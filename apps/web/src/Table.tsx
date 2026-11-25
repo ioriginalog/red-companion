@@ -318,10 +318,10 @@ export function Table({ s }: { s: ClientState }) {
           if (!enc.active || !canAct || !currentId || actingId !== currentId || enc.delayAllowed === false) return null;
           const fresh = !usage || (usage.moveUsed === 0 && !usage.actionUsed);
           const later = enc.order.slice(enc.turnIndex + 1).filter((id) => view.actors[id] && !view.actors[id]!.placeholder);
-          const canEnd = enc.turnIndex < enc.order.length - 1;
+          // Players' order omits unseen hostiles, so "last" is the server's call.
           return (
             <span className="menu-wrap">
-              <button className={`btn${delayOpen ? ' on' : ''}`} disabled={!fresh || !canEnd || !!view.pending} aria-expanded={!!delayOpen} aria-haspopup="menu"
+              <button className={`btn${delayOpen ? ' on' : ''}`} disabled={!fresh || !!view.pending} aria-expanded={!!delayOpen} aria-haspopup="menu"
                 onClick={(e) => setDelayOpen(delayOpen ? null : e.currentTarget.getBoundingClientRect())} title="House rule: take your Turn later this Round (before you move or act)">Delay</button>
               {delayOpen && (
                 <span className="menu" role="menu" style={{ left: Math.max(8, Math.min(delayOpen.left, window.innerWidth - 230)), bottom: window.innerHeight - delayOpen.top + 6 }}>
