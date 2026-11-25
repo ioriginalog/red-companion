@@ -15,22 +15,18 @@ import {
   RulesError, spendAmmo, stabilize, turnStartChecklist, woundState,
   type Cell, type CombatEvent, type Dice, type Weapon,
 } from '@cprc/rules-core';
-import { factionOf, planMove, watchTrigger, withSpotted } from './tactical.js';
+import { planMove, watchTrigger, withSpotted } from './tactical.js';
+import {
+  checkAttackAction, checkOtherAction, controls, currentActorId, freshUsage, getActor, getWeapon, requireMap, SessionError, usageFor, visibilityFor,
+} from './helpers.js';
+import { executeTool, TOOL_GM_ONLY, TOOL_WHILE_PENDING } from './tools.js';
+import { doAreaAttack, doSuppressiveFire } from './grid-area.js';
+
+export { SessionError, currentActorId };
 import type {
   Accepted, Actor, AuthorId, Encounter, Intent, IntentType, LogEntry, Pending, RangedAttackIntent, Rejection, SessionState,
   StatePatch, TacticalMap, TurnUsage, Viewer,
 } from './types.js';
-
-export class SessionError extends Error {
-  constructor(
-    public readonly code:
-      | 'NOT_FOUND' | 'FORBIDDEN' | 'NOT_YOUR_TURN' | 'PENDING' | 'NO_PENDING' | 'DEATH_SAVE_FIRST' | 'INVALID'
-      | 'NO_LINE_OF_SIGHT' | 'OUT_OF_REACH' | 'NO_MOVEMENT' | 'ACTION_USED',
-    message: string,
-  ) {
-    super(message);
-  }
-}
 
 export interface AuthorityContext {
   dice: Dice;
@@ -40,8 +36,9 @@ export interface AuthorityContext {
 
 const GM_ONLY: ReadonlySet<IntentType> = new Set([
   'addActor', 'replaceActor', 'removeActor', 'assignController', 'startEncounter', 'endEncounter', 'cancelPending', 'setMap', 'placeToken',
+  ...TOOL_GM_ONLY,
 ]);
-const ALLOWED_WHILE_PENDING: ReadonlySet<IntentType> = new Set(['respondDodge', 'rollDamage', 'cancelPending', 'declineWatch']);
+const ALLOWED_WHILE_PENDING: ReadonlySet<IntentType> = new Set(['respondDodge', 'rollDamage', 'cancelPending', 'declineWatch', ...TOOL_WHILE_PENDING]);
 
 export function authorId(v: Viewer): AuthorId {
   return v.role === 'gm' ? 'gm' : `player:${v.playerId}`;
@@ -70,20 +67,6 @@ export function handleIntent(state: SessionState, intent: Intent, by: Viewer, ct
 
 // ----- Authorization -------------------------------------------------------------
 
-function getActor(state: SessionState, id: string): Actor {
-  const a = state.actors[id];
-  if (!a) throw new SessionError('NOT_FOUND', `No actor ${id}.`);
-  return a;
-}
-
-function controls(by: Viewer, a: Actor): boolean {
-  return by.role === 'gm' || a.controller === by.playerId;
-}
-
-export function currentActorId(state: SessionState): string | null {
-  return state.encounter.active ? (state.encounter.order[state.encounter.turnIndex] ?? null) : null;
-}
-
 function requireActing(state: SessionState, by: Viewer, actorId: string, outOfTurnOk = false) {
   const a = getActor(state, actorId);
   if (!controls(by, a)) throw new SessionError('FORBIDDEN', `You don’t control ${a.combatant.name}.`);
@@ -111,6 +94,10 @@ function authorize(state: SessionState, intent: Intent, by: Viewer) {
     case 'moveToken':
     case 'setWatch':
       requireActing(state, by, intent.actorId);
+      break;
+    case 'areaAttack':
+    case 'suppressiveFire':
+      requireActing(state, by, intent.attackerId);
       break;
     case 'clearWatch': {
       const a = getActor(state, intent.actorId);
@@ -348,19 +335,16 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       const { [intent.actorId]: _w, ...watches } = map.watches;
       return { events: [], patch: { map: { ...map, watches } } };
     }
+    case 'areaAttack':
+      return doAreaAttack(state, intent, by, dice);
+    case 'suppressiveFire':
+      return doSuppressiveFire(state, intent, by, dice);
     default:
-      throw new SessionError('INVALID', `${intent.type} isn’t supported yet.`);
+      return executeTool(state, intent, by, dice);
   }
 }
 
 // ----- Tactical helpers ------------------------------------------------------------
-
-function requireMap(state: SessionState): TacticalMap {
-  if (!state.map) throw new SessionError('INVALID', 'No map is loaded.');
-  return state.map;
-}
-
-const visibilityFor = (a: Actor): 'public' | 'gm' => (factionOf(a) === 'friendly' ? 'public' : 'gm');
 
 /**
  * With both tokens on the map, the map decides: range comes from the grid
@@ -375,38 +359,6 @@ function withMapGeometry(state: SessionState, intent: RangedAttackIntent): Range
     throw new SessionError('NO_LINE_OF_SIGHT', `${getActor(state, intent.defenderId).combatant.name} is behind cover or out of sight.`);
   }
   return { ...intent, distance: Math.max(1, metersBetween(a, d)) };
-}
-
-const freshUsage = (actorId: string): TurnUsage => ({ actorId, moveUsed: 0, actionUsed: false, ran: false, attacks: 0, attackWith: null });
-
-/** Usage is tracked only for the current actor during an encounter. */
-function usageFor(state: SessionState, actorId: string): TurnUsage | null {
-  const enc = state.encounter;
-  if (!enc.active || currentActorId(state) !== actorId) return null;
-  return enc.usage?.actorId === actorId ? enc.usage : freshUsage(actorId);
-}
-
-/**
- * The GM is the referee: their intents are recorded against the Turn but never
- * refused for economy. Players are held to one Action per Turn.
- */
-function checkAttackAction(state: SessionState, by: Viewer, a: Actor, withKey: string, perAction: number): Encounter | undefined {
-  const u = usageFor(state, a.id);
-  if (!u) return undefined;
-  const followUp = u.actionUsed && u.attackWith === withKey && u.attacks < perAction;
-  if (u.actionUsed && !followUp && by.role !== 'gm') {
-    throw new SessionError('ACTION_USED', `${a.combatant.name} has already used their Action this Turn.`);
-  }
-  // Single-attack actions (aimed, autofire, ROF 1) close the Action outright.
-  const attacks = perAction === 1 ? 99 : (followUp ? u.attacks : 0) + 1;
-  return { ...state.encounter, usage: { ...u, actionUsed: true, attackWith: withKey, attacks } };
-}
-
-function checkOtherAction(state: SessionState, by: Viewer, a: Actor): Encounter | undefined {
-  const u = usageFor(state, a.id);
-  if (!u) return undefined;
-  if (u.actionUsed && by.role !== 'gm') throw new SessionError('ACTION_USED', `${a.combatant.name} has already used their Action this Turn.`);
-  return { ...state.encounter, usage: { ...u, actionUsed: true } };
 }
 
 const stepCost = (map: TacticalMap, path: Cell[]) => path.reduce((s, c) => s + (terrainAt(map, c) === '~' ? 2 : 1), 0);
@@ -466,12 +418,6 @@ function doMove(state: SessionState, actorId: string, to: Cell, run: boolean, by
   }
   patch.map = withSpotted(next, state.actors);
   return { events, patch };
-}
-
-function getWeapon(a: Actor, weaponId: string): Weapon {
-  const w = a.weapons.find((x) => x.id === weaponId);
-  if (!w) throw new SessionError('NOT_FOUND', `${a.combatant.name} has no weapon ${weaponId}.`);
-  return w;
 }
 
 class PrecheckPassed extends Error {}

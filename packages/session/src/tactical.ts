@@ -23,15 +23,28 @@ export function factionOf(a: Actor): Faction {
 
 const canSee = (a: Actor) => !a.combatant.conditions.dead && !a.combatant.conditions.unconscious;
 
+/**
+ * Squares visible from `seers` (token squares), honoring the GM's lighting:
+ * `revealAll` shows everything; `revealed` squares are always visible.
+ * Pure; the web client uses it with its own idea of who can see.
+ */
+export function visionFor(map: TacticalMap, seers: Cell[]): Set<string> {
+  const out = new Set<string>();
+  if (map.lighting?.revealAll) {
+    for (let y = 0; y < map.height; y++) for (let x = 0; x < map.width; x++) out.add(`${x},${y}`);
+    return out;
+  }
+  for (const at of seers) for (const k of visibleCells(map, at, map.sightRange)) out.add(k);
+  for (const k of map.lighting?.revealed ?? []) out.add(k);
+  return out;
+}
+
 /** Squares the party can see right now. */
 export function partyVision(map: TacticalMap, actors: Record<string, Actor>): Set<string> {
-  const out = new Set<string>();
-  for (const [id, at] of Object.entries(map.tokens)) {
-    const a = actors[id];
-    if (!a || factionOf(a) !== 'friendly' || !canSee(a)) continue;
-    for (const k of visibleCells(map, at, map.sightRange)) out.add(k);
-  }
-  return out;
+  const seers = Object.entries(map.tokens)
+    .filter(([id]) => { const a = actors[id]; return !!a && factionOf(a) === 'friendly' && canSee(a); })
+    .map(([, at]) => at);
+  return visionFor(map, seers);
 }
 
 /** Returns `map` itself when nothing new was spotted, so callers can skip a patch. */

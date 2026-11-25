@@ -48,6 +48,15 @@ Status key: **Easy Mode** = matches the free Easy Mode PDF · **Errata** = match
 | Melee and Stabilize reach | Adjacent square (2 m/yds). | Secondary |
 | Fog of war | The party (PCs and allied NPCs) shares one field of view. Hostile tokens outside it are hidden from players; names stay hidden until first seen. Vision is 360°. | Interpretation |
 | Facing | None. RED has no facing rules; cones in the UI are for targeting and watches only. | Secondary |
+| Explosive blast | 10 × 10 m/yds = 5 × 5 squares centered on the target square. Caught if in the blast with line of sight to the center square; anything opaque in between protects (no cover HP on the map, so cover survives). A miss scatters; the GM places it (Core has no scatter table). | Interpretation |
+| Shotgun Shells on the grid | Every token (friend or foe) within 3 squares (6 m/yds) in a 90° cone toward the aimed square, in the shooter's line of sight. | Interpretation |
+| Area dodges | Everyone in the area who can dodge (REF 8+) does, automatically: in the engine a failed dodge costs nothing. | Interpretation |
+| Thrown grenades | DEX + Athletics vs the Grenade Launcher row; 6d6 unless the item sets its own damage dice; one grenade per throw. | Secondary |
+| Suppressive Fire on the grid | Opposing tokens (not neutrals) within 25 m/yds (12 squares) and the weapon's Autofire range, in the shooter's line of sight. Needs 10 rounds; takes the Action. | Secondary |
+| Area attacks and the Turn | Every area attack and Suppressive Fire takes the whole Action. | Secondary |
+| Free checks | STAT + skill + 1d10 + standing modifiers (wound penalties) vs an optional DV; ties fail. Not tied to the Turn or the Action: the GM rules what a check costs. | Easy Mode |
+| GM HP edits | Healing caps at max HP; damage has no floor; HP edits never kill on their own (only Death Saves do). | Interpretation |
+| Scene switches | Allowed mid-encounter; the encounter, Turn order and actors carry over; watches end. | Interpretation |
 | Watch | **House rule, not RED Core.** Spend the Action to watch a 90° cone (30°–180°) until your next Turn. The first opposing token to step into a visible watched square stops there and the watcher may attack out of Turn, or hold fire. | House Rule |
 
 ## Interpretations the GM Should Confirm

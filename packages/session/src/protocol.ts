@@ -50,6 +50,24 @@ export type ServerMessage =
   | { t: 'error'; code: string; message: string }
   | { t: 'pong' };
 
+const isCell = (x: unknown): x is Cell =>
+  typeof x === 'object' && x !== null && Number.isInteger((x as Cell).x) && Number.isInteger((x as Cell).y)
+  && (x as Cell).x >= 0 && (x as Cell).y >= 0 && (x as Cell).x < 10_000 && (x as Cell).y < 10_000;
+
+/** Strict validation of an ephemeral signal; returns a clean copy (no extra fields) or null. */
+export function parseSignal(x: unknown): Signal | null {
+  if (typeof x !== 'object' || x === null) return null;
+  const m = x as Record<string, unknown>;
+  switch (m.kind) {
+    case 'ping': return isCell(m.at) ? { kind: 'ping', at: { x: m.at.x, y: m.at.y } } : null;
+    case 'cursor': return m.at === null ? { kind: 'cursor', at: null } : isCell(m.at) ? { kind: 'cursor', at: { x: m.at.x, y: m.at.y } } : null;
+    case 'measure':
+      if (!isCell(m.from) || !(m.to === null || isCell(m.to))) return null;
+      return { kind: 'measure', from: { x: m.from.x, y: m.from.y }, to: m.to === null ? null : { x: (m.to as Cell).x, y: (m.to as Cell).y } };
+    default: return null;
+  }
+}
+
 const isObj = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
 const isStr = (x: unknown, max = 200): x is string => typeof x === 'string' && x.length > 0 && x.length <= max;
 
@@ -79,8 +97,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return isStr(m.playerId, 64) && isStr(m.clientMsgId, 64) && isStr(m.code, 40) && isStr(m.message, 500) ? (m as ClientMessage) : null;
     case 'intent':
       return isStr(m.clientMsgId, 64) && isObj(m.intent) && typeof m.intent.type === 'string' ? (m as ClientMessage) : null;
-    case 'signal':
-      return isObj(m.signal) && typeof m.signal.kind === 'string' && JSON.stringify(m.signal).length < 300 ? (m as ClientMessage) : null;
+    case 'signal': {
+      const signal = parseSignal(m.signal);
+      return signal ? { t: 'signal', signal } : null;
+    }
     case 'ping':
       return { t: 'ping' };
     default:
