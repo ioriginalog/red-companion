@@ -74,9 +74,12 @@ player ◀─projected entry── relay ◀─append─┘   (relay redacts per
 |---|---|
 | `GET /health` | Liveness and protocol version |
 | `POST /api/sessions` | Create a session → `{ sessionId, gmKey, joinCode }`. **The GM key is shown once; store it on the GM device.** Rate-limited per IP. |
-| `WS /ws` | Protocol in `packages/session/src/protocol.ts` |
+| `POST /api/sessions/:id/assets` | GM only (`Authorization: Bearer <gmKey>`). Raw WebP, PNG or JPEG body, 8 MB max, checked against its magic bytes. Content-addressed (same bytes → same URL); 200 MB per session. → `201 { url: '/u/:id/<sha256>.<ext>' }` |
+| `GET /u/:id/<sha256>.<ext>` | Uploaded image, cached immutably, `nosniff`, `default-src 'none'` |
+| `GET /api/sessions/:id/export` | GM only. Download `{ meta, log }` as JSON (no key or token hashes) |
+| `WS /ws` | Protocol in `packages/session/src/protocol.ts`. `signal` messages (ping, cursor, measure) are relayed to the rest of the room, never logged, and rate-limited to about 10 per second per connection (excess is dropped). |
 
-Environment: `PORT` (set by Railway), `DATA_DIR` (volume path; omit = in-memory), `ALLOWED_ORIGINS` (comma-separated; default `*`), `HOST` (default `::`).
+Environment: `PORT` (set by Railway), `DATA_DIR` (volume path; omit = in-memory, including uploads), `ALLOWED_ORIGINS` (comma-separated; default `*`; gates session creation, uploads and WebSocket upgrades), `HOST` (default `::`), `WEB_DIR` (built client; defaults to `apps/web/dist`).
 
 ## Edge Cases the Engine Enforces
 

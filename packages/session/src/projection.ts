@@ -86,6 +86,17 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
     .filter((e) => viewer.role === 'gm' || !e.audience || e.audience.includes(me))
     .filter((e) => e.visibility === 'public' || visible(eventSubject(e)))
     .map((e) => (viewer.role === 'gm' ? e : redactEvent(e, visible)));
+  // Don't reveal hidden tokens: drop their checks, trim them from area results.
+  if (viewer.role !== 'gm' && after.map && events.some((e) => e.type === 'areaResolved' || e.type === 'checkRolled')) {
+    const map = after.map;
+    const seen = projectMap(map, actorsAfter).tokens;
+    const hidden = (id: string) => !!map.tokens[id] && !seen[id];
+    for (let i = events.length - 1; i >= 0; i--) {
+      const e = events[i]!;
+      if (e.type === 'areaResolved') events[i] = { ...e, targetIds: e.targetIds.filter((id) => !hidden(id)) };
+      else if (e.type === 'checkRolled' && e.combatantId && hidden(e.combatantId)) events.splice(i, 1);
+    }
+  }
   const patch: ProjectedEntry['patch'] = {};
   if (entry.patch.actors) {
     patch.actors = Object.fromEntries(Object.entries(entry.patch.actors).map(([id, a]) => [id, a ? projectActor(a, viewer, opts, after.map) : null]));
@@ -123,6 +134,8 @@ export function redactEvent(e: CombatEvent, visible: (id: string | undefined) =>
       return visible(e.targetId) ? e : { ...e, from: 0, to: 0 };
     case 'stabilized':
       return visible(e.targetId) ? e : { ...e, hpAfter: 0 };
+    case 'checkRolled':
+      return !e.combatantId || visible(e.combatantId) ? e : { ...e, check: redactCheck(e.check) };
     case 'stabilizationAttempted':
       return visible(e.medicId) ? e : { ...e, check: redactCheck(e.check) };
     case 'initiativeRolled':
