@@ -1,12 +1,13 @@
-# CPR Companion — Combat Core
+# Night Shift Companion
 
-Unofficial fan tool for running Cyberpunk RED combat. Not affiliated with, approved by or endorsed by R. Talsorian Games.
+Unofficial fan tool for running Cyberpunk RED combat: a rules engine, a synced session layer, and a small private tactical table. Not affiliated with, approved by or endorsed by R. Talsorian Games.
 
 | Package | What It Is |
 |---|---|
 | `packages/rules-core` | Zero-dependency combat rules engine. Pure: no I/O, no clock, injected dice. |
 | `packages/session` | Event-sourced session layer: intents, GM authority, replay, per-player redaction, wire protocol. |
-| `apps/relay` | WebSocket relay deployed on Railway: stores logs, forwards player intents to the GM, sends redacted updates to players. |
+| `apps/relay` | WebSocket relay deployed on Railway: stores logs, forwards player intents to the GM, sends redacted updates to players, serves the web client. |
+| `apps/web` | Vite + React client: tactical map with fog of war, targeting and watch cones, initiative strip, attack panel. The GM's browser is the rules authority. |
 
 See [`docs/ADR-001-architecture.md`](docs/ADR-001-architecture.md) for the stack and sync design.
 
@@ -17,8 +18,11 @@ See [`docs/ADR-001-architecture.md`](docs/ADR-001-architecture.md) for the stack
 ```bash
 npm ci
 npm test            # builds all packages, then runs every test suite
-PORT=8080 DATA_DIR=./.data npm start   # local relay
+npm run build && PORT=8080 DATA_DIR=./.data npm start   # relay + web client on http://localhost:8080
+npm run dev -w @cprc/web   # hot-reload client on :5173 (proxies to the relay on :8080)
 ```
+
+Create a session, choose **Load Demo Encounter**, share the join code, assign each player a character in the Roster, then **Start Encounter**.
 
 ```ts
 import { resolveRangedAttack, rollDamage, applyDamage, cryptoDice } from '@cprc/rules-core';
@@ -100,7 +104,7 @@ Environment: `PORT` (set by Railway), `DATA_DIR` (volume path; omit = in-memory)
 
 ## IP Compliance Checklist (RTG Homebrew Content Policy)
 
-- [ ] **App name** must not include "Cyberpunk RED". "CPR Companion" is a working title; the final name is your call, with Cyberpunk RED only in a descriptive subtitle.
+- [ ] **App name** must not include "Cyberpunk RED". "Night Shift Companion" is a placeholder chosen to stay clear of the trademark; the final name is your call.
 - [ ] **Disclaimer** in a visible spot (About screen and store listing). Draft: *"[App Name] is unofficial content provided under R. Talsorian Games' Homebrew Content Policy. It is not approved or endorsed by R. Talsorian Games. It references material that is the property of R. Talsorian Games and its licensees."* Check it against the current policy page before release.
 - [ ] **Free**, with no paywall or subscription; no itch.io or DriveThruRPG distribution. App-store distribution is allowed when free.
 - [ ] **No full NPC stat blocks** from any RTG book, in data or seed files. Users create their own NPCs.
@@ -108,3 +112,5 @@ Environment: `PORT` (set by Railway), `DATA_DIR` (volume path; omit = in-memory)
 - [ ] **No RTG logos, art, trade dress, fonts or colors.**
 - [ ] **Hardcoded lore:** none in this package. Weapon, armor and injury names are game terms. "Kevlar" is a DuPont trademark used in the book; consider "Kevlar-Style" or keep with a ® note.
 - [ ] **Duplication risk:** RTG can request removal if an official or licensed product does the same job. Licensed VTT integrations exist, so keep the app focused on table-side combat speed rather than becoming a full VTT.
+- [x] **Art:** the warehouse map and portraits were generated for this project with open image models (Z-Image Turbo on Hugging Face). No RTG or CD PROJEKT RED art, logos or characters. Demo characters and stats are original.
+- [ ] **2077 setting (CD PROJEKT RED Fan Content Guidelines):** non-commercial only. Don't add CDPR art, logos, UI assets, music or named characters; place names and gangs are fine in your own session data, not in shipped seed files.

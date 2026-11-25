@@ -5,6 +5,7 @@
  * `visibility` is a hint for the projection layer: 'gm' events are stripped
  * from player views (e.g. exact NPC HP).
  */
+import type { Cell } from './grid.js';
 import type { CheckResult, CritTable, D10Roll, HitLocation, WoundState } from './types.js';
 
 type Base = { visibility: 'public' | 'gm' };
@@ -27,6 +28,9 @@ export type CombatEvent = Base & (
   | { type: 'stabilized'; targetId: string; hpAfter: number; unconscious: boolean }
   | { type: 'suppressiveFireResolved'; attackerId: string; attack: CheckResult; results: { targetId: string; resist: CheckResult; mustSeekCover: boolean }[] }
   | { type: 'gmRulingRequired'; reason: string }
+  | { type: 'tokenMoved'; combatantId: string; path: Cell[]; cost: number; ran: boolean }
+  | { type: 'watchSet'; combatantId: string; facing: number; arc: number }
+  | { type: 'watchTriggered'; combatantId: string; targetId: string; at: Cell }
 );
 
 export type { D10Roll };

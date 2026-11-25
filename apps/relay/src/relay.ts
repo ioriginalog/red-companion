@@ -8,6 +8,8 @@
  */
 import { createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
   applyEntry, LogGapError, parseClientMessage, projectEntry, projectState, PROTOCOL_VERSION, replay,
@@ -23,8 +25,20 @@ export interface RelayOptions {
   /** Session creations allowed per IP per hour. */
   createPerHour?: number;
   allowedOrigins?: string[] | '*';
+  /** Built web client to serve from the same origin (SPA fallback to index.html). */
+  webDir?: string;
   log?: (msg: string) => void;
 }
+
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json', '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2', '.woff': 'font/woff', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.txt': 'text/plain; charset=utf-8',
+};
+const CSP = [
+  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:",
+  "font-src 'self'", "connect-src 'self'", "frame-ancestors 'none'", "base-uri 'none'", "form-action 'self'",
+].join('; ');
 
 interface Room {
   meta: SessionMeta;
@@ -74,6 +88,41 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     return true;
   }
 
+  /** Browsers always send Origin cross-site; native clients may omit it. */
+  function originOk(req: IncomingMessage) {
+    const allowed = opts.allowedOrigins ?? '*';
+    const origin = req.headers.origin;
+    return allowed === '*' || !origin || allowed.includes(origin);
+  }
+
+  const webRoot = opts.webDir && existsSync(join(opts.webDir, 'index.html')) ? resolve(opts.webDir) : null;
+  function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: string): boolean {
+    if (!webRoot || (req.method !== 'GET' && req.method !== 'HEAD')) return false;
+    let rel: string;
+    try { rel = normalize(decodeURIComponent(pathname)).replace(/^([/\\])+/, ''); } catch { return false; }
+    let file = resolve(webRoot, rel || 'index.html');
+    if (file !== webRoot && !file.startsWith(webRoot + sep)) return false;
+    let isFile = false;
+    try { isFile = statSync(file).isFile(); } catch { /* missing */ }
+    // SPA fallback for routes; real 404s for missing assets.
+    if (!isFile) {
+      if (extname(rel)) return false;
+      file = join(webRoot, 'index.html');
+    }
+    const ext = extname(file);
+    const immutable = rel.startsWith('assets/') && /-[A-Za-z0-9_-]{8}\./.test(rel);
+    res.writeHead(200, {
+      'Content-Type': MIME[ext] ?? 'application/octet-stream',
+      'Cache-Control': ext === '.html' ? 'no-cache' : immutable ? 'public, max-age=31536000, immutable' : 'public, max-age=3600',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+      ...(ext === '.html' ? { 'Content-Security-Policy': CSP } : {}),
+    });
+    if (req.method === 'HEAD') res.end();
+    else res.end(readFileSync(file));
+    return true;
+  }
+
   function cors(req: IncomingMessage, res: ServerResponse) {
     const origin = req.headers.origin;
     const allowed = opts.allowedOrigins ?? '*';
@@ -96,6 +145,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/sessions') {
+      if (!originOk(req)) { json(res, 403, { error: 'Origin not allowed.' }); return; }
       const ip = clientIp(req);
       if (!rateOk(ip)) { json(res, 429, { error: 'Too many sessions created. Try again later.' }); return; }
       const sessionId = randomUUID();
@@ -109,11 +159,15 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
       json(res, 201, { sessionId, gmKey, joinCode });
       return;
     }
+    if (!url.pathname.startsWith('/api/') && serveStatic(req, res, url.pathname)) return;
     json(res, 404, { error: 'Not found' });
   });
 
   // ----- WebSocket ------------------------------------------------------------
-  const wss = new WebSocketServer({ server, path: '/ws', maxPayload: opts.maxPayloadBytes ?? 512 * 1024 });
+  const wss = new WebSocketServer({
+    server, path: '/ws', maxPayload: opts.maxPayloadBytes ?? 512 * 1024,
+    verifyClient: (info: { req: IncomingMessage }) => originOk(info.req),
+  });
   // ws re-emits the HTTP server's errors; the server's own listener handles them.
   wss.on('error', (e) => log(`wss error: ${e.message}`));
   const failedHellos = new Map<string, { n: number; since: number }>();
@@ -132,7 +186,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
   function broadcastEntries(r: Room & { state: SessionState }, entries: LogEntry[], statesAfter: SessionState[]) {
     for (const [ws, playerId] of r.players) {
       const viewer: Viewer = { role: 'player', playerId };
-      send(ws, { t: 'entries', entries: entries.map((e, i) => projectEntry(e, viewer, statesAfter[i]!.actors)) });
+      send(ws, { t: 'entries', entries: entries.map((e, i) => projectEntry(e, viewer, statesAfter[i]!)) });
     }
   }
   function broadcastSnapshot(r: Room & { state: SessionState }) {

@@ -28,12 +28,27 @@ Status key: **Easy Mode** = matches the free Easy Mode PDF · **Errata** = match
 | Death Save | 1d10 + penalty, live if **under** BODY; natural 10 always fails; +1 penalty per roll; one fail = dead. | Easy Mode |
 | Stabilization | TECH + First Aid/Paramedic vs 10/13/15. Mortally → 1 HP and Unconscious. Resets accumulated penalty. | Easy Mode |
 | Body Critical Injuries | All 11 rows. | Easy Mode |
-| Head Critical Injuries | All 11 rows from **one** community chart. ⚠ Highest-risk data in the pack. | Secondary |
+| Head Critical Injuries | All 11 rows from one community chart; a second pass found the rows consistent across sources **except Concussion's Quick Fix and Treatment DVs**, which differ between references. ⚠ Confirm Concussion in the book. | Secondary |
 | Armor table | Leathers 4, Kevlar 7, Light AJ 11, Bodyweight 11, Medium AJ 12 (−2), Heavy AJ 13 (−2), Flak 15 (−4), Metalgear 18 (−4). | Secondary |
 | Shotgun Shells | DV13, 3d6 to every target within 6 m/yds in front, rolled once; no Aimed Shot. | Secondary |
 | Explosives | 10 × 10 m/yds; damage rolled once; miss = GM scatters within area; cover protects only if the blast can't destroy it. | Secondary |
 | Suppressive Fire | 10 rounds; WILL + Concentration vs REF + Autofire; losers move to cover. | Secondary |
 | Initiative | REF (after armor) + 1d10; tied combatants reroll until settled. | Easy Mode |
+
+## Tactical Map (2026-11)
+
+| Rule | Engine Behavior | Status |
+|---|---|---|
+| Grid scale | 1 square = 2 m/yds. Range is measured on the grid; the client's distance is ignored when both tokens are on the map. | Secondary |
+| Diagonals | Cost 1 square (Chebyshev distance), for both movement and range. | Interpretation |
+| Movement | Move Action = MOVE squares. Running spends the Action for MOVE more. Can't end on a token; can pass allies, not enemies; can't squeeze diagonally between two blockers. | Secondary |
+| Turn economy | One Action per Turn. A ROF 2 weapon gets two attacks with the same weapon for that Action; Aimed Shots and Autofire take the whole Action. Reload, Stabilize and Watch use the Action. Enforced for players; the GM is recorded but never refused. | Secondary |
+| Line of sight | Ray between square centers. A ray exactly through a corner is blocked only if both squares beside it are opaque. | Interpretation |
+| Cover | Binary, as in RED: no line of sight = no attack. No partial-cover modifier. The GM can rule a target visible. | Secondary |
+| Melee and Stabilize reach | Adjacent square (2 m/yds). | Secondary |
+| Fog of war | The party (PCs and allied NPCs) shares one field of view. Hostile tokens outside it are hidden from players; names stay hidden until first seen. Vision is 360°. | Interpretation |
+| Facing | None. RED has no facing rules; cones in the UI are for targeting and watches only. | Secondary |
+| Watch | **House rule, not RED Core.** Spend the Action to watch a 90° cone (30°–180°) until your next Turn. The first opposing token to step into a visible watched square stops there and the watcher may attack out of Turn, or hold fire. | House Rule |
 
 ## Interpretations the GM Should Confirm
 
@@ -49,6 +64,8 @@ Status key: **Easy Mode** = matches the free Easy Mode PDF · **Errata** = match
 10. **Melee Aimed Shots** are allowed.
 11. **Defender who can't Evade** (Dismembered Leg, Unconscious): the GM must set the DV.
 12. **HP can go negative** with no floor; only Death Saves kill.
+13. **Shared vision vs. your own line of sight**: you can *see* a target a teammate spots, but you can only *shoot* it with your own line of sight.
+14. **Difficult terrain** ('~' squares) costs 2 squares to enter. No demo map uses it yet.
 
 ## Not Built Yet
 

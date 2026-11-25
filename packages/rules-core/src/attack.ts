@@ -254,3 +254,55 @@ export function resolveMeleeAttack(input: MeleeAttackInput, dice: Dice): AttackO
     : undefined;
   return { attack, defenseValue, defense, hit, margin, ammoSpent: 0, damage, events };
 }
+
+// ----- Preview (no dice) -------------------------------------------------------
+
+export interface RangedPreview {
+  /** Attacker's STAT + skill. */
+  base: number;
+  modifiers: Modifier[];
+  /** Range (or Autofire) DV for this distance. */
+  dv: number;
+  ammo: number;
+  /** Defender's DEX + Evasion + standing modifiers, if they may dodge instead of taking the DV. */
+  dodgeBase: number | null;
+}
+
+/**
+ * What `resolveRangedAttack` would roll against, without rolling: for the
+ * chance-to-hit readout. Throws the same RulesErrors. Kept in lockstep with
+ * `resolveRangedAttack` by a test.
+ */
+export function previewRangedAttack(input: Omit<RangedAttackInput, 'defenderDodges'>): RangedPreview {
+  const { attacker, defender, weapon, distance, aimTarget } = input;
+  const mode = input.mode ?? 'single';
+  const p = profileOf(weapon);
+  if (p.melee) throw new RulesError('ILLEGAL_MODE', `${weapon.name} is a melee weapon.`);
+  const band = rangeBandIndex(distance);
+  let dv: number | null | undefined;
+  let skill: string;
+  let ammo: number;
+  if (mode === 'autofire') {
+    if (!p.autofire) throw new RulesError('ILLEGAL_MODE', `${p.displayName} can't Autofire.`);
+    if (aimTarget) throw new RulesError('ILLEGAL_MODE', 'Autofire can’t be an Aimed Shot.');
+    ammo = AUTOFIRE_AMMO;
+    skill = 'Autofire';
+    dv = band < 0 ? null : AUTOFIRE_DV[p.autofire.row][band];
+  } else {
+    ammo = 1;
+    skill = p.skill;
+    dv = band < 0 ? null : RANGE_DV[p.rangeRow!][band];
+  }
+  if (dv == null) throw new RulesError('OUT_OF_RANGE', `${p.displayName}${mode === 'autofire' ? ' (Autofire)' : ''} can’t reach ${distance} m/yds.`);
+  checkAmmo(weapon, ammo);
+  const dodgeBase = canDodgeRanged(defender)
+    ? effectiveStat(defender, 'DEX') + skillLevel(defender, 'Evasion') + standingModifiers(defender, 'other').reduce((s, m) => s + m.value, 0)
+    : null;
+  return {
+    base: effectiveStat(attacker, 'REF') + skillLevel(attacker, skill),
+    modifiers: [...standingModifiers(attacker, 'rangedAttack'), ...aimMods(aimTarget), ...(input.situational ?? [])],
+    dv,
+    ammo,
+    dodgeBase,
+  };
+}

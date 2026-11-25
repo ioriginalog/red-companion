@@ -10,7 +10,7 @@
  * Clients never re-run the rules engine; they apply patches. That keeps replay
  * trivially deterministic and lets the relay redact patches per viewer.
  */
-import type { AimTarget, CombatEvent, Combatant, DamageSpec, Modifier, Weapon, WoundState } from '@cprc/rules-core';
+import type { AimTarget, Cell, CombatEvent, Combatant, DamageSpec, GridMap, Modifier, Weapon, WoundState } from '@cprc/rules-core';
 
 export type Viewer = { role: 'gm' } | { role: 'player'; playerId: string };
 /** Serialized author of an entry: 'gm' or 'player:<id>'. */
@@ -22,7 +22,13 @@ export interface Actor {
   weapons: Weapon[];
   /** 'gm' or a playerId. */
   controller: string;
+  /** Map faction. Default: PCs 'party', NPCs 'hostile'. Allies share the party's vision. */
+  allegiance?: Allegiance;
+  /** Portrait image URL. */
+  portrait?: string;
 }
+
+export type Allegiance = 'party' | 'ally' | 'neutral' | 'hostile';
 
 export interface Encounter {
   active: boolean;
@@ -32,11 +38,57 @@ export interface Encounter {
   turnIndex: number;
   /** Set when the current actor must roll a Death Save before acting. */
   deathSaveRequiredFor: string | null;
+  /** What the current actor has spent this Turn. Absent outside encounters. */
+  usage?: TurnUsage;
+}
+
+/**
+ * RED Turn economy: one Move Action (MOVE squares) and one Action. Running
+ * spends the Action on a second MOVE. Weapons with ROF 2 get two attacks
+ * with the same weapon for the one Action.
+ */
+export interface TurnUsage {
+  actorId: string;
+  moveUsed: number;
+  actionUsed: boolean;
+  ran: boolean;
+  attacks: number;
+  /** Weapon (or 'brawling' / 'martialArts') that used the Action, for ROF follow-ups. */
+  attackWith: string | null;
+}
+
+/**
+ * House rule, not RED Core: an actor spends its Action to watch a cone.
+ * When an opposing token moves into a visible watched square, the GM gets a
+ * prompt to resolve an attack. The watch ends at the watcher's next Turn.
+ */
+export interface Watch {
+  facing: number;
+  arc: number;
+  /** Squares. */
+  range: number;
+}
+
+export interface TacticalMap extends GridMap {
+  id: string;
+  name: string;
+  /** URL of the painted background, drawn under the grid. */
+  background?: string;
+  /** Pixel size of one square in the background image. */
+  cellPx: number;
+  /** Squares. Use a small number for dark scenes. */
+  sightRange: number;
+  tokens: Record<string, Cell>;
+  watches: Record<string, Watch>;
+  /** NPC actor ids the party has seen at least once (names revealed). */
+  spotted: string[];
 }
 
 export type Pending =
   | { kind: 'awaitingDodge'; id: string; attack: RangedAttackIntent; defenderId: string }
-  | { kind: 'awaitingDamage'; id: string; attackerId: string; targetId: string; spec: DamageSpec };
+  | { kind: 'awaitingDamage'; id: string; attackerId: string; targetId: string; spec: DamageSpec }
+  /** A watch (house rule) triggered: the watcher may attack the mover now, out of Turn. */
+  | { kind: 'awaitingWatch'; id: string; watcherId: string; targetId: string };
 
 export interface SessionState {
   sessionId: string;
@@ -45,6 +97,7 @@ export interface SessionState {
   actors: Record<string, Actor>;
   encounter: Encounter;
   pending: Pending | null;
+  map: TacticalMap | null;
 }
 
 export interface StatePatch {
@@ -53,6 +106,8 @@ export interface StatePatch {
   encounter?: Encounter;
   /** Present (even as null) = replace. */
   pending?: Pending | null;
+  /** Present (even as null) = replace. Small enough to send whole. */
+  map?: TacticalMap | null;
 }
 
 export interface LogEntry {
@@ -78,6 +133,8 @@ export interface RangedAttackIntent {
   situational?: Modifier[];
   /** Omit to let the defender's controller decide (if eligible). */
   defenderDodges?: boolean;
+  /** GM only: rule the target visible despite the map's line of sight. */
+  ignoreLineOfSight?: boolean;
 }
 
 export type MeleeWith = { kind: 'weapon'; weaponId: string } | { kind: 'brawling' } | { kind: 'martialArts'; form: string };
@@ -100,7 +157,14 @@ export type Intent =
   | { type: 'rollDamage'; pendingId: string }
   | { type: 'deathSave'; actorId: string }
   | { type: 'stabilize'; medicId: string; targetId: string; skill: 'First Aid' | 'Paramedic'; situational?: Modifier[] }
-  | { type: 'reload'; actorId: string; weaponId: string };
+  | { type: 'reload'; actorId: string; weaponId: string }
+  // Tactical map
+  | { type: 'setMap'; map: TacticalMap | null }
+  | { type: 'placeToken'; actorId: string; at: Cell | null }
+  | { type: 'moveToken'; actorId: string; to: Cell; run?: boolean }
+  | { type: 'setWatch'; actorId: string; facing: number; arc?: number }
+  | { type: 'clearWatch'; actorId: string }
+  | { type: 'declineWatch'; pendingId: string };
 
 export type IntentType = Intent['type'];
 
@@ -112,6 +176,8 @@ export type Accepted = { ok: true; entry: LogEntry };
 export interface PublicCombatantView {
   name: string;
   side: 'pc' | 'npc';
+  allegiance: Allegiance;
+  portrait?: string;
   woundState: WoundState;
   conditions: Combatant['conditions'];
   injuries: string[];
@@ -132,6 +198,7 @@ export interface ViewState {
   actors: Record<string, ProjectedActor>;
   encounter: Encounter;
   pending: Pending | null;
+  map: TacticalMap | null;
 }
 
 export interface ProjectedEntry {
@@ -141,5 +208,5 @@ export interface ProjectedEntry {
   by: AuthorId;
   intentType: IntentType;
   events: CombatEvent[];
-  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: Pending | null };
+  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: Pending | null; map?: TacticalMap | null };
 }

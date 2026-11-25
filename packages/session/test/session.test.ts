@@ -166,17 +166,17 @@ describe('projection', () => {
     let s = emptySession('s1');
     for (const e of t.log) {
       s = applyEntry(s, e);
-      v = applyProjectedEntry(v, projectEntry(e, P1, s.actors));
+      v = applyProjectedEntry(v, projectEntry(e, P1, s));
     }
     expect(v).toEqual(view);
 
-    const dmgEntry = projectEntry(t.log.at(-1)!, P1, t.state.actors);
+    const dmgEntry = projectEntry(t.log.at(-1)!, P1, t.state);
     const serialized = JSON.stringify(dmgEntry);
     expect(dmgEntry.events.some((e) => e.type === 'damageApplied')).toBe(false);
     expect(serialized).not.toContain('"hpAfter":30');
     expect(serialized).not.toContain('"currentSP"');
-    expect(projectEntry(t.log[2]!, P1, t.state.actors).intentType).toBe('addActor');
-    expect(JSON.stringify(projectEntry(t.log[2]!, P1, t.state.actors))).not.toContain('"skills"');
+    expect(projectEntry(t.log[2]!, P1, t.state).intentType).toBe('addActor');
+    expect(JSON.stringify(projectEntry(t.log[2]!, P1, t.state))).not.toContain('"skills"');
   });
   it('GM projection is complete', () => {
     const t = setup();
@@ -184,7 +184,7 @@ describe('projection', () => {
   });
   it('redacts NPC initiative numbers', () => {
     const t = setup();
-    const e = projectEntry(t.log[3]!, P1, t.state.actors).events[0]!;
+    const e = projectEntry(t.log[3]!, P1, t.state).events[0]!;
     expect(e.type === 'initiativeRolled' && e.entries.find((x) => x.combatantId === 'ganger')!.total).toBe(0);
   });
 });

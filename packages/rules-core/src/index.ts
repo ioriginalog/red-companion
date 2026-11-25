@@ -11,3 +11,4 @@ export * from './health.js';
 export * from './initiative.js';
 export * from './data/core.js';
 export * from './data/critical-injuries.js';
+export * from './grid.js';

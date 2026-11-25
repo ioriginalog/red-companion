@@ -1,0 +1,102 @@
+/**
+ * Tactical-map helpers shared by the authority (GM device), the relay's
+ * projection, and the clients. All pure.
+ *
+ * Vision: the party (PCs and 'ally' NPCs) shares one field of view, the
+ * union of what each conscious friendly token can see. Hostile and neutral
+ * tokens outside it are hidden from players; their names stay hidden until
+ * the party has seen them once.
+ */
+import { cellKey, findPath, inCone, hasLineOfSight, gridDistance, visibleCells, type Cell } from '@cprc/rules-core';
+import type { Actor, Allegiance, TacticalMap } from './types.js';
+
+export type Faction = 'friendly' | 'hostile' | 'neutral';
+
+export function allegianceOf(a: Actor): Allegiance {
+  return a.allegiance ?? (a.combatant.side === 'pc' ? 'party' : 'hostile');
+}
+
+export function factionOf(a: Actor): Faction {
+  const al = allegianceOf(a);
+  return al === 'party' || al === 'ally' ? 'friendly' : al;
+}
+
+const canSee = (a: Actor) => !a.combatant.conditions.dead && !a.combatant.conditions.unconscious;
+
+/** Squares the party can see right now. */
+export function partyVision(map: TacticalMap, actors: Record<string, Actor>): Set<string> {
+  const out = new Set<string>();
+  for (const [id, at] of Object.entries(map.tokens)) {
+    const a = actors[id];
+    if (!a || factionOf(a) !== 'friendly' || !canSee(a)) continue;
+    for (const k of visibleCells(map, at, map.sightRange)) out.add(k);
+  }
+  return out;
+}
+
+/** Returns `map` itself when nothing new was spotted, so callers can skip a patch. */
+export function withSpotted(map: TacticalMap, actors: Record<string, Actor>): TacticalMap {
+  const vision = partyVision(map, actors);
+  const known = new Set(map.spotted);
+  const added = Object.entries(map.tokens)
+    .filter(([id, at]) => {
+      const a = actors[id];
+      return a && factionOf(a) !== 'friendly' && !known.has(id) && vision.has(cellKey(at));
+    })
+    .map(([id]) => id);
+  return added.length ? { ...map, spotted: [...map.spotted, ...added] } : map;
+}
+
+/** Movement blockers for `mover`: other factions block, own faction can be passed but not ended on. */
+export function occupancy(map: TacticalMap, actors: Record<string, Actor>, moverId: string) {
+  const mover = actors[moverId];
+  const blocked = new Set<string>();
+  const occupied = new Set<string>();
+  for (const [id, at] of Object.entries(map.tokens)) {
+    const a = actors[id];
+    if (id === moverId || !a) continue;
+    // Bodies don't block, but you can't stop on one.
+    if (a.combatant.conditions.dead || (mover && factionOf(a) === factionOf(mover))) occupied.add(cellKey(at));
+    else blocked.add(cellKey(at));
+  }
+  return { blocked, occupied };
+}
+
+export function planMove(map: TacticalMap, actors: Record<string, Actor>, moverId: string, to: Cell, budget: number) {
+  const from = map.tokens[moverId];
+  if (!from) return null;
+  return findPath(map, from, to, budget, occupancy(map, actors, moverId));
+}
+
+/** First opposing watch the path walks into, if any. */
+export function watchTrigger(map: TacticalMap, actors: Record<string, Actor>, moverId: string, path: Cell[]): { watcherId: string; at: Cell } | null {
+  const mover = actors[moverId];
+  if (!mover) return null;
+  for (const at of path) {
+    for (const [watcherId, w] of Object.entries(map.watches)) {
+      const watcher = actors[watcherId];
+      const apex = map.tokens[watcherId];
+      if (!watcher || !apex || !canSee(watcher)) continue;
+      const fw = factionOf(watcher);
+      if (fw === 'neutral' || fw === factionOf(mover)) continue;
+      if (gridDistance(apex, at) <= w.range && inCone(apex, w.facing, w.arc, at) && hasLineOfSight(map, apex, at)) return { watcherId, at };
+    }
+  }
+  return null;
+}
+
+/** Player-facing copy of the map: hidden tokens and enemy watches removed. */
+export function projectMap(map: TacticalMap, actors: Record<string, Actor>): TacticalMap {
+  const vision = partyVision(map, actors);
+  const tokens: Record<string, Cell> = {};
+  for (const [id, at] of Object.entries(map.tokens)) {
+    const a = actors[id];
+    if (!a) continue;
+    if (factionOf(a) === 'friendly' || vision.has(cellKey(at))) tokens[id] = at;
+  }
+  const watches = Object.fromEntries(Object.entries(map.watches).filter(([id]) => {
+    const a = actors[id];
+    return a && factionOf(a) === 'friendly';
+  }));
+  return { ...map, tokens, watches };
+}

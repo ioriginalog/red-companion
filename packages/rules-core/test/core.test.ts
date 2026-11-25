@@ -160,3 +160,20 @@ describe('melee', () => {
     expect(standingModifiers(hurt, 'rangedAttack')).toEqual([]);
   });
 });
+
+describe('previewRangedAttack stays in lockstep with resolveRangedAttack', async () => {
+  const { previewRangedAttack, resolveRangedAttack, scriptedDice } = await import('../src/index.js');
+  const { combatant } = await import('./fixtures.js');
+  const solo = () => combatant({ id: 'a', stats: { REF: 8 }, skills: { Handgun: 6 } });
+  const ganger = () => combatant({ id: 'b', stats: { REF: 5 } });
+  it.each([
+    ['single at 10 m', { distance: 10 }],
+    ['aimed head at 4 m', { distance: 4, aimTarget: 'head' as const }],
+  ])('%s', (_label, extra) => {
+    const weapon = { id: 'p', name: 'Heavy Pistol', type: 'heavyPistol' as const, ammo: { loaded: 8, capacity: 8 } };
+    const pv = previewRangedAttack({ attacker: solo(), defender: ganger(), weapon, ...extra });
+    const out = resolveRangedAttack({ attacker: solo(), defender: ganger(), weapon, defenderDodges: false, ...extra }, scriptedDice({ d10: [5], d6: [] }));
+    expect(out.attack.total).toBe(pv.base + pv.modifiers.reduce((s, m) => s + m.value, 0) + 5);
+    expect(out.defenseValue).toBe(pv.dv);
+  });
+});

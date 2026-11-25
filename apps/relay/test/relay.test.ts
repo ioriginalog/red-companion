@@ -205,3 +205,43 @@ describe('relay', () => {
     expect(l.entries).toEqual(auth.log);
   });
 });
+
+describe('static web client and origin policy', () => {
+  let dir: string;
+  let relay: ReturnType<typeof createRelay>;
+  let base: string;
+  beforeEach(async () => {
+    const { mkdirSync, writeFileSync } = await import('node:fs');
+    dir = mkdtempSync(join(tmpdir(), 'web-'));
+    mkdirSync(join(dir, 'assets'));
+    writeFileSync(join(dir, 'index.html'), '<!doctype html><title>t</title>');
+    writeFileSync(join(dir, 'assets', 'app-abcd1234.js'), 'console.log(1)');
+    relay = createRelay({ store: new MemoryStore(), webDir: dir, allowedOrigins: ['https://good.example'] });
+    await new Promise<void>((r) => relay.server.listen(0, '127.0.0.1', () => r()));
+    base = `http://127.0.0.1:${(relay.server.address() as AddressInfo).port}`;
+  });
+  afterEach(async () => { await relay.close(); rmSync(dir, { recursive: true, force: true }); });
+
+  it('serves index with a CSP, hashed assets as immutable, and falls back for routes', async () => {
+    const idx = await fetch(`${base}/`);
+    expect(idx.status).toBe(200);
+    expect(idx.headers.get('content-security-policy')).toContain("default-src 'self'");
+    const js = await fetch(`${base}/assets/app-abcd1234.js`);
+    expect(js.headers.get('cache-control')).toContain('immutable');
+    expect((await fetch(`${base}/table/xyz`)).status).toBe(200);
+    expect((await fetch(`${base}/missing.png`)).status).toBe(404);
+  });
+  it('refuses path traversal', async () => {
+    // Normalizes to a path inside the web root, so it gets the SPA shell, never the file.
+    const r = await fetch(`${base}/..%2f..%2fetc%2fpasswd`);
+    expect(await r.text()).toBe('<!doctype html><title>t</title>');
+    expect((await fetch(`${base}/..%2f..%2fetc%2fhosts.txt`)).status).toBe(404);
+  });
+  it('rejects session creation and sockets from other origins', async () => {
+    expect((await fetch(`${base}/api/sessions`, { method: 'POST', headers: { Origin: 'https://evil.example' } })).status).toBe(403);
+    expect((await fetch(`${base}/api/sessions`, { method: 'POST', headers: { Origin: 'https://good.example' } })).status).toBe(201);
+    const ws = new WebSocket(`${base.replace('http', 'ws')}/ws`, { headers: { Origin: 'https://evil.example' } });
+    const code = await new Promise<string>((r) => { ws.on('unexpected-response', (_q, res) => r(String(res.statusCode))); ws.on('open', () => r('open')); });
+    expect(code).toBe('401');
+  });
+});

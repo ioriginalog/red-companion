@@ -7,6 +7,7 @@ export function emptySession(sessionId: string): SessionState {
     actors: {},
     encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null },
     pending: null,
+    map: null,
   };
 }
 
@@ -26,6 +27,7 @@ export function applyEntry(state: SessionState, entry: LogEntry): SessionState {
     actors,
     encounter: entry.patch.encounter ?? state.encounter,
     pending: 'pending' in entry.patch ? (entry.patch.pending ?? null) : state.pending,
+    map: 'map' in entry.patch ? (entry.patch.map ?? null) : state.map,
   };
 }
 

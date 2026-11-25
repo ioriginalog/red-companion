@@ -6,7 +6,8 @@
  * Everything else: name, side, Wound State, conditions, injury names.
  */
 import { getInjury, woundState, type CheckResult, type CombatEvent } from '@cprc/rules-core';
-import type { Actor, LogEntry, ProjectedActor, ProjectedEntry, SessionState, Viewer, ViewState } from './types.js';
+import { allegianceOf, factionOf, projectMap } from './tactical.js';
+import type { Actor, LogEntry, ProjectedActor, ProjectedEntry, SessionState, TacticalMap, Viewer, ViewState } from './types.js';
 
 export interface ProjectionOptions {
   /** Players can see other PCs' sheets. Default true. */
@@ -19,14 +20,23 @@ export function canSeeFull(actor: Actor, viewer: Viewer, opts: ProjectionOptions
   return (opts.revealPcs ?? true) && actor.combatant.side === 'pc';
 }
 
-export function projectActor(actor: Actor, viewer: Viewer, opts?: ProjectionOptions): ProjectedActor {
+/** Hostile and neutral NPCs the party hasn't seen yet stay anonymous to players. */
+function isAnonymous(actor: Actor, viewer: Viewer, map: TacticalMap | null): boolean {
+  if (viewer.role === 'gm' || !map || factionOf(actor) === 'friendly') return false;
+  return !map.spotted.includes(actor.id);
+}
+
+export function projectActor(actor: Actor, viewer: Viewer, opts?: ProjectionOptions, map: TacticalMap | null = null): ProjectedActor {
   const c = actor.combatant;
+  const anon = isAnonymous(actor, viewer, map);
   const base: ProjectedActor = {
     id: actor.id,
     controller: actor.controller,
     public: {
-      name: c.name,
+      name: anon ? 'Unknown Contact' : c.name,
       side: c.side,
+      allegiance: allegianceOf(actor),
+      ...(actor.portrait && !anon ? { portrait: actor.portrait } : {}),
       woundState: woundState(c.hp),
       conditions: c.conditions,
       injuries: c.criticalInjuries.map((i) => getInjury(i.injuryId).name),
@@ -39,10 +49,16 @@ export function projectState(state: SessionState, viewer: Viewer, opts?: Project
   return {
     sessionId: state.sessionId,
     seq: state.seq,
-    actors: Object.fromEntries(Object.values(state.actors).map((a) => [a.id, projectActor(a, viewer, opts)])),
+    actors: Object.fromEntries(Object.values(state.actors).map((a) => [a.id, projectActor(a, viewer, opts, state.map)])),
     encounter: state.encounter,
     pending: state.pending,
+    map: viewMap(state, viewer),
   };
+}
+
+function viewMap(state: SessionState, viewer: Viewer): TacticalMap | null {
+  if (!state.map) return null;
+  return viewer.role === 'gm' ? state.map : projectMap(state.map, state.actors);
 }
 
 function eventSubject(e: CombatEvent): string | undefined {
@@ -50,10 +66,15 @@ function eventSubject(e: CombatEvent): string | undefined {
 }
 
 /**
- * Project one entry. `actorsAfter` = actors after applying the entry (used to
- * decide who the viewer may see; removed actors fall back to the patch-less view).
+ * Project one entry. `after` = state after applying the entry (used to decide
+ * what the viewer may see).
+ *
+ * Fog of war: any change to the map or to actors can change what the party
+ * sees, so those entries carry the whole re-projected map, and a map change
+ * re-sends every actor (a newly spotted NPC gets its name back).
  */
-export function projectEntry(entry: LogEntry, viewer: Viewer, actorsAfter: Record<string, Actor>, opts?: ProjectionOptions): ProjectedEntry {
+export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionState, opts?: ProjectionOptions): ProjectedEntry {
+  const actorsAfter = after.actors;
   const visible = (id: string | undefined) => {
     if (viewer.role === 'gm') return true;
     const a = id ? actorsAfter[id] : undefined;
@@ -64,8 +85,12 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, actorsAfter: Recor
     .map((e) => (viewer.role === 'gm' ? e : redactEvent(e, visible)));
   const patch: ProjectedEntry['patch'] = {};
   if (entry.patch.actors) {
-    patch.actors = Object.fromEntries(Object.entries(entry.patch.actors).map(([id, a]) => [id, a ? projectActor(a, viewer, opts) : null]));
+    patch.actors = Object.fromEntries(Object.entries(entry.patch.actors).map(([id, a]) => [id, a ? projectActor(a, viewer, opts, after.map) : null]));
   }
+  if ('map' in entry.patch && viewer.role !== 'gm') {
+    patch.actors = { ...patch.actors, ...Object.fromEntries(Object.values(actorsAfter).map((a) => [a.id, projectActor(a, viewer, opts, after.map)])) };
+  }
+  if ('map' in entry.patch || (entry.patch.actors && after.map)) patch.map = viewMap(after, viewer);
   if (entry.patch.encounter) patch.encounter = entry.patch.encounter;
   if ('pending' in entry.patch) patch.pending = entry.patch.pending ?? null;
   return { seq: entry.seq, id: entry.id, at: entry.at, by: entry.by, intentType: entry.intent.type, events, patch };
@@ -110,7 +135,7 @@ export function redactEvent(e: CombatEvent, visible: (id: string | undefined) =>
 }
 
 export function emptyView(sessionId: string): ViewState {
-  return { sessionId, seq: 0, actors: {}, encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null }, pending: null };
+  return { sessionId, seq: 0, actors: {}, encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null }, pending: null, map: null };
 }
 
 /** Client-side reducer for projected entries. */
@@ -127,5 +152,6 @@ export function applyProjectedEntry(view: ViewState, entry: ProjectedEntry): Vie
     actors,
     encounter: entry.patch.encounter ?? view.encounter,
     pending: 'pending' in entry.patch ? (entry.patch.pending ?? null) : view.pending,
+    map: 'map' in entry.patch ? (entry.patch.map ?? null) : view.map,
   };
 }

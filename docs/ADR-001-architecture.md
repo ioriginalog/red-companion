@@ -49,3 +49,10 @@ Dice are rolled on the authority device through an injected `Dice` interface. Pl
 - A GM without a device can't host. Acceptable for a GM tool.
 - Latency for players = one round-trip to the GM device. Fine for turn-based play.
 - The rules engine is fully unit-testable with scripted dice, which is how we keep rules disputes out of bug reports.
+
+## Addendum (2026-11-25): Tactical Map and Web Client
+
+- **Map state lives in the log** like everything else: `setMap`, `placeToken` (GM), `moveToken`, `setWatch`, `clearWatch`, `declineWatch`. The map is small (24 × 16 squares), so patches replace it whole.
+- **Fog of war is enforced at the relay**, not the client. `projectEntry` takes the state *after* an entry and re-projects the whole map for players whenever the map or any actor changes, because a PC stepping forward can reveal a hostile that wasn't in the patch. Hidden tokens and hostile watches never leave the server.
+- **One geometry function** (`hasLineOfSight`) drives both fog and attack legality, so what a player can see and what they can shoot never disagree about walls.
+- **The web client** (`apps/web`, Vite + React) is served by the relay from the same origin. The GM's browser is the authority: it replays the log, runs intents with real dice, and appends entries. `ALLOWED_ORIGINS` now gates session creation and WebSocket upgrades, not just CORS.

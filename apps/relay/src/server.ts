@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { createRelay } from './relay.js';
 import { FileStore, MemoryStore } from './store.js';
 
@@ -11,6 +12,7 @@ if (!dataDir) console.warn('DATA_DIR not set: sessions are kept in memory and lo
 const { server, close } = createRelay({
   store,
   allowedOrigins: origins && origins.length ? origins : '*',
+  webDir: process.env.WEB_DIR ?? fileURLToPath(new URL('../../web/dist', import.meta.url)),
   log: (m) => console.log(m),
 });
 
