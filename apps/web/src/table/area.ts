@@ -34,7 +34,7 @@ export function shellCells(map: GridMap, from: Cell, toward: Cell): Set<string> 
   for (let dy = -SHELL_RANGE_SQUARES; dy <= SHELL_RANGE_SQUARES; dy++) for (let dx = -SHELL_RANGE_SQUARES; dx <= SHELL_RANGE_SQUARES; dx++) {
     const c = { x: from.x + dx, y: from.y + dy };
     if (!inBounds(map, c) || gridDistance(from, c) > SHELL_RANGE_SQUARES) continue;
-    if (inCone(from, facing, SHELL_ARC, c) && hasLineOfSight(map, from, c)) out.add(cellKey(c));
+    if (!isOpaque(map, c) && inCone(from, facing, SHELL_ARC, c) && hasLineOfSight(map, from, c)) out.add(cellKey(c));
   }
   return out;
 }

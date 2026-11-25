@@ -58,6 +58,7 @@ export class Client {
   };
   private pingN = 0;
   private lastSignalAt: Record<string, number> = {};
+  private trailing: Record<string, { timer: number; sig: Signal }> = {};
   private listeners = new Set<Listener>();
   private ws: WebSocket | null = null;
   private full: SessionState | null = null;
@@ -131,12 +132,27 @@ export class Client {
   /** Send a table signal; rendered locally right away as 'me'. Cursor and measure updates are throttled. */
   signal(sig: Signal) {
     const now = Date.now();
-    if (sig.kind !== 'ping' && !(sig.kind === 'measure' && sig.to === null) && !(sig.kind === 'cursor' && sig.at === null)) {
-      if (now - (this.lastSignalAt[sig.kind] ?? 0) < 120) { this.applySignal('me', sig); return; }
+    const final = sig.kind === 'ping' || (sig.kind === 'measure' && sig.to === null) || (sig.kind === 'cursor' && sig.at === null);
+    const wait = 120 - (now - (this.lastSignalAt[sig.kind] ?? 0));
+    this.applySignal('me', sig);
+    const pending = this.trailing[sig.kind];
+    if (!final && wait > 0) {
+      // Throttled: keep only the newest and send it when the window ends.
+      if (pending) pending.sig = sig;
+      else this.trailing[sig.kind] = { sig, timer: window.setTimeout(() => this.flushSignal(sig.kind), wait) };
+      return;
     }
+    if (pending) { window.clearTimeout(pending.timer); delete this.trailing[sig.kind]; }
     this.lastSignalAt[sig.kind] = now;
     this.send({ t: 'signal', signal: sig });
-    this.applySignal('me', sig);
+  }
+
+  private flushSignal(kind: string) {
+    const p = this.trailing[kind];
+    if (!p) return;
+    delete this.trailing[kind];
+    this.lastSignalAt[kind] = Date.now();
+    this.send({ t: 'signal', signal: p.sig });
   }
 
   private applySignal(from: string, sig: Signal) {

@@ -37,6 +37,7 @@ export function Table({ s }: { s: ClientState }) {
   const [help, setHelp] = useState(false);
   const [effects, setEffects] = useState<Effect[]>([]);
   const [unread, setUnread] = useState(0);
+  const [gmCursor, setGmCursor] = useState(false);
 
   const mine = useCallback((id: string | null | undefined) => !!id && (isGm || view.actors[id]?.controller === me), [isGm, view.actors, me]);
   const name = useCallback((id: string) => view.actors[id]?.public.name ?? 'Someone', [view.actors]);
@@ -164,6 +165,7 @@ export function Table({ s }: { s: ClientState }) {
           <MapView
             view={view} isGm={isGm} actingId={actingId} canAct={canAct} targetId={targetId} attack={attack} chances={chances}
             mode={mapMode} areaKind={areaKind} partyFog={partyFog} focusId={isGm ? focusId : null} highlight={highlight}
+            shareCursor={!isGm || gmCursor}
             signals={s.signals} effects={effects} nameOf={(f) => client.nameOf(f)}
             canDrag={(id) => isGm || (mine(id) && (!enc.active || currentId === id))}
             onToken={pickToken}
@@ -264,7 +266,7 @@ export function Table({ s }: { s: ClientState }) {
           )}
           {tab === 'sheet' && <SheetPanel c={c} preferId={isGm ? (focusId ?? actingId) : actingId} />}
           {tab === 'chat' && <ChatPanel c={c} rollerId={isGm ? (focusId ?? actingId) : (actingId ?? ownIds[0] ?? null)} onUnreadReset={() => setUnread(0)} />}
-          {tab === 'scene' && isGm && <ScenePanel c={c} mapMode={mapMode} setMapMode={setMapMode} onFocus={(id) => { setFocusId(id); setTab('combat'); }} />}
+          {tab === 'scene' && isGm && <ScenePanel c={c} mapMode={mapMode} setMapMode={setMapMode} shareCursor={gmCursor} setShareCursor={(v) => { setGmCursor(v); if (!v) client.signal({ kind: 'cursor', at: null }); }} onFocus={(id) => { setFocusId(id); setTab('combat'); }} />}
         </div>
       </aside>
 

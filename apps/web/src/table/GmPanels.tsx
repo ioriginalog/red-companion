@@ -49,7 +49,9 @@ export function Inspector({ c, id, onClose, onTarget }: { c: TableCtx; id: strin
 }
 
 /** GM scene controls: lighting and the roster. */
-export function ScenePanel({ c, mapMode, setMapMode, onFocus }: { c: TableCtx; mapMode: MapMode; setMapMode: (m: MapMode) => void; onFocus: (id: string) => void }) {
+export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor, onFocus }: {
+  c: TableCtx; mapMode: MapMode; setMapMode: (m: MapMode) => void; shareCursor: boolean; setShareCursor: (v: boolean) => void; onFocus: (id: string) => void;
+}) {
   const { view } = c;
   const lighting = view.map?.lighting ?? {};
   const actors = Object.values(view.actors);
@@ -62,6 +64,7 @@ export function ScenePanel({ c, mapMode, setMapMode, onFocus }: { c: TableCtx; m
             <button className={`mode${lighting.revealAll ? ' sel' : ''}`} aria-pressed={!!lighting.revealAll} onClick={() => c.act({ type: 'setLighting', lighting: { ...lighting, revealAll: !lighting.revealAll } })}>Reveal All</button>
             <button className={`mode${mapMode === 'reveal' ? ' sel' : ''}`} onClick={() => setMapMode(mapMode === 'reveal' ? 'move' : 'reveal')}>Paint Revealed Squares</button>
             <button className="mode" disabled={!lighting.revealed?.length} onClick={() => c.act({ type: 'setLighting', lighting: { ...lighting, revealed: [] } })}>Clear Revealed</button>
+            <button className={`mode${shareCursor ? ' sel' : ''}`} aria-pressed={shareCursor} onClick={() => setShareCursor(!shareCursor)} title="Players see your pointer. Careful: hovering a hidden token shows where it is.">Share My Cursor</button>
           </div>
           <p className="dim small" style={{ marginTop: 8 }}>
             {mapMode === 'reveal' ? 'Drag over squares to reveal them to players; drag over revealed squares to hide them again.' : 'Players always see revealed squares, even without line of sight (lit areas, windows, cameras).'}

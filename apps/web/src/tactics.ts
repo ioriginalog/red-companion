@@ -8,28 +8,20 @@ import {
   profileOf, reachableCells, RulesError, skillLevel, standingModifiers, visibleCells, AIMED_SHOT_PENALTY,
   type AimTarget, type Cell, type Combatant, type Modifier, type Weapon,
 } from '@cprc/rules-core';
-import type { ProjectedActor, TacticalMap, ViewState, Watch } from '@cprc/session';
+import { visionFor, type ProjectedActor, type TacticalMap, type ViewState, type Watch } from '@cprc/session';
 import { chanceToBeat, chanceToWinContest } from './odds.js';
 
 export const isFriendly = (a?: ProjectedActor) => !!a && (a.public.allegiance === 'party' || a.public.allegiance === 'ally');
 export const canSeeActor = (a: ProjectedActor) => !a.public.conditions.dead && !a.public.conditions.unconscious;
 
-/** What the party sees: shared sight of conscious friendly tokens, plus GM lighting overrides. */
+/** What the party sees: shared sight of conscious friendly tokens, plus GM lighting overrides (same rule as the relay). */
 export function partyVision(view: ViewState): Set<string> {
-  const out = new Set<string>();
   const map = view.map;
-  if (!map) return out;
-  if (map.lighting?.revealAll) {
-    for (let y = 0; y < map.height; y++) for (let x = 0; x < map.width; x++) out.add(`${x},${y}`);
-    return out;
-  }
-  for (const k of map.lighting?.revealed ?? []) out.add(k);
-  for (const [id, at] of Object.entries(map.tokens)) {
-    const a = view.actors[id];
-    if (!a || !isFriendly(a) || !canSeeActor(a)) continue;
-    for (const k of visibleCells(map, at, map.sightRange)) out.add(k);
-  }
-  return out;
+  if (!map) return new Set();
+  const seers = Object.entries(map.tokens)
+    .filter(([id]) => { const a = view.actors[id]; return !!a && isFriendly(a) && canSeeActor(a); })
+    .map(([, at]) => at);
+  return visionFor(map, seers);
 }
 
 export function occupancy(view: ViewState, moverId: string) {

@@ -123,6 +123,8 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--cyan)
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; position: relative; }
 .card p { margin: 0 0 8px; }
 .card > .ttl { font: 700 13px var(--head); text-transform: uppercase; letter-spacing: 0.1em; color: var(--cyan); margin-bottom: 8px; }
+.card > .ttl.row::before { content: none; }
+.card > .ttl.row > span:first-child::before { content: '///'; color: var(--magenta); margin-right: 6px; letter-spacing: -0.1em; }
 .card > .ttl::before { content: '///'; color: var(--magenta); margin-right: 6px; letter-spacing: -0.1em; }
 .row { display: flex; align-items: center; gap: 10px; }
 .kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }

@@ -23,6 +23,8 @@ interface Props {
   partyFog: boolean;
   focusId: string | null;
   highlight: string[];
+  /** Broadcast this viewer's cursor. Off for the GM by default: hovering hidden tokens would reveal them. */
+  shareCursor: boolean;
   signals: Signals;
   effects: Effect[];
   nameOf: (from: string) => string;
@@ -195,7 +197,7 @@ export function MapView(p: Props) {
     const c = cellAtClient(e.clientX, e.clientY);
     if (!hover || !c || hover.x !== c.x || hover.y !== c.y) {
       setHover(c);
-      p.onSignal({ kind: 'cursor', at: c });
+      if (p.shareCursor) p.onSignal({ kind: 'cursor', at: c });
     }
     const g = gesture.current;
     if (!g) return;
@@ -303,7 +305,7 @@ export function MapView(p: Props) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={(e) => { pointers.current.delete(e.pointerId); gesture.current = null; clearLong(); setDragTo(null); }}
-        onPointerLeave={() => { setHover(null); p.onSignal({ kind: 'cursor', at: null }); }}
+        onPointerLeave={() => { setHover(null); if (p.shareCursor) p.onSignal({ kind: 'cursor', at: null }); }}
         onContextMenu={(e) => {
           e.preventDefault();
           const tok = tokenAt(cellAtClient(e.clientX, e.clientY));
@@ -388,6 +390,10 @@ export function MapView(p: Props) {
               points={[pathFrom, ...path].map((c) => `${center(c).x},${center(c).y}`).join(' ')}
               fill="none" stroke={runAt(path[path.length - 1]!) ? '#ffd400' : '#22e3ff'} strokeWidth={4} strokeDasharray="2 10" strokeLinecap="round"
             />
+            {dragTo && (() => {
+              const g = center(dragTo.at);
+              return <circle cx={g.x} cy={g.y} r={S * 0.44} fill="rgba(7,11,31,0.6)" stroke={runAt(dragTo.at) ? '#ffd400' : '#22e3ff'} strokeWidth={3} strokeDasharray="8 5" />;
+            })()}
             {dragTo && (() => {
               const end = center(path[path.length - 1]!);
               const cost = path.length;
