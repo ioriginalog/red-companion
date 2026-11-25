@@ -15,7 +15,8 @@
  *     rolled (an `awaitingAreaDodge` step). The GM can resolve the rest as "dodge".
  *   - Suppressive Fire covers opposing tokens within 25 m/yds (12 squares) and the
  *     weapon's Autofire range, in the shooter's line of sight.
- *   - A missed explosive scatters: the GM places it (Core gives no scatter table).
+ *   - A missed explosive scatters: an `awaitingScatter` step; the GM places it or rolls a
+ *     random square in the blast area (playloop.ts), then it resolves like a hit there.
  */
 import {
   applyAreaDamage, AUTOFIRE_DV, bearing, gridDistance, hasLineOfSight, inBounds, inCone, metersBetween,
@@ -115,10 +116,13 @@ export function doAreaAttack(state: SessionState, intent: AreaIntent, by: Viewer
   if (!hasLineOfSight(map, from, at)) throw new SessionError('NO_LINE_OF_SIGHT', 'That square is out of sight.');
   const distance = Math.max(1, metersBetween(from, at));
 
+  // Round 3 D: a Thrown Grenade weapon is always thrown (DEX + Athletics), whatever kind the client sent.
+  const kind: AreaIntent['kind'] = weapon.type === 'grenade' ? 'thrownGrenade' : intent.kind;
+  if (weapon.type === 'grenade' && intent.kind === 'shotgunShell') throw new SessionError('INVALID', `${weapon.name} is thrown, not fired as a shell.`);
   let area: AreaKind;
-  if (intent.kind === 'shotgunShell') area = { kind: 'shotgunShell', weapon };
-  else if (intent.kind === 'launcher') area = { kind: 'launcher', weapon, distance };
-  else if (intent.kind === 'thrownGrenade') {
+  if (kind === 'shotgunShell') area = { kind: 'shotgunShell', weapon };
+  else if (kind === 'launcher') area = { kind: 'launcher', weapon, distance };
+  else if (kind === 'thrownGrenade') {
     if (weapon.ammo && weapon.ammo.loaded < 1) throw new SessionError('INVALID', `No ${weapon.name} left.`);
     area = { kind: 'thrownGrenade', distance, damageDice: weapon.damageDiceOverride ?? DEFAULT_GRENADE_DICE };
   } else throw new SessionError('INVALID', 'Unknown area attack.');
@@ -126,9 +130,9 @@ export function doAreaAttack(state: SessionState, intent: AreaIntent, by: Viewer
   // Full Action. Checked before any die is rolled; RulesErrors also come first.
   const encounter = checkAttackAction(state, by, attacker, weapon.id, 1);
   const out = resolveAreaAttack(attacker.combatant, area, dice);
-  const spent = intent.kind === 'thrownGrenade' ? (weapon.ammo ? 1 : 0) : out.ammoSpent;
+  const spent = kind === 'thrownGrenade' ? (weapon.ammo ? 1 : 0) : out.ammoSpent;
 
-  const label = intent.kind === 'shotgunShell' ? 'Shotgun Shell' : intent.kind === 'launcher' ? `${weapon.name} Blast` : 'Thrown Grenade';
+  const label = kind === 'shotgunShell' ? 'Shotgun Shell' : kind === 'launcher' ? `${weapon.name} Blast` : weapon.type === 'grenade' ? weapon.name : 'Thrown Grenade';
   const events: CombatEvent[] = [
     { type: 'checkRolled', visibility: 'public', by: attacker.controller, combatantId: attacker.id, label, check: out.attack, dv: out.dv, success: out.hit },
   ];
@@ -138,17 +142,19 @@ export function doAreaAttack(state: SessionState, intent: AreaIntent, by: Viewer
   const patch: StatePatch = { actors };
   if (encounter) patch.encounter = encounter;
   if (out.scattered) {
-    events.push({ type: 'gmRulingRequired', visibility: 'public', reason: 'The explosive missed and scatters. The GM places it within the blast area around the target square.' });
-    events.push({ type: 'areaResolved', visibility: 'public', attackerId: attacker.id, kind: intent.kind, at, targetIds: [] });
+    // Round 3 P: the GM places (or rolls) where it lands, then the blast resolves there (placeScatter).
+    events.push({ type: 'explosiveMissed', visibility: 'public', attackerId: attacker.id, at });
+    const areaKind = kind === 'launcher' ? 'launcher' : 'thrownGrenade';
+    patch.pending = { kind: 'awaitingScatter', id: newId(), attackerId: attacker.id, areaKind, at, attack: out.attack, damageDice: out.damageDice };
     return { events, patch };
   }
   if (!out.hit) {
-    events.push({ type: 'areaResolved', visibility: 'public', attackerId: attacker.id, kind: intent.kind, at, targetIds: [] });
+    events.push({ type: 'areaResolved', visibility: 'public', attackerId: attacker.id, kind, at, targetIds: [] });
     return { events, patch };
   }
-  const targets = intent.kind === 'shotgunShell' ? shellTargets(state, attacker.id, at).map((id) => ({ id })) : blastTargetsWithCover(state, at);
+  const targets = kind === 'shotgunShell' ? shellTargets(state, attacker.id, at).map((id) => ({ id })) : blastTargetsWithCover(state, at);
   const base: Omit<AreaPendingT, 'kind' | 'decisions'> = {
-    id: newId(), attackerId: attacker.id, areaKind: intent.kind, at, attack: out.attack, damageDice: out.damageDice, source: out.source, targets,
+    id: newId(), attackerId: attacker.id, areaKind: kind, at, attack: out.attack, damageDice: out.damageDice, source: out.source, targets,
   };
   const afterAttack: SessionState = { ...state, actors: { ...state.actors, ...actors } };
   const ask = startAreaDodge(base, afterAttack);
@@ -179,6 +185,10 @@ export function finishArea(state: SessionState, p: AreaPendingT, dice: Dice): { 
       events.push({ type: 'checkRolled', visibility: 'public', by: base.controller, combatantId: r.targetId, label: 'Dodge', check: r.dodge, dv: p.attack.total, success: r.avoided });
     }
     events.push(...r.events);
+    // Round 3 P: players learn the hit did nothing, without SP numbers.
+    if (!r.avoided && factionOf(base) !== 'friendly' && base.combatant.hp.current === r.target.hp.current) {
+      events.push({ type: 'noEffect', visibility: 'public', targetId: r.targetId });
+    }
     actors[r.targetId] = { ...base, combatant: r.target };
   }
   const patch: StatePatch = { actors, pending: null };

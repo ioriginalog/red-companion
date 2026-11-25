@@ -29,3 +29,6 @@ export * from './martial.js';
 export * from './facedown.js';
 export * from './roles-extra.js';
 // --- end Round 3 X ---
+// --- Round 3 D ---
+export * from './data/packs.js';
+// --- end Round 3 D ---

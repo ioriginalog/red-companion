@@ -21,6 +21,7 @@ export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: 
   if (k !== undefined) return k;
   switch (e.type) {
     case 'initiativeRolled':
+      if (e.entries.length === 1) return { text: `${name(e.entries[0]!.combatantId)} joins the Turn order.`, tone: 'info' }; // Round 3 P
       return { text: `Initiative: ${e.entries.map((x) => name(x.combatantId)).join(', ')}.`, tone: 'info' };
     case 'attackResolved':
       return {
@@ -74,8 +75,24 @@ export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: 
       return { text: `GM shared a handout: ${e.title}.`, tone: 'info' };
     case 'sceneChanged':
       return { text: `Scene: ${e.name}.`, tone: 'info' };
-    case 'areaResolved':
-      return { text: `${name(e.attackerId)} ${e.kind === 'shotgunShell' ? 'fires a shotgun shell' : 'lands an explosive'}${e.targetIds.length ? `, catching ${e.targetIds.map(name).join(', ')}` : ''}.`, tone: e.targetIds.length ? 'hit' : 'miss' };
+    case 'areaResolved': {
+      // Round 3 P: an explosive's areaResolved only comes once it has gone off (hit or placed scatter).
+      const caught = e.targetIds.length ? e.targetIds.map(name).join(', ') : '';
+      if (e.kind === 'shotgunShell') return { text: caught ? `${name(e.attackerId)}’s shotgun shell catches ${caught}.` : `${name(e.attackerId)}’s shotgun shell hits no one.`, tone: caught ? 'hit' : 'miss' };
+      return { text: caught ? `The blast catches ${caught}.` : 'The blast catches no one.', tone: caught ? 'hit' : 'miss' };
+    }
+    // --- Round 3 P ---
+    case 'explosiveMissed':
+      return { text: `${name(e.attackerId)}’s explosive misses and scatters. The GM places where it lands.`, tone: 'miss' };
+    case 'explosiveScattered':
+      return { text: `The explosive lands ${Math.max(Math.abs(e.to.x - e.from.x), Math.abs(e.to.y - e.from.y)) * 2} m from the aim point${e.rolled ? ' (rolled)' : ''}.`, tone: 'info' };
+    case 'noEffect':
+      return { text: `No effect on ${name(e.targetId)}.`, tone: 'miss' };
+    case 'turnDelayed':
+      return { text: `${name(e.combatantId)} delays${e.after ? ` until after ${name(e.after)}` : ' to the end of the Round'}.`, tone: 'info' };
+    case 'leftInitiative':
+      return { text: `${name(e.combatantId)} leaves the Turn order.`, tone: 'info' };
+    // --- end Round 3 P ---
     case 'suppressiveFireResolved':
       return { text: `${name(e.attackerId)} lays down Suppressive Fire${e.results.some((r) => r.mustSeekCover) ? `; ${e.results.filter((r) => r.mustSeekCover).map((r) => name(r.targetId)).join(', ')} must take cover` : ''}.`, tone: 'hit' };
     default:

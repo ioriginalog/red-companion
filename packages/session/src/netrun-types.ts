@@ -33,6 +33,8 @@ export type NetOp =
   | { op: 'jackIn'; actorId: string; archId: string }
   | { op: 'jackOut'; actorId: string }
   | { op: 'move'; actorId: string; toFloorId: string }
+  /** Round 3 P: step down into the `branch`-th way down from here (revealed or not). No Pathfinder needed. */
+  | { op: 'descend'; actorId: string; branch: number }
   | { op: 'ability'; actorId: string; ability: NetAbilityName; index?: number; toFloorId?: string }
   | { op: 'program'; actorId: string; programId: string; index: number }
   | { op: 'activate'; actorId: string; programId: string; active: boolean }
@@ -55,6 +57,8 @@ export interface NetFloorView {
   controlled: boolean;
   ice?: { name: string; kind: 'antiPersonnel' | 'antiProgram'; rez: number; maxRez: number }[];
   demon?: { name: string; rez: number; maxRez: number };
+  /** Round 3 P: on the runner's own floor, how many ways lead down (revealed or not). */
+  exitsDown?: number;
 }
 
 export interface NetRunView {

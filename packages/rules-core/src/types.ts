@@ -85,7 +85,10 @@ export interface Combatant {
   /** Role and rank. A Netrunner's rank is their Interface rank (see `interfaceRank`). */
   role?: RoleState;
   /** Humanity; current EMP = floor(current / 10). */
-  humanity?: { current: number; max: number };
+  /** `base` = EMP × 10 at creation; `max` = base − 2 per cyberware with Humanity Loss (4 for borgware). */
+  humanity?: { current: number; max: number; base?: number };
+  /** Round 3 D: carried gear. */
+  gear?: GearItem[];
   cyberware?: CyberwareItem[];
   /** Derived by `applySystems` from role and cyberware. The engine reads only this. */
   mods?: CombatMods;
@@ -130,7 +133,14 @@ export type CyberwareEffect =
   | { kind: 'skill'; skill: string; value: number }
   | { kind: 'armor'; location: HitLocation; sp: number }
   | { kind: 'initiative'; value: number }
+  /** Legacy alias of 'targetingScope' (saved data from Round 2). */
   | { kind: 'smartLink' }
+  /** Cybereye option: Smart ammo can track; +1 to ranged Aimed Shots. */
+  | { kind: 'targetingScope' }
+  /** Prerequisite for chipware, plugs and a Smartgun Link. */
+  | { kind: 'neuralLink' }
+  /** Cyberhand option; with a Neural Link it can drive a Smartgun Link. */
+  | { kind: 'subdermalGrip' }
   | { kind: 'interfacePlugs' }
   | { kind: 'healingMultiplier'; value: number }
   | { kind: 'ignoreSeriouslyWounded' };
@@ -143,7 +153,20 @@ export interface CyberwareItem {
   humanityLoss: number;
   effects: CyberwareEffect[];
   notes?: string;
+  // --- Round 3 D ---
+  /** Humanity Loss dice as written, e.g. "2d6", "1d6/2", "0". */
+  hlDice?: string;
+  /** Fixed Humanity Loss taken at character creation. */
+  hlFixed?: number;
+  /** Borgware lowers maximum Humanity by 4 instead of 2. */
+  borgware?: boolean;
+  install?: 'mall' | 'clinic' | 'hospital' | 'none';
+  costEb?: number;
+  // --- end Round 3 D ---
 }
+
+/** A gear entry on a character sheet (Round 3 D). */
+export interface GearItem { name: string; qty: number; notes?: string }
 export interface CombatMods {
   statBonuses?: Partial<Record<StatKey, number>>;
   skillBonuses?: Record<string, number>;
@@ -154,7 +177,10 @@ export interface CombatMods {
   damageDeflection?: number;
   spotWeakness?: number;
   fumbleRecovery?: boolean;
-  smartLink?: boolean;
+  /** Round 3 D: Targeting Scope (Smart ammo tracking, +1 ranged Aimed Shots). */
+  targetingScope?: boolean;
+  neuralLink?: boolean;
+  subdermalGrip?: boolean;
   interfacePlugs?: boolean;
   healingMultiplier?: number;
   ignoreSeriouslyWounded?: boolean;
@@ -172,7 +198,9 @@ export type WeaponType =
   | 'smg' | 'heavySmg'
   | 'shotgun' | 'assaultRifle' | 'sniperRifle'
   | 'bowsAndCrossbows' | 'grenadeLauncher' | 'rocketLauncher'
-  | 'lightMelee' | 'mediumMelee' | 'heavyMelee' | 'veryHeavyMelee';
+  | 'lightMelee' | 'mediumMelee' | 'heavyMelee' | 'veryHeavyMelee'
+  // --- Round 3 D --- thrown grenades (DEX + Athletics, area attack only)
+  | 'grenade';
 
 export type RangeRow =
   | 'pistol' | 'smg' | 'shotgunSlug' | 'assaultRifle' | 'sniperRifle'
@@ -205,6 +233,14 @@ export interface Weapon {
   /** Loaded ammunition type. Missing = Basic. */
   ammoType?: AmmoTypeId;
   // --- end Track K ---
+  // --- Round 3 D ---
+  /** Smartgun Link attachment: +1 to ranged attacks with this weapon when wired in (Neural Link + Interface Plugs or Subdermal Grip). */
+  smartgunLink?: boolean;
+  /** 2070s Smart Weapon: built smart, or a Smart Rebuild (non-Power, non-Tech gun; uses 2 of 3 attachment slots). */
+  smart?: 'built' | 'rebuild';
+  /** 2070s weapon class. Power and Tech weapons can't be given a Smart Rebuild. */
+  tech2070s?: 'power' | 'tech';
+  // --- end Round 3 D ---
 }
 
 // ---------------------------------------------------------------------------

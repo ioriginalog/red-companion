@@ -8,7 +8,7 @@
  */
 import {
   AMMO_TYPES, ammoProblem, applySystems, attacksPerAction, awarenessProblem, beats, cellKey, coverMaterial, COVER_MATERIALS,
-  cyberwareProblem, DEFAULT_COVER_MATERIAL, effectiveStat, empFromHumanity, gridDistance, hasLineOfSight, inBounds, makeCheck,
+  cyberwareProblem, DEFAULT_COVER_MATERIAL, hlAverage, humanityMax, parseHlDice, rollHl, effectiveStat, empFromHumanity, gridDistance, hasLineOfSight, inBounds, makeCheck,
   metersBetween, naturalHealing, profileOf, RANGE_DV, rangeBandIndex, rollDamage, skillLevel, spendAmmo, standingModifiers,
   terrainAt, THERAPY, THERAPY_DICE, treatInjury, treatmentDv, wieldProblem, woundState,
   type Cell, type CombatEvent, type Combatant, type CoverMaterialId, type Dice, type Weapon,
@@ -164,10 +164,10 @@ export function executeSystems(state: SessionState, intent: SystemsIntent, by: V
       const a = getActor(state, intent.actorId);
       const w = getWeapon(a, intent.weaponId);
       need(typeof intent.ammoType === 'string', 'Pick an ammunition type.');
-      const problem = ammoProblem(w, intent.ammoType);
-      need(!problem, problem ?? '');
       // 2070s ammunition only when the GM has turned on the Edgerunners 2070s options (Track N's toggle).
       need(!AMMO_TYPES.find((t) => t.id === intent.ammoType)?.era2070s || !!state.netrun?.quickhacks2070s, 'That ammunition needs the 2070s options turned on.');
+      const problem = ammoProblem(w, intent.ammoType);
+      need(!problem, problem ?? '');
       // Changing ammunition means reloading: an Action in combat.
       const encounter = checkOtherAction(state, by, a);
       const loaded: Weapon = { ...w, ammoType: intent.ammoType, ...(w.ammo ? { ammo: { ...w.ammo, loaded: w.ammo.capacity } } : {}) };
@@ -202,13 +202,22 @@ export function executeSystems(state: SessionState, intent: SystemsIntent, by: V
       const a = getActor(state, intent.actorId);
       const item = (a.combatant.cyberware ?? []).find((i) => i.id === intent.itemId);
       need(!!item, 'No such cyberware.');
+      // Removal restores half the Humanity Loss, rounded down (Secondary), and gives back the
+      // maximum Humanity the item took (Secondary: only removal restores it).
       const restore = Math.floor(item.humanityLoss / 2);
-      let c: Combatant = { ...a.combatant, cyberware: (a.combatant.cyberware ?? []).filter((i) => i.id !== item.id) };
-      const events: CombatEvent[] = [{ type: 'cyberwareRemoved', visibility: visibilityFor(a), combatantId: a.id, itemId: item.id, name: item.name, humanityRestored: restore }];
-      if (c.humanity) {
+      const base = humanityBase(a.combatant);
+      const rest = (a.combatant.cyberware ?? []).filter((i) => i.id !== item.id);
+      let c: Combatant = { ...a.combatant, cyberware: rest };
+      const events: CombatEvent[] = [];
+      if (c.humanity && base !== undefined) {
         const from = c.humanity.current;
-        c = { ...c, humanity: { ...c.humanity, current: Math.min(c.humanity.max, from + restore) } };
+        const maxFrom = c.humanity.max;
+        const maxTo = humanityMax(base, rest);
+        c = { ...c, humanity: { base, max: maxTo, current: Math.min(maxTo, from + restore) } };
+        events.push({ type: 'cyberwareRemoved', visibility: visibilityFor(a), combatantId: a.id, itemId: item.id, name: item.name, humanityRestored: c.humanity!.current - from, maxFrom, maxTo });
         events.push(humanityEvent(a, from, c.humanity!.current, 'removal'));
+      } else {
+        events.push({ type: 'cyberwareRemoved', visibility: visibilityFor(a), combatantId: a.id, itemId: item.id, name: item.name, humanityRestored: 0 });
       }
       return { events, patch: { actors: { [a.id]: withCombatant(a, applySystems(c)) } } };
     }
@@ -282,6 +291,13 @@ function humanityEvent(a: Actor, from: number, to: number, reason: 'cyberware' |
   return { type: 'humanityChanged', visibility: visibilityFor(a), combatantId: a.id, from, to, empFrom: empFromHumanity(from), empTo: empFromHumanity(to), reason };
 }
 
+/** Creation Humanity (EMP × 10). Older saves without `base`: recover it from max plus what installed items took. */
+function humanityBase(c: Combatant): number | undefined {
+  if (!c.humanity) return undefined;
+  if (c.humanity.base !== undefined) return c.humanity.base;
+  return c.humanity.max - humanityMax(0, c.cyberware);
+}
+
 function doInstall(state: SessionState, intent: Extract<Intent, { type: 'installCyberware' }>, dice: Dice): Result {
   const a = getActor(state, intent.actorId);
   const problem = cyberwareProblem(intent.item);
@@ -290,19 +306,40 @@ function doInstall(state: SessionState, intent: Extract<Intent, { type: 'install
   need((a.combatant.cyberware ?? []).length < 60, 'Too much cyberware.');
   let loss = intent.item.humanityLoss;
   let rolled: number[] | undefined;
-  if (intent.rollLoss !== undefined) {
+  const mode = intent.lossMode;
+  need(mode === undefined || mode === 'roll' || mode === 'fixed' || mode === 'none', 'Loss mode must be roll, fixed or none.');
+  if (mode === 'roll') {
+    const spec = intent.item.hlDice ? parseHlDice(intent.item.hlDice) : null;
+    need(!!spec, 'This item has no Humanity Loss dice to roll.');
+    const r = rollHl(spec, () => dice.d6());
+    rolled = r.rolled; loss = r.total;
+  } else if (mode === 'fixed') {
+    const spec = intent.item.hlDice ? parseHlDice(intent.item.hlDice) : null;
+    need(intent.item.hlFixed !== undefined || !!spec, 'This item has no fixed Humanity Loss.');
+    loss = intent.item.hlFixed ?? hlAverage(spec!);
+  } else if (mode === 'none') {
+    loss = 0;
+  } else if (intent.rollLoss !== undefined) {
     need(isInt(intent.rollLoss?.count, 0, 10) && isInt(intent.rollLoss?.bonus, 0, 30), 'Humanity Loss dice: 0–10 d6 plus 0–30.');
     rolled = Array.from({ length: intent.rollLoss.count }, () => dice.d6());
     loss = rolled.reduce((s, d) => s + d, 0) + intent.rollLoss.bonus;
   }
-  const item = { ...intent.item, humanityLoss: loss, effects: intent.item.effects.map((e) => ({ ...e })) };
-  let c: Combatant = { ...a.combatant, cyberware: [...(a.combatant.cyberware ?? []), item] };
-  const events: CombatEvent[] = [{ type: 'cyberwareInstalled', visibility: visibilityFor(a), combatantId: a.id, itemId: item.id, name: item.name, humanityLoss: loss, ...(rolled ? { rolled } : {}) }];
-  if (c.humanity) {
+  // 'none' waives the loss and the maximum Humanity cost too (GM option).
+  const item = { ...intent.item, humanityLoss: loss, effects: intent.item.effects.map((e) => ({ ...e })), ...(mode === 'none' ? { hlDice: '0', hlFixed: 0 } : {}) };
+  const items = [...(a.combatant.cyberware ?? []), item];
+  let c: Combatant = { ...a.combatant, cyberware: items };
+  const base = humanityBase(a.combatant);
+  const installed: CombatEvent = { type: 'cyberwareInstalled', visibility: visibilityFor(a), combatantId: a.id, itemId: item.id, name: item.name, humanityLoss: loss, ...(rolled ? { rolled } : {}), ...(mode ? { lossMode: mode } : {}) };
+  const events: CombatEvent[] = [installed];
+  if (c.humanity && base !== undefined) {
     const from = c.humanity.current;
-    c = { ...c, humanity: { ...c.humanity, current: from - loss } };
-    events.push(humanityEvent(a, from, from - loss, 'cyberware'));
-    if (from > 0 && from - loss <= 0) {
+    const maxFrom = c.humanity.max;
+    const maxTo = humanityMax(base, items);
+    const to = Math.min(maxTo, from - loss);
+    c = { ...c, humanity: { base, max: maxTo, current: to } };
+    Object.assign(installed, { maxFrom, maxTo });
+    events.push(humanityEvent(a, from, to, 'cyberware'));
+    if (from > 0 && to <= 0) {
       events.push({ type: 'gmRulingRequired', visibility: 'gm', reason: `${a.combatant.name} has reached 0 Humanity: cyberpsychosis. The character becomes the GM’s.` });
     }
   }

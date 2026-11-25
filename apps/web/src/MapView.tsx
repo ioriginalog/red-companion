@@ -39,6 +39,8 @@ interface Props {
   onArea: (at: Cell) => void;
   onReveal: (cells: string[], add: boolean) => void;
   onSignal: (s: Signal) => void;
+  /** Round 3 P: a short label for the hovered square (e.g. cover HP for the GM). */
+  hoverInfo?: (c: Cell) => string | null;
 }
 
 const COLOR = { party: 'var(--party)', ally: 'var(--ally)', neutral: 'var(--neutral)', hostile: 'var(--hostile)' } as const;
@@ -605,6 +607,20 @@ export function MapView(p: Props) {
         </g>
 
         {hover && mode !== 'watch' && mode !== 'area' && <rect x={hover.x * S} y={hover.y * S} width={S} height={S} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={2} pointerEvents="none" />}
+        {/* Round 3 P: hover readout (cover state) */}
+        {hover && p.hoverInfo && (() => {
+          const label = p.hoverInfo!(hover);
+          if (!label) return null;
+          const w = Math.max(S * 1.6, label.length * 8 + 16);
+          const x = Math.min(Math.max(0, hover.x * S + S / 2 - w / 2), W - w);
+          const y = hover.y * S > 30 ? hover.y * S - 28 : hover.y * S + S + 4;
+          return (
+            <g pointerEvents="none">
+              <rect x={x} y={y} width={w} height={24} rx={3} fill="rgba(5,8,22,0.92)" stroke="#22e3ff" strokeWidth={1} />
+              <text x={x + w / 2} y={y + 16} textAnchor="middle" className="svg-label" fill="#dce6ff">{label}</text>
+            </g>
+          );
+        })()}
         {hasFocus && kbdMode && kbd && <rect x={kbd.x * S + 1} y={kbd.y * S + 1} width={S - 2} height={S - 2} fill="none" stroke="#ffd400" strokeWidth={4} strokeDasharray="10 5" pointerEvents="none" className="kbd-focus" />}
       </svg>
       <div className="zoom" role="group" aria-label="Map zoom">

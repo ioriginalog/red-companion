@@ -113,7 +113,8 @@ function projectEncounter(enc: Encounter, kn: Knowledge): Encounter {
     if (current) turnIndex = order.length;
     order.push(id);
   });
-  const { usage, hiddenActing: _h, ...rest } = enc;
+  // Round 3 P: initiative totals name every combatant; players don't get them.
+  const { usage, hiddenActing: _h, initiative: _totals, ...rest } = enc;
   return {
     ...rest,
     order,
@@ -156,6 +157,10 @@ function projectPending(p: Pending | null, viewer: Viewer, state: SessionState, 
       };
     }
     // --- end Track K ---
+    // --- Round 3 P --- (NPC damage dice are stats)
+    case 'awaitingScatter':
+      return { ...p, attackerId: kn.aliasOf(p.attackerId), damageDice: full(p.attackerId) ? p.damageDice : 0 };
+    // --- end Round 3 P ---
   }
 }
 

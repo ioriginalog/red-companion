@@ -25,7 +25,7 @@ describe('narrate new events', () => {
       'GM removes 5 HP from Drone (fire).',
       'Vex is Prone.',
       'Scene: Rooftop.',
-      'Vex lands an explosive, catching Drone.',
+      'The blast catches Drone.',
     ]);
   });
 });

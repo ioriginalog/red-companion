@@ -3,8 +3,8 @@
  *
  * Tables (NET Actions per Interface rank, DV tiers, deck slots) are RED Core
  * as reported by community references: status Secondary.
- * Program and ICE starters are ORIGINAL: own numbers, own one-line summaries.
- * They are placeholders for the GM to edit against their book.
+ * Program and ICE starters are ORIGINAL designs (own names, numbers and
+ * summaries), not the book's. Official ones come in through rules packs.
  */
 import type { IceStats, NetDifficulty, Program } from './types.js';
 
@@ -33,16 +33,21 @@ export const RESTART_COST = 2;
 
 const p = (x: Omit<Program, 'status' | 'rez'> & { rez?: number }): Program => ({ ...x, rez: x.rez ?? x.maxRez, status: 'ready' });
 
-/** Starter Programs. Game-term names; stats and summaries are this tool's own. Edit to match your book. */
+/**
+ * Starter Programs: ORIGINAL to this tool. Names, numbers and summaries are our
+ * own designs, comparable in role to the book's boosters, defenders and
+ * attackers but not copies of them. Import your book's Programs as a rules pack
+ * (Characters tab → Rules Packs) if you want the official ones.
+ */
 export const PROGRAM_TEMPLATES: Program[] = [
-  p({ id: 'worm', name: 'Worm', class: 'booster', atk: 0, def: 0, maxRez: 7, boost: { ability: 'backdoor', amount: 2 }, summary: 'Helps you slip past Passwords.' }),
-  p({ id: 'see-ya', name: 'See Ya', class: 'booster', atk: 0, def: 0, maxRez: 7, boost: { ability: 'pathfinder', amount: 2 }, summary: 'Sharpens Pathfinder.' }),
-  p({ id: 'eraser', name: 'Eraser', class: 'booster', atk: 0, def: 0, maxRez: 7, boost: { ability: 'cloak', amount: 2 }, summary: 'Better at covering your tracks.' }),
-  p({ id: 'speedy', name: 'Speedy Gonzalvez', class: 'booster', atk: 0, def: 0, maxRez: 7, boost: { ability: 'speed', amount: 2 }, summary: 'Faster off the mark against Black ICE.' }),
-  p({ id: 'armor', name: 'Armor', class: 'defender', atk: 0, def: 0, maxRez: 7, brainReduce: 4, summary: 'Soaks some brain damage while running.' }),
-  p({ id: 'shield', name: 'Shield', class: 'defender', atk: 0, def: 0, maxRez: 7, shield: true, summary: 'Eats the first brain damage of the run, then drops.' }),
-  p({ id: 'sword', name: 'Sword', class: 'attacker', target: 'ice', atk: 1, def: 0, maxRez: 1, damage: { count: 3, sides: 6 }, summary: 'Hits Black ICE hard.' }),
-  p({ id: 'banhammer', name: 'Banhammer', class: 'attacker', target: 'ice', atk: 1, def: 0, maxRez: 1, damage: { count: 2, sides: 6 }, summary: 'Hits Black ICE, lighter than Sword.' }),
+  p({ id: 'lockpick', name: 'Lockpick', class: 'booster', atk: 0, def: 0, maxRez: 6, boost: { ability: 'backdoor', amount: 1 }, summary: 'Original. A small edge against Passwords.' }),
+  p({ id: 'cartographer', name: 'Cartographer', class: 'booster', atk: 0, def: 0, maxRez: 6, boost: { ability: 'pathfinder', amount: 1 }, summary: 'Original. Maps floors a little better.' }),
+  p({ id: 'ghostwalk', name: 'Ghostwalk', class: 'booster', atk: 0, def: 0, maxRez: 6, boost: { ability: 'cloak', amount: 1 }, summary: 'Original. Helps hide your trail.' }),
+  p({ id: 'quickstep', name: 'Quickstep', class: 'booster', atk: 0, def: 0, maxRez: 6, boost: { ability: 'speed', amount: 1 }, summary: 'Original. A head start against Black ICE.' }),
+  p({ id: 'padding', name: 'Static Padding', class: 'defender', atk: 0, def: 0, maxRez: 8, brainReduce: 3, summary: 'Original. Soaks a little brain damage while it runs.' }),
+  p({ id: 'decoy', name: 'Decoy Shell', class: 'defender', atk: 0, def: 0, maxRez: 5, shield: true, summary: 'Original. Takes the first brain damage of the run, then drops.' }),
+  p({ id: 'cleaver', name: 'Cleaver', class: 'attacker', target: 'ice', atk: 2, def: 0, maxRez: 2, damage: { count: 2, sides: 6 }, summary: 'Original. A reliable hit on Black ICE.' }),
+  p({ id: 'needle', name: 'Needle', class: 'attacker', target: 'ice', atk: 3, def: 0, maxRez: 2, damage: { count: 1, sides: 6 }, summary: 'Original. Accurate but light.' }),
 ];
 
 /** Starter Black ICE. Entirely original designs and numbers. */

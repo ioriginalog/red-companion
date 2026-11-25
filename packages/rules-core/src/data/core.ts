@@ -72,6 +72,8 @@ export const WEAPON_TYPES: Record<WeaponType, WeaponTypeProfile> = {
   mediumMelee:      W({ type: 'mediumMelee', displayName: 'Medium Melee Weapon', skill: 'Melee Weapon', damageDice: 2, rof: 2, melee: true }),
   heavyMelee:       W({ type: 'heavyMelee', displayName: 'Heavy Melee Weapon', skill: 'Melee Weapon', damageDice: 3, rof: 2, melee: true }, { book: 'CPR Easy Mode', verification: 'easy-mode' }),
   veryHeavyMelee:   W({ type: 'veryHeavyMelee', displayName: 'Very Heavy Melee Weapon', skill: 'Melee Weapon', damageDice: 4, rof: 1, melee: true }),
+  // Round 3 D: thrown grenades. Area attack only; DEX + Athletics vs the Grenade Launcher row (Interpretation).
+  grenade:          W({ type: 'grenade', displayName: 'Thrown Grenade', skill: 'Athletics', damageDice: 6, rof: 1, melee: false, rangeRow: 'grenadeLauncher' }),
 };
 
 /** Brawling and Martial Arts damage by BODY. */
@@ -88,7 +90,8 @@ export const UNARMED_SOURCE: SourceRef = { book: 'CPR Core', verification: 'seco
 // ---------------------------------------------------------------------------
 export const ARMOR_TYPES = [
   { id: 'leathers', displayName: 'Leathers', sp: 4, penalty: 0 },
-  { id: 'kevlar', displayName: 'Kevlar', sp: 7, penalty: 0 },
+  // Kevlar® is a registered trademark of DuPont; named here as the game term only.
+  { id: 'kevlar', displayName: 'Kevlar®', sp: 7, penalty: 0 },
   { id: 'lightArmorjack', displayName: 'Light Armorjack', sp: 11, penalty: 0 },
   { id: 'bodyweightSuit', displayName: 'Bodyweight Suit', sp: 11, penalty: 0 },
   { id: 'mediumArmorjack', displayName: 'Medium Armorjack', sp: 12, penalty: -2 },

@@ -28,6 +28,20 @@ interface Props {
   /** This player's characters, for picking one when no Turn is active. */
   ownIds?: string[];
   onSelectOwn?: (id: string) => void;
+  /** Round 3 P: picking a cover square to shoot. */
+  coverPick?: boolean;
+  setCoverPick?: (on: boolean) => void;
+}
+
+/** Round 3 P (#11): attack modes a weapon can actually use against a person. */
+export function directModes(weapon: Weapon): [AttackMode, string][] {
+  if (areaKindFor(weapon) === 'blast') return []; // launchers and grenades only fire at squares
+  const prof = profileOf(weapon);
+  return [
+    ['single', prof.melee ? 'Strike' : 'Single'],
+    ...(prof.autofire ? [['autofire', 'Autofire'] as [AttackMode, string]] : []),
+    ['aimHead', 'Aim: Head'], ['aimLeg', 'Aim: Leg'], ['aimHeld', 'Aim: Held Item'],
+  ];
 }
 
 export function fireBlocked(p: Pick<Props, 'attack' | 'usage' | 'weapon'>, pending: boolean): boolean {
@@ -85,15 +99,21 @@ export function CombatPanel(p: Props) {
               </button>
             ))}
           </div>
-          {weapon && (
+          {weapon && directModes(weapon).length > 0 && (
             <div className="modes" role="radiogroup" aria-label="Attack mode">
-              {([['single', 'Single'], ...(profileOf(weapon).autofire ? [['autofire', 'Autofire']] : []), ['aimHead', 'Aim: Head'], ['aimLeg', 'Aim: Leg'], ['aimHeld', 'Aim: Held Item']] as [AttackMode, string][]).map(([m, label]) => (
+              {directModes(weapon).map(([m, label]) => (
                 <button key={m} role="radio" aria-checked={p.mode === m} className={`mode${p.mode === m ? ' sel' : ''}`} onClick={() => p.setMode(m)}>{label}</button>
               ))}
             </div>
           )}
-          {(area || suppress) && (
+          {(area || suppress || (weapon && area !== 'blast' && view.map)) && (
             <div className="modes">
+              {weapon && area !== 'blast' && view.map && p.setCoverPick && (
+                <button className={`mode${p.coverPick ? ' sel' : ''}`} disabled={actionGone && !(usage?.attackWith === weapon.id)} aria-pressed={!!p.coverPick}
+                  onClick={() => p.setCoverPick!(!p.coverPick)} title="Shoot a cover square to wear it down (uses your Action)">
+                  Shoot Cover
+                </button>
+              )}
               {area && (
                 <button className={`mode${p.mapMode === 'area' ? ' sel' : ''}`} disabled={actionGone} onClick={() => p.setMapMode(p.mapMode === 'area' ? 'move' : 'area')}
                   title={area === 'blast' ? 'Aim a 10 × 10 m/yds blast' : 'Fire a shell: 6 m/yds cone'}>
@@ -110,6 +130,7 @@ export function CombatPanel(p: Props) {
             </div>
           )}
           {p.mapMode === 'area' && <p className="dim small" style={{ marginTop: 8 }}>Tap a square to fire. Orange squares are hit; hatched squares are shielded by cover.</p>}
+          {p.coverPick && <p className="dim small" style={{ marginTop: 8 }}>Tap a cover square to shoot it. Destroyed cover becomes open ground.</p>}
         </section>
       )}
 
@@ -119,7 +140,7 @@ export function CombatPanel(p: Props) {
             <span>Target</span>
             {actingId && <button className="link" onClick={() => p.setTargetId(nearestTarget(view, actingId))}>Nearest</button>}
           </div>
-          {!target ? <p className="dim">Tap an enemy on the map.</p> : (
+          {area === 'blast' ? <p className="dim">{weapon?.name ?? 'This weapon'} fires at a square, not a person. Use the Blast Template.</p> : !target ? <p className="dim">Tap an enemy on the map.</p> : (
             <>
               <div className="row" style={{ marginBottom: 10 }}>
                 <Portrait a={target} />

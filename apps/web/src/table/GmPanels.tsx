@@ -40,6 +40,9 @@ export function Inspector({ c, id, onClose, onTarget }: { c: TableCtx; id: strin
       </div>
       <div className="modes" style={{ marginTop: 10 }}>
         <button className="mode" onClick={() => onTarget(id)}>Make Target</button>
+        {/* Round 3 P */}
+        {c.view.encounter.active && !c.view.encounter.order.includes(id) && <button className="mode" onClick={() => c.act({ type: 'addToInitiative', actorId: id })}>Add to Initiative</button>}
+        {c.view.encounter.active && c.view.encounter.order.includes(id) && <button className="mode" onClick={() => c.act({ type: 'removeFromInitiative', actorId: id })}>Remove from Initiative</button>}
         {at && <button className="mode" onClick={() => client.signal({ kind: 'ping', at })}>Ping</button>}
         {at && <button className="mode" onClick={() => c.act({ type: 'placeToken', actorId: id, at: null })}>Remove from Map</button>}
         <button className="mode danger-mode" onClick={() => { if (confirm(`Remove ${a.public.name} from the session? Undo can bring them back.`)) { c.act({ type: 'removeActor', actorId: id }); onClose(); } }}>Delete</button>
@@ -71,6 +74,18 @@ export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor
           </p>
         </section>
       )}
+      {/* Round 3 P: house rule switch */}
+      {view.map && (
+        <section className="card">
+          <div className="ttl">House Rules</div>
+          <div className="modes">
+            <button className={`mode${view.encounter.delayAllowed !== false ? ' sel' : ''}`} aria-pressed={view.encounter.delayAllowed !== false}
+              onClick={() => c.act({ type: 'setDelayRule', allowed: view.encounter.delayAllowed === false })}
+              title="Not in RED Core: lets the acting character take their Turn later this Round, before moving or acting.">Allow Delay</button>
+          </div>
+          <p className="dim small" style={{ marginTop: 8 }}>Delay isn’t a RED Core rule. With it on, the acting character can take their Turn later this Round, before they move or act.</p>
+        </section>
+      )}
       {actors.length > 0 && (
         <section className="card">
           <div className="ttl">Roster</div>
@@ -81,6 +96,10 @@ export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor
                   <span style={{ color: `var(--${a.public.allegiance})` }}>{a.public.name}</span>
                   <span className="dim small"> · {a.combatant ? `${a.combatant.hp.current}/${a.combatant.hp.max} HP` : ''}{view.map && !view.map.tokens[a.id] ? ' · Off Map' : ''}</span>
                 </button>
+                {/* Round 3 P */}
+                {view.encounter.active && !view.encounter.order.includes(a.id) && !a.public.conditions.dead && (
+                  <button className="btn sm" onClick={() => c.act({ type: 'addToInitiative', actorId: a.id })} title={`Roll ${a.public.name} into the Turn order`}>Add to Initiative</button>
+                )}
                 {a.public.allegiance === 'party' && (
                   <select aria-label={`Who plays ${a.public.name}`} value={a.controller} onChange={(e) => c.act({ type: 'assignController', actorId: a.id, controller: e.target.value })}>
                     <option value="gm">GM</option>
