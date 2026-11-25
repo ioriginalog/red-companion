@@ -1,0 +1,20 @@
+{
+  "name": "@cprc/relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WebSocket relay: stores the session log and fans out per-viewer projections.",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@cprc/rules-core": "0.1.0",
+    "@cprc/session": "0.1.0",
+    "ws": "^8.18.0"
+  },
+  "license": "UNLICENSED"
+}

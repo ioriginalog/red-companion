@@ -1,0 +1,25 @@
+{
+  "name": "red-companion",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/rules-core",
+    "packages/session",
+    "apps/relay"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build -w @cprc/rules-core && npm run build -w @cprc/session && npm run build -w @cprc/relay",
+    "test": "npm run build && npm test --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "start": "node apps/relay/dist/server.js"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.10",
+    "@types/ws": "^8.18.2",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.2"
+  }
+}
