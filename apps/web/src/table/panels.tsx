@@ -61,11 +61,12 @@ export function InitiativeStrip({ c, onPick }: { c: TableCtx; onPick: (id: strin
         if (id === '|') return <div className="round-div" key="div">Round {enc.round + 1}</div>;
         const a = view.actors[id];
         if (!a || a.placeholder) {
-          // Unseen hostiles arrive as opaque placeholders: show them without leaking anything.
+          // Round 3 Track R: unseen hostiles never appear in the order; one opaque
+          // slot stands in only while one of them holds the Turn.
           return (
-            <div key={`${id}-${i}`} className={`init-card unknown${i === 0 ? ' active' : ''}`} title="Unknown Contact" aria-label="Unknown Contact">
+            <div key={`${id}-${i}`} className={`init-card unknown${i === 0 ? ' active' : ''}`} title="Unknown Contact Acting" aria-label="Unknown Contact Acting">
               <div className={`pf${i === 0 ? ' active' : ''}`} data-al="hostile"><div className="ini">?</div></div>
-              <div className="nm">Unknown</div>
+              <div className="nm">{i === 0 ? 'Acting' : 'Unknown'}</div>
             </div>
           );
         }

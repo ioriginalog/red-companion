@@ -8,8 +8,9 @@
 import { cryptoDice, type Cell, type CombatEvent } from '@cprc/rules-core';
 import {
   applyEntry, applyProjectedEntry, emptySession, handleIntent, projectState, PROTOCOL_VERSION, replay,
-  type Actor, type Intent, type LogEntry, type PlayerInfo, type ServerMessage, type SessionState, type Signal, type ViewState,
+  type Actor, type HistoryItem, type Intent, type LogEntry, type PlayerInfo, type ServerMessage, type SessionState, type Signal, type ViewState,
 } from '@cprc/session';
+import { cacheKey, idbKV, restoreFromCache, type GmCache, type KV } from './persist.js';
 
 export interface FeedItem { seq: number; by: string; intentType: string; events: CombatEvent[] }
 
@@ -21,6 +22,24 @@ export interface Signals {
   cursors: Record<string, { at: Cell; t: number }>;
 }
 export const PING_MS = 2600;
+/**
+ * Feed items kept in memory (and handed to the log panel). The GM rebuilds
+ * the feed from the whole log on reload and players get their recent history
+ * in the welcome; renderers should window long feeds rather than draw them all.
+ */
+export const FEED_CAP = 1000;
+
+const toFeed = (e: { seq: number; by: string; intentType: string; events: CombatEvent[] }): FeedItem =>
+  ({ seq: e.seq, by: e.by, intentType: e.intentType, events: e.events });
+
+/** Feed items from the GM's full log (events only, newest FEED_CAP). */
+export function feedFromLog(log: LogEntry[]): FeedItem[] {
+  return log.filter((e) => e.events.length).slice(-FEED_CAP).map((e) => toFeed({ ...e, intentType: e.intent.type }));
+}
+/** Feed items from a player's welcome history. */
+export function feedFromHistory(history: HistoryItem[] | undefined): FeedItem[] {
+  return (history ?? []).filter((h) => h.events.length).slice(-FEED_CAP).map(toFeed);
+}
 
 export interface ClientState {
   status: 'idle' | 'connecting' | 'online' | 'offline' | 'error';
@@ -37,6 +56,10 @@ export interface ClientState {
   signals: Signals;
   /** GM: entries made while disconnected, waiting to reach the relay. */
   unsynced: number;
+  /** Player intents held at the relay until the GM returns. */
+  queued: number;
+  /** Epoch ms when a hello lockout lifts (the client retries then). */
+  lockedUntil: number | null;
 }
 
 interface GmCreds { sessionId: string; gmKey: string; joinCode: string }
@@ -72,8 +95,12 @@ type Listener = () => void;
 export class Client {
   state: ClientState = {
     status: 'idle', role: null, sessionId: null, joinCode: null, playerId: null, view: null, players: [], gmOnline: false, feed: [], toast: null,
-    signals: { pings: [], measures: {}, cursors: {} }, unsynced: 0,
+    signals: { pings: [], measures: {}, cursors: {} }, unsynced: 0, queued: 0, lockedUntil: null,
   };
+  /** GM log cache (IndexedDB, localStorage fallback). Replaceable for tests. */
+  kv: KV = idbKV();
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private queuedIds = new Set<string>();
   /** GM: number of local log entries the relay is known to hold. */
   private synced = 0;
   private pingN = 0;
@@ -108,13 +135,38 @@ export class Client {
     this.resumeGm(creds);
   }
 
-  resumeGm(creds: GmCreds) {
+  /**
+   * GM: open a session. Restores this device's cached log first (it may hold
+   * actions made offline before the tab closed); the welcome then reconciles
+   * it with the relay.
+   */
+  async resumeGm(creds: GmCreds) {
     this.gmCreds = creds;
     this.full = emptySession(creds.sessionId);
     this.log = [];
     this.synced = 0;
-    this.set({ role: 'gm', sessionId: creds.sessionId, joinCode: creds.joinCode, view: projectState(this.full, { role: 'gm' }), feed: [] });
+    this.set({ role: 'gm', sessionId: creds.sessionId, joinCode: creds.joinCode, view: projectState(this.full, { role: 'gm' }), feed: [], lockedUntil: null });
+    const cached = restoreFromCache(await this.kv.get(cacheKey(creds.sessionId)).catch(() => null), creds.sessionId);
+    if (cached && this.gmCreds === creds) {
+      this.log = cached.log;
+      this.full = cached.state;
+      this.synced = cached.synced;
+      this.set({ view: projectState(this.full, { role: 'gm' }), feed: feedFromLog(this.log), unsynced: this.log.length - this.synced });
+    }
+    if (this.gmCreds !== creds) return; // left or switched while loading
     this.connect({ t: 'hello', v: PROTOCOL_VERSION, role: 'gm', sessionId: creds.sessionId, gmKey: creds.gmKey });
+  }
+
+  /** GM: save the log to this device soon (debounced). */
+  private scheduleSave() {
+    if (this.state.role !== 'gm' || !this.full) return;
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      if (this.state.role !== 'gm' || !this.full) return;
+      const cache: GmCache = { sessionId: this.full.sessionId, log: this.log, synced: this.synced, savedAt: Date.now() };
+      void this.kv.set(cacheKey(this.full.sessionId), cache).catch(() => {});
+    }, 400);
   }
 
   /**
@@ -173,18 +225,21 @@ export class Client {
   join(joinCode: string, name: string) {
     const code = joinCode.trim().toUpperCase();
     const saved = store.get<{ token: string; name: string }>(playerKey(code));
-    this.set({ role: 'player', joinCode: code, feed: [] });
+    this.set({ role: 'player', joinCode: code, feed: [], lockedUntil: null });
     this.connect({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode: code, name: name.trim() || saved?.name || 'Player', ...(saved ? { playerToken: saved.token } : {}) });
   }
 
   leave() {
     this.hello = null;
     this.ws?.close();
-    if (this.state.role === 'gm') store.del(GM_KEY);
-    else store.del(LAST_JOIN);
+    if (this.state.role === 'gm') {
+      store.del(GM_KEY);
+      if (this.full) void this.kv.del(cacheKey(this.full.sessionId)).catch(() => {});
+    } else store.del(LAST_JOIN);
     this.gmCreds = null;
     this.full = null;
-    this.set({ status: 'idle', role: null, view: null, sessionId: null, joinCode: null, feed: [] });
+    this.queuedIds.clear();
+    this.set({ status: 'idle', role: null, view: null, sessionId: null, joinCode: null, feed: [], queued: 0, lockedUntil: null });
   }
 
   private connect(hello: object) {
@@ -198,7 +253,8 @@ export class Client {
     ws.onmessage = (ev) => this.onMessage(JSON.parse(String(ev.data)) as ServerMessage);
     ws.onclose = (ev) => {
       if (this.ws !== ws) return;
-      this.set({ status: 'offline' });
+      // While we're cut off we can't vouch for anyone's presence.
+      this.set({ status: 'offline', gmOnline: false, players: this.state.players.map((p) => ({ ...p, online: false })) });
       if (this.state.role === 'gm' && ev.code < 4000) this.toast('Offline: Actions Will Sync');
       // 4000-range codes are deliberate refusals (auth, replaced): don't hammer.
       if (this.hello && ev.code < 4000) {
@@ -270,7 +326,7 @@ export class Client {
   }
 
   private pushFeed(items: FeedItem[]) {
-    const feed = [...this.state.feed, ...items.filter((i) => i.events.length)].slice(-150);
+    const feed = [...this.state.feed, ...items.filter((i) => i.events.length)].slice(-FEED_CAP);
     this.set({ feed });
   }
 
@@ -279,7 +335,7 @@ export class Client {
       case 'welcome':
         this.retry = 0;
         if (m.role === 'gm') {
-          this.set({ status: 'online', players: m.players });
+          this.set({ status: 'online', players: m.players, lockedUntil: null });
           // Always reconcile against the relay's log: it may be missing entries
           // made while we were offline, or (another device) be ahead of us.
           if (m.headSeq > 0 || this.log.length > 0) this.send({ t: 'fetchLog', fromSeq: 1 });
@@ -288,7 +344,8 @@ export class Client {
           const prev = store.get<{ token: string; name: string }>(playerKey(this.state.joinCode!));
           store.set(playerKey(this.state.joinCode!), { token: m.playerToken, name: (this.hello as { name?: string })?.name || prev?.name || 'Player' });
           store.set(LAST_JOIN, { code: this.state.joinCode });
-          this.set({ status: 'online', sessionId: m.sessionId, playerId: m.playerId, view: m.view, players: m.players ?? [] });
+          this.queuedIds.clear();
+          this.set({ status: 'online', sessionId: m.sessionId, playerId: m.playerId, view: m.view, players: m.players ?? [], feed: feedFromHistory(m.history), queued: 0, lockedUntil: null });
         }
         return;
       case 'log': {
@@ -302,6 +359,7 @@ export class Client {
             this.toast(`Back online. Synced ${r.tail.length} offline ${r.tail.length === 1 ? 'action' : 'actions'}.`);
           }
           this.set({ unsynced: 0 });
+          this.scheduleSave();
           return;
         }
         if (r.kind === 'adopt' && r.dropped > 0) {
@@ -311,7 +369,8 @@ export class Client {
         this.synced = m.entries.length;
         this.full = replay(this.state.sessionId!, m.entries);
         this.refreshGmView();
-        this.set({ unsynced: 0, feed: m.entries.slice(-60).filter((e) => e.events.length).map((e) => ({ seq: e.seq, by: e.by, intentType: e.intent.type, events: e.events })) });
+        this.set({ unsynced: 0, feed: feedFromLog(m.entries) });
+        this.scheduleSave();
         return;
       }
       case 'entries': {
@@ -334,7 +393,13 @@ export class Client {
         this.runIntent(m.intent, { role: 'player', playerId: m.from }, m.clientMsgId);
         return;
       case 'rejected':
+        if (this.queuedIds.delete(m.clientMsgId)) this.set({ queued: this.queuedIds.size });
         this.toast(m.message);
+        return;
+      case 'queued':
+        this.queuedIds.add(m.clientMsgId);
+        this.set({ queued: this.queuedIds.size });
+        this.toast('Queued: Will Send When the GM Returns');
         return;
       case 'playerJoined': {
         const known = this.state.players.some((p) => p.playerId === m.player.playerId);
@@ -345,13 +410,26 @@ export class Client {
         this.set({ players: this.state.players.map((p) => (p.playerId === m.playerId ? { ...p, online: false } : p)) });
         return;
       case 'gmStatus':
-        this.set({ gmOnline: m.online });
+        // Once the GM is back, held intents are delivered (or refused) by the relay.
+        if (m.online) this.queuedIds.clear();
+        this.set({ gmOnline: m.online, ...(m.online ? { queued: 0 } : {}) });
         return;
       case 'error':
         if (m.code === 'GAP') { this.send({ t: 'fetchLog', fromSeq: 1 }); return; }
+        if (m.code === 'LOCKED') {
+          // Keep the saved join and token: a lockout is temporary. Retry when it lifts.
+          const secs = Math.max(1, m.retryAfter ?? 30);
+          const hello = this.hello;
+          this.set({ status: 'error', lockedUntil: Date.now() + secs * 1000 });
+          this.toast(m.message);
+          setTimeout(() => {
+            if (hello && this.hello === hello) { this.set({ lockedUntil: null }); this.connect(hello); }
+          }, secs * 1000 + 250);
+          return;
+        }
         if (m.code === 'AUTH_FAILED' && this.state.role === 'gm') store.del(GM_KEY);
         this.toast(m.message);
-        if (m.code === 'AUTH_FAILED' || m.code === 'LOCKED') {
+        if (m.code === 'AUTH_FAILED') {
           this.hello = null;
           // A stale auto-resume shouldn't leave the player stuck on a dead session.
           if (this.state.role === 'player') { store.del(LAST_JOIN); this.set({ status: 'error', role: null, view: null }); }
@@ -387,6 +465,7 @@ export class Client {
     else this.set({ unsynced: this.log.length - this.synced });
     this.refreshGmView();
     this.pushFeed([{ seq: r.entry.seq, by: r.entry.by, intentType: intent.type, events: r.entry.events }]);
+    this.scheduleSave();
     return true;
   }
 
@@ -418,6 +497,7 @@ export class Client {
     this.full = replay(this.full.sessionId, this.log);
     this.send({ t: 'truncate', toSeq: this.log.length });
     this.refreshGmView();
+    this.scheduleSave();
     this.set({ feed: this.state.feed.filter((f) => f.seq <= this.log.length) });
   }
 }

@@ -65,10 +65,10 @@ describe('fog of war', () => {
     const v = projectState(t.state, P1);
     expect(v.map!.tokens.ganger).toBeUndefined();
     expect(v.map!.tokens.solo).toEqual({ x: 2, y: 2 });
-    // Unseen hostiles are omitted entirely; their Turn slot is an opaque placeholder.
+    // Unseen hostiles are omitted entirely, including from the Turn order.
     expect(v.actors.ganger).toBeUndefined();
-    expect(v.encounter.order).toEqual(['solo', 'hidden:1']);
-    expect(v.actors['hidden:1']!.public.name).toBe('Unknown Contact');
+    expect(v.encounter.order).toEqual(['solo']);
+    expect(v.encounter.hiddenActing).toBeUndefined();
     expect(JSON.stringify(v)).not.toContain('ganger');
     expect(projectState(t.state, GM).map!.tokens.ganger).toEqual({ x: 7, y: 2 });
   });

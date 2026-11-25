@@ -45,6 +45,8 @@ export interface Encounter {
   deathSaveRequiredFor: string | null;
   /** What the current actor has spent this Turn. Absent outside encounters. */
   usage?: TurnUsage;
+  /** Player views only: an actor the party hasn't seen holds the current Turn (Round 3 Track R). */
+  hiddenActing?: boolean;
 }
 
 /**
@@ -292,7 +294,7 @@ export interface ProjectedActor {
   id: string;
   controller: string;
   public: PublicCombatantView;
-  /** Stand-in for a combatant players haven't seen (id like `hidden:2`). */
+  /** Stand-in for an unseen combatant while it acts (id `hidden`). */
   placeholder?: true;
   /** Only when the viewer may see full stats (own actor, PCs, or GM). */
   combatant?: Combatant;
