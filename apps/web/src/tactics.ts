@@ -12,15 +12,21 @@ import type { ProjectedActor, TacticalMap, ViewState, Watch } from '@cprc/sessio
 import { chanceToBeat, chanceToWinContest } from './odds.js';
 
 export const isFriendly = (a?: ProjectedActor) => !!a && (a.public.allegiance === 'party' || a.public.allegiance === 'ally');
-const canSee = (a: ProjectedActor) => !a.public.conditions.dead && !a.public.conditions.unconscious;
+export const canSeeActor = (a: ProjectedActor) => !a.public.conditions.dead && !a.public.conditions.unconscious;
 
+/** What the party sees: shared sight of conscious friendly tokens, plus GM lighting overrides. */
 export function partyVision(view: ViewState): Set<string> {
   const out = new Set<string>();
   const map = view.map;
   if (!map) return out;
+  if (map.lighting?.revealAll) {
+    for (let y = 0; y < map.height; y++) for (let x = 0; x < map.width; x++) out.add(`${x},${y}`);
+    return out;
+  }
+  for (const k of map.lighting?.revealed ?? []) out.add(k);
   for (const [id, at] of Object.entries(map.tokens)) {
     const a = view.actors[id];
-    if (!a || !isFriendly(a) || !canSee(a)) continue;
+    if (!a || !isFriendly(a) || !canSeeActor(a)) continue;
     for (const k of visibleCells(map, at, map.sightRange)) out.add(k);
   }
   return out;
@@ -144,4 +150,21 @@ export function wedgePath(cx: number, cy: number, facingDeg: number, arcDeg: num
   const x0 = cx + radius * Math.cos(a0), y0 = cy + radius * Math.sin(a0);
   const x1 = cx + radius * Math.cos(a1), y1 = cy + radius * Math.sin(a1);
   return `M${cx},${cy} L${x0},${y0} A${radius},${radius} 0 ${arcDeg > 180 ? 1 : 0} 1 ${x1},${y1} Z`;
+}
+
+/** Nearest opposing token this actor can actually shoot (own line of sight), for the quick-target button. */
+export function nearestTarget(view: ViewState, actorId: string): string | null {
+  const map = view.map;
+  const me = view.actors[actorId];
+  const at = map?.tokens[actorId];
+  if (!map || !me || !at) return null;
+  let best: string | null = null;
+  let bestD = Infinity;
+  for (const [id, c] of Object.entries(map.tokens)) {
+    const a = view.actors[id];
+    if (!a || id === actorId || a.public.conditions.dead || isFriendly(a) === isFriendly(me)) continue;
+    const d = gridDistance(at, c);
+    if (d < bestD && hasLineOfSight(map, at, c)) { best = id; bestD = d; }
+  }
+  return best;
 }

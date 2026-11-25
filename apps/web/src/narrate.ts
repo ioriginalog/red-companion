@@ -1,13 +1,14 @@
 /** Combat log lines. Sentence case (Chicago); names come from the viewer's projection. */
 import type { CheckResult, CombatEvent } from '@cprc/rules-core';
 
-export type Tone = 'hit' | 'miss' | 'info' | 'bad' | 'good';
+export type Tone = 'hit' | 'miss' | 'info' | 'bad' | 'good' | 'chat' | 'roll';
 export interface Line { text: string; tone: Tone }
 
 const LOC: Record<string, string> = { head: 'head', body: 'body' };
 const roll = (c: CheckResult) => (c.redacted ? `${c.total}` : `${c.total} (${c.roll.natural}${c.roll.kind === 'critSuccess' ? ' crit' : c.roll.kind === 'critFailure' ? ' fumble' : ''})`);
 
-export function narrate(e: CombatEvent, name: (id: string) => string): Line | null {
+/** `who` names a viewer id ('gm' or a player id); defaults to 'GM'/'A player'. */
+export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: string) => string = (b) => (b === 'gm' ? 'GM' : 'A player')): Line | null {
   switch (e.type) {
     case 'initiativeRolled':
       return { text: `Initiative: ${e.entries.map((x) => name(x.combatantId)).join(', ')}.`, tone: 'info' };
@@ -44,6 +45,25 @@ export function narrate(e: CombatEvent, name: (id: string) => string): Line | nu
       return { text: `${name(e.targetId)} moves into ${name(e.combatantId)}’s watch!`, tone: 'hit' };
     case 'gmRulingRequired':
       return { text: `GM ruling needed: ${e.reason}`, tone: 'info' };
+    case 'checkRolled': {
+      const subject = e.combatantId ? name(e.combatantId) : who(e.by);
+      const res = e.dv !== undefined ? ` vs DV ${e.dv}: ${e.success ? 'success' : 'failure'}.` : '.';
+      return { text: `${subject} rolls ${e.label}: ${roll(e.check)}${res}`, tone: 'roll' };
+    }
+    case 'diceRolled':
+      return { text: `${who(e.by)} rolls ${e.label}: ${e.dice.join(' + ')}${e.bonus ? ` ${e.bonus > 0 ? '+' : '−'} ${Math.abs(e.bonus)}` : ''} = ${e.total}.`, tone: 'roll' };
+    case 'chatMessage':
+      return { text: `${e.asCombatantId ? name(e.asCombatantId) : who(e.by)}: ${e.text}`, tone: 'chat' };
+    case 'hpAdjusted':
+      return { text: `GM ${e.delta >= 0 ? 'restores' : 'removes'} ${Math.abs(e.delta)} HP ${e.delta >= 0 ? 'to' : 'from'} ${name(e.targetId)}${e.reason ? ` (${e.reason})` : ''}.`, tone: e.delta >= 0 ? 'good' : 'bad' };
+    case 'conditionSet':
+      return { text: `${name(e.targetId)} is ${e.value ? '' : 'no longer '}${e.condition}.`, tone: 'info' };
+    case 'sceneChanged':
+      return { text: `Scene: ${e.name}.`, tone: 'info' };
+    case 'areaResolved':
+      return { text: `${name(e.attackerId)} ${e.kind === 'shotgunShell' ? 'fires a shotgun shell' : 'lands an explosive'}${e.targetIds.length ? `, catching ${e.targetIds.map(name).join(', ')}` : ''}.`, tone: e.targetIds.length ? 'hit' : 'miss' };
+    case 'suppressiveFireResolved':
+      return { text: `${name(e.attackerId)} lays down Suppressive Fire${e.results.some((r) => r.mustSeekCover) ? `; ${e.results.filter((r) => r.mustSeekCover).map((r) => name(r.targetId)).join(', ')} must take cover` : ''}.`, tone: 'hit' };
     default:
       return null;
   }

@@ -5,13 +5,22 @@
  * intent (its own and players') through `handleIntent` with real dice, and
  * appends the resulting entries. Players only ever see projected state.
  */
-import { cryptoDice, type CombatEvent } from '@cprc/rules-core';
+import { cryptoDice, type Cell, type CombatEvent } from '@cprc/rules-core';
 import {
   applyEntry, applyProjectedEntry, emptySession, handleIntent, projectState, PROTOCOL_VERSION, replay,
-  type Intent, type LogEntry, type PlayerInfo, type ServerMessage, type SessionState, type ViewState,
+  type Intent, type LogEntry, type PlayerInfo, type ServerMessage, type SessionState, type Signal, type ViewState,
 } from '@cprc/session';
 
 export interface FeedItem { seq: number; by: string; intentType: string; events: CombatEvent[] }
+
+/** Ephemeral table signals (never logged). `from` = 'me', 'gm' or a player id. */
+export interface Ping { id: number; from: string; at: Cell; t: number }
+export interface Signals {
+  pings: Ping[];
+  measures: Record<string, { from: Cell; to: Cell }>;
+  cursors: Record<string, { at: Cell; t: number }>;
+}
+export const PING_MS = 2600;
 
 export interface ClientState {
   status: 'idle' | 'connecting' | 'online' | 'offline' | 'error';
@@ -25,6 +34,7 @@ export interface ClientState {
   gmOnline: boolean;
   feed: FeedItem[];
   toast: { text: string; at: number } | null;
+  signals: Signals;
 }
 
 interface GmCreds { sessionId: string; gmKey: string; joinCode: string }
@@ -44,7 +54,10 @@ type Listener = () => void;
 export class Client {
   state: ClientState = {
     status: 'idle', role: null, sessionId: null, joinCode: null, playerId: null, view: null, players: [], gmOnline: false, feed: [], toast: null,
+    signals: { pings: [], measures: {}, cursors: {} },
   };
+  private pingN = 0;
+  private lastSignalAt: Record<string, number> = {};
   private listeners = new Set<Listener>();
   private ws: WebSocket | null = null;
   private full: SessionState | null = null;
@@ -115,6 +128,45 @@ export class Client {
     };
   }
 
+  /** Send a table signal; rendered locally right away as 'me'. Cursor and measure updates are throttled. */
+  signal(sig: Signal) {
+    const now = Date.now();
+    if (sig.kind !== 'ping' && !(sig.kind === 'measure' && sig.to === null) && !(sig.kind === 'cursor' && sig.at === null)) {
+      if (now - (this.lastSignalAt[sig.kind] ?? 0) < 120) { this.applySignal('me', sig); return; }
+    }
+    this.lastSignalAt[sig.kind] = now;
+    this.send({ t: 'signal', signal: sig });
+    this.applySignal('me', sig);
+  }
+
+  private applySignal(from: string, sig: Signal) {
+    const now = Date.now();
+    const s = this.state.signals;
+    if (sig.kind === 'ping') {
+      const pings = [...s.pings.filter((p) => now - p.t < PING_MS), { id: ++this.pingN, from, at: sig.at, t: now }].slice(-12);
+      this.set({ signals: { ...s, pings } });
+    } else if (sig.kind === 'measure') {
+      const measures = { ...s.measures };
+      if (sig.to) measures[from] = { from: sig.from, to: sig.to }; else delete measures[from];
+      this.set({ signals: { ...s, measures } });
+    } else if (sig.kind === 'cursor') {
+      const cursors = { ...s.cursors };
+      if (sig.at) cursors[from] = { at: sig.at, t: now }; else delete cursors[from];
+      this.set({ signals: { ...s, cursors } });
+    }
+  }
+
+  /** Display name for a signal source or chat author. */
+  nameOf(from: string): string {
+    if (from === 'me') return 'You';
+    if (from === 'gm') return 'GM';
+    if (from === this.state.playerId) return 'You';
+    const p = this.state.players.find((x) => x.playerId === from);
+    if (p) return p.name;
+    const a = Object.values(this.state.view?.actors ?? {}).find((x) => x.controller === from);
+    return a ? a.public.name : 'Player';
+  }
+
   private send(m: object) { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(m)); }
 
   private pushFeed(items: FeedItem[]) {
@@ -177,6 +229,9 @@ export class Client {
         if (m.code === 'AUTH_FAILED' && this.state.role === 'gm') store.del(GM_KEY);
         this.toast(m.message);
         if (m.code === 'AUTH_FAILED' || m.code === 'LOCKED') { this.hello = null; this.set({ status: 'error' }); }
+        return;
+      case 'signal':
+        this.applySignal(m.from, m.signal);
         return;
       case 'pong':
         return;
