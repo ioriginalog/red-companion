@@ -11,7 +11,7 @@ import { applyDamage, rollDamage } from './damage.js';
 import type { Dice } from './dice.js';
 import { RulesError } from './errors.js';
 import type { CombatEvent } from './events.js';
-import { canDodgeRanged, profileOf, rangeBandIndex } from './attack.js';
+import { canDodgeRanged, profileOf, rangeBandIndex, withFumbleRecovery } from './attack.js';
 import { effectiveStat, skillLevel, standingModifiers } from './character.js';
 import type { CheckResult, Combatant, DamageRoll, DamageSpec, Modifier, Weapon } from './types.js';
 
@@ -73,11 +73,11 @@ export function resolveAreaAttack(attacker: Combatant, area: AreaKind, dice: Dic
     }
   }
 
-  const attack = makeCheck(
+  const attack = withFumbleRecovery(attacker, makeCheck(
     [{ label: stat, value: effectiveStat(attacker, stat) }, { label: skill, value: skillLevel(attacker, skill) }],
     [...standingModifiers(attacker, 'rangedAttack'), ...situational],
     dice,
-  );
+  )); // Track K: Fumble Recovery
   const hit = beats(attack.total, dv);
   const scattered = source === 'explosive' && !hit;
   return { attack, dv, hit, scattered, ammoSpent, damageDice, source, events: [] };

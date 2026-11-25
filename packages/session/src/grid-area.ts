@@ -4,26 +4,28 @@
  * in the area from the map.
  *
  * Rulings (see docs/rules-verification.md):
- *   - Explosive blast = 10 × 10 m/yds = 5 × 5 squares centered on the target square.
- *     A token is caught if it's in the blast and has line of sight to the center
- *     square; anything opaque in between is cover that protects (the map has no
- *     cover HP, so cover is treated as surviving the blast). Interpretation.
+ *   - Explosive blast = 10 × 10 m/yds = 5 × 5 squares centered on the target square
+ *     (which may be a cover square). A token in the blast is shielded by a wall; behind
+ *     cover it's protected only if that cover survives the blast (the toughest intact
+ *     cover on the line counts). Every cover square the blast reaches takes its damage,
+ *     and destroyed cover becomes open ground. Interpretation.
  *   - Shotgun Shells hit every token within 3 squares (6 m/yds) in a 90° cone
  *     toward the aimed square, with line of sight from the shooter. Interpretation.
- *   - Everyone in an area who can dodge (REF 8+) does: dodging an area attack has
- *     no downside in the engine. Interpretation.
+ *   - Everyone caught who can dodge (REF 8+) chooses whether to, before damage is
+ *     rolled (an `awaitingAreaDodge` step). The GM can resolve the rest as "dodge".
  *   - Suppressive Fire covers opposing tokens within 25 m/yds (12 squares) and the
  *     weapon's Autofire range, in the shooter's line of sight.
  *   - A missed explosive scatters: the GM places it (Core gives no scatter table).
  */
 import {
-  applyAreaDamage, AUTOFIRE_DV, bearing, canDodgeRanged, gridDistance, hasLineOfSight, inBounds, inCone, isPassable, metersBetween,
-  profileOf, RANGE_BANDS, resolveAreaAttack, resolveSuppressiveFire, spendAmmo,
+  applyAreaDamage, AUTOFIRE_DV, bearing, gridDistance, hasLineOfSight, inBounds, inCone, metersBetween,
+  profileOf, RANGE_BANDS, raySteps, resolveAreaAttack, resolveSuppressiveFire, spendAmmo, terrainAt,
   type AreaKind, type Cell, type CombatEvent, type Dice,
 } from '@cprc/rules-core';
 import { checkAttackAction, getActor, getWeapon, requireMap, SessionError } from './helpers.js';
-import { factionOf } from './tactical.js';
-import type { Actor, Intent, SessionState, StatePatch, Viewer } from './types.js';
+import { coverBetween, damageCoverSquare, setAreaFinisher, startAreaDodge } from './systems.js';
+import { factionOf, withSpotted } from './tactical.js';
+import type { Actor, Intent, Pending, SessionState, StatePatch, TacticalMap, Viewer } from './types.js';
 
 type Result = { events: CombatEvent[]; patch: StatePatch };
 type AreaIntent = Extract<Intent, { type: 'areaAttack' }>;
@@ -36,12 +38,34 @@ const DEFAULT_GRENADE_DICE = 6;
 
 const able = (a: Actor | undefined) => !!a && !a.combatant.conditions.dead;
 
-/** Tokens caught by an explosive centered on `at`. */
-export function blastTargets(state: SessionState, at: Cell): string[] {
+/** Tokens caught by an explosive centered on `at`, with the cover HP protecting each (if any). */
+export function blastTargetsWithCover(state: SessionState, at: Cell): { id: string; coverHp?: number }[] {
   const map = requireMap(state);
-  return Object.entries(map.tokens)
-    .filter(([id, c]) => able(state.actors[id]) && Math.abs(c.x - at.x) <= BLAST_RADIUS && Math.abs(c.y - at.y) <= BLAST_RADIUS && hasLineOfSight(map, at, c))
-    .map(([id]) => id);
+  const out: { id: string; coverHp?: number }[] = [];
+  for (const [id, c] of Object.entries(map.tokens)) {
+    if (!able(state.actors[id]) || Math.abs(c.x - at.x) > BLAST_RADIUS || Math.abs(c.y - at.y) > BLAST_RADIUS) continue;
+    const cover = coverBetween(map, at, c, raySteps);
+    if (cover === 'wall') continue;
+    out.push(cover === undefined ? { id } : { id, coverHp: cover });
+  }
+  return out;
+}
+
+/** Tokens caught by an explosive centered on `at` (ignoring whether cover survives). */
+export function blastTargets(state: SessionState, at: Cell): string[] {
+  return blastTargetsWithCover(state, at).map((t) => t.id);
+}
+
+/** Cover squares the blast reaches: in the 5 × 5 area with line of sight from the center. */
+export function blastCoverSquares(map: TacticalMap, at: Cell): Cell[] {
+  const out: Cell[] = [];
+  for (let y = at.y - BLAST_RADIUS; y <= at.y + BLAST_RADIUS; y++) {
+    for (let x = at.x - BLAST_RADIUS; x <= at.x + BLAST_RADIUS; x++) {
+      const c = { x, y };
+      if (inBounds(map, c) && terrainAt(map, c) === 'c' && hasLineOfSight(map, at, c)) out.push(c);
+    }
+  }
+  return out;
 }
 
 /** Tokens caught by a Shotgun Shell fired from `from` toward `at`. */
@@ -78,14 +102,16 @@ export function suppressTargets(state: SessionState, attackerId: string): string
     .map(([id]) => id);
 }
 
-export function doAreaAttack(state: SessionState, intent: AreaIntent, by: Viewer, dice: Dice): Result {
+export function doAreaAttack(state: SessionState, intent: AreaIntent, by: Viewer, dice: Dice, newId: () => string = () => globalThis.crypto.randomUUID()): Result {
   const map = requireMap(state);
   const attacker = getActor(state, intent.attackerId);
   const weapon = getWeapon(attacker, intent.weaponId);
   const from = map.tokens[attacker.id];
   if (!from) throw new SessionError('INVALID', `${attacker.combatant.name} isn’t on the map.`);
   const at = intent.at;
-  if (!at || !inBounds(map, at) || !isPassable(map, at)) throw new SessionError('INVALID', 'Aim at an open square.');
+  if (!at || !Number.isInteger(at.x) || !Number.isInteger(at.y) || !inBounds(map, at) || terrainAt(map, at) === '#') {
+    throw new SessionError('INVALID', 'Aim at an open or cover square.');
+  }
   if (!hasLineOfSight(map, from, at)) throw new SessionError('NO_LINE_OF_SIGHT', 'That square is out of sight.');
   const distance = Math.max(1, metersBetween(from, at));
 
@@ -109,31 +135,67 @@ export function doAreaAttack(state: SessionState, intent: AreaIntent, by: Viewer
   if (spent) events.push({ type: 'ammoSpent', visibility: 'public', combatantId: attacker.id, weaponId: weapon.id, rounds: spent });
 
   const actors: Record<string, Actor> = { [attacker.id]: { ...attacker, weapons: attacker.weapons.map((w) => (w.id === weapon.id ? spendAmmo(w, spent) : w)) } };
-  let targetIds: string[] = [];
-  if (out.scattered) {
-    events.push({ type: 'gmRulingRequired', visibility: 'public', reason: 'The explosive missed and scatters. The GM places it within the blast area around the target square.' });
-  } else if (out.hit) {
-    targetIds = intent.kind === 'shotgunShell' ? shellTargets(state, attacker.id, at) : blastTargets(state, at);
-    const targets = targetIds.map((id) => {
-      const c = id === attacker.id ? actors[id]!.combatant : getActor(state, id).combatant;
-      return { combatant: c, dodges: canDodgeRanged(c) };
-    });
-    const { roll, results } = applyAreaDamage(out, targets, dice);
-    events.push({ type: 'damageRolled', visibility: 'public', dice: roll.dice, multiplier: roll.multiplier, total: roll.total, critTriggered: roll.critTriggered });
-    for (const r of results) {
-      const base = actors[r.targetId] ?? getActor(state, r.targetId);
-      if (r.dodge) {
-        events.push({ type: 'checkRolled', visibility: 'public', by: base.controller, combatantId: r.targetId, label: 'Dodge', check: r.dodge, dv: out.attack.total, success: r.avoided });
-      }
-      events.push(...r.events);
-      actors[r.targetId] = { ...base, combatant: r.target };
-    }
-  }
-  events.push({ type: 'areaResolved', visibility: 'public', attackerId: attacker.id, kind: intent.kind, at, targetIds });
   const patch: StatePatch = { actors };
   if (encounter) patch.encounter = encounter;
+  if (out.scattered) {
+    events.push({ type: 'gmRulingRequired', visibility: 'public', reason: 'The explosive missed and scatters. The GM places it within the blast area around the target square.' });
+    events.push({ type: 'areaResolved', visibility: 'public', attackerId: attacker.id, kind: intent.kind, at, targetIds: [] });
+    return { events, patch };
+  }
+  if (!out.hit) {
+    events.push({ type: 'areaResolved', visibility: 'public', attackerId: attacker.id, kind: intent.kind, at, targetIds: [] });
+    return { events, patch };
+  }
+  const targets = intent.kind === 'shotgunShell' ? shellTargets(state, attacker.id, at).map((id) => ({ id })) : blastTargetsWithCover(state, at);
+  const base: Omit<AreaPendingT, 'kind' | 'decisions'> = {
+    id: newId(), attackerId: attacker.id, areaKind: intent.kind, at, attack: out.attack, damageDice: out.damageDice, source: out.source, targets,
+  };
+  const afterAttack: SessionState = { ...state, actors: { ...state.actors, ...actors } };
+  const ask = startAreaDodge(base, afterAttack);
+  if (ask) {
+    events.push(...ask.events);
+    return { events, patch: { ...patch, pending: ask.pending } };
+  }
+  const done = finishArea(afterAttack, { ...base, kind: 'awaitingAreaDodge', decisions: {} }, dice);
+  return { events: [...events, ...done.events], patch: { ...patch, ...done.patch, actors: { ...actors, ...done.patch.actors } } };
+}
+
+type AreaPendingT = Extract<Pending, { kind: 'awaitingAreaDodge' }>;
+
+/** Roll the area damage once and apply it: dodges as decided, cover as computed, cover squares damaged. */
+export function finishArea(state: SessionState, p: AreaPendingT, dice: Dice): { events: CombatEvent[]; patch: StatePatch } {
+  const events: CombatEvent[] = [];
+  const actors: Record<string, Actor> = {};
+  const live = p.targets.filter((t) => able(state.actors[t.id]));
+  const { roll, results } = applyAreaDamage(
+    { attack: p.attack, damageDice: p.damageDice, source: p.source },
+    live.map((t) => ({ combatant: state.actors[t.id]!.combatant, dodges: p.decisions[t.id] === true, ...(t.coverHp !== undefined ? { coverHp: t.coverHp } : {}) })),
+    dice,
+  );
+  events.push({ type: 'damageRolled', visibility: 'public', dice: roll.dice, multiplier: roll.multiplier, total: roll.total, critTriggered: roll.critTriggered });
+  for (const r of results) {
+    const base = state.actors[r.targetId]!;
+    if (r.dodge) {
+      events.push({ type: 'checkRolled', visibility: 'public', by: base.controller, combatantId: r.targetId, label: 'Dodge', check: r.dodge, dv: p.attack.total, success: r.avoided });
+    }
+    events.push(...r.events);
+    actors[r.targetId] = { ...base, combatant: r.target };
+  }
+  const patch: StatePatch = { actors, pending: null };
+  if (p.source === 'explosive' && state.map) {
+    let map = state.map;
+    for (const c of blastCoverSquares(map, p.at)) {
+      const d = damageCoverSquare(map, c, roll.total);
+      map = d.map;
+      events.push(d.event);
+    }
+    if (map !== state.map) patch.map = withSpotted(map, { ...state.actors, ...actors });
+  }
+  events.push({ type: 'areaResolved', visibility: 'public', attackerId: p.attackerId, kind: p.areaKind, at: p.at, targetIds: live.map((t) => t.id) });
   return { events, patch };
 }
+
+setAreaFinisher(finishArea);
 
 export function doSuppressiveFire(state: SessionState, intent: Extract<Intent, { type: 'suppressiveFire' }>, by: Viewer, dice: Dice): Result {
   requireMap(state);

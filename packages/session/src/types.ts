@@ -10,7 +10,7 @@
  * Clients never re-run the rules engine; they apply patches. That keeps replay
  * trivially deterministic and lets the relay redact patches per viewer.
  */
-import type { AimTarget, Cell, CombatEvent, Combatant, DamageSpec, GridMap, Modifier, Weapon, WoundState } from '@cprc/rules-core';
+import type { AimTarget, AmmoTypeId, AwarenessKey, Care, Cell, CheckResult, CombatEvent, Combatant, CoverMaterialId, CyberwareItem, DamageSpec, GridMap, Modifier, Weapon, WoundState } from '@cprc/rules-core';
 
 export type Viewer = { role: 'gm' } | { role: 'player'; playerId: string };
 /** Serialized author of an entry: 'gm' or 'player:<id>'. */
@@ -86,6 +86,10 @@ export interface TacticalMap extends GridMap {
   spotted: string[];
   /** GM lighting overrides. `revealed` squares are always visible to players. */
   lighting?: { revealAll?: boolean; revealed?: string[] };
+  // --- Track K ---
+  /** Cover squares ('c') with a material and current HP, keyed "x,y". Missing = default material at full HP. */
+  cover?: Record<string, { material: CoverMaterialId; hp: number }>;
+  // --- end Track K ---
 }
 
 /** GM-only prep library (never projected to players). */
@@ -103,7 +107,18 @@ export type Pending =
   | { kind: 'awaitingDodge'; id: string; attack: RangedAttackIntent; defenderId: string }
   | { kind: 'awaitingDamage'; id: string; attackerId: string; targetId: string; spec: DamageSpec }
   /** A watch (house rule) triggered: the watcher may attack the mover now, out of Turn. */
-  | { kind: 'awaitingWatch'; id: string; watcherId: string; targetId: string };
+  | { kind: 'awaitingWatch'; id: string; watcherId: string; targetId: string }
+  // --- Track K ---
+  /** An area attack hit: each eligible defender (REF 8+) decides whether to dodge before damage is rolled. */
+  | {
+    kind: 'awaitingAreaDodge'; id: string; attackerId: string; areaKind: 'shotgunShell' | 'launcher' | 'thrownGrenade'; at: Cell;
+    attack: CheckResult; damageDice: number; source: 'shotgunShell' | 'explosive';
+    /** Everyone caught, with the HP of the cover protecting them (explosives). */
+    targets: { id: string; coverHp?: number }[];
+    /** Eligible defenders: null until they decide. */
+    decisions: Record<string, boolean | null>;
+  };
+  // --- end Track K ---
 
 export interface SessionState {
   sessionId: string;
@@ -203,7 +218,25 @@ export type Intent =
   | { type: 'setLighting'; lighting: NonNullable<TacticalMap['lighting']> }
   // Area attacks on the grid
   | { type: 'areaAttack'; attackerId: string; weaponId: string; kind: 'shotgunShell' | 'launcher' | 'thrownGrenade'; at: Cell }
-  | { type: 'suppressiveFire'; attackerId: string; weaponId: string };
+  | { type: 'suppressiveFire'; attackerId: string; weaponId: string }
+  // --- Track K ---
+  | { type: 'respondAreaDodge'; pendingId: string; actorId: string; dodge: boolean }
+  /** GM: everyone who hasn't decided dodges (if able), then damage resolves. */
+  | { type: 'resolveAreaDodges'; pendingId: string }
+  | { type: 'attackCover'; attackerId: string; weaponId: string; at: Cell }
+  | { type: 'setCover'; at: Cell; material: CoverMaterialId | null }
+  | { type: 'setAmmoType'; actorId: string; weaponId: string; ammoType: AmmoTypeId }
+  | { type: 'extinguish'; actorId: string }
+  | { type: 'setAwareness'; actorId: string; allocation: Partial<Record<AwarenessKey, number>> }
+  /** GM. `rollLoss` rolls that many d6 (+ bonus) for Humanity Loss instead of item.humanityLoss. */
+  | { type: 'installCyberware'; actorId: string; item: CyberwareItem; rollLoss?: { count: number; bonus: number } }
+  | { type: 'removeCyberware'; actorId: string; itemId: string }
+  /** GM. The therapist's STAT + skill total; DV and eligibility from the therapy kind. */
+  | { type: 'therapy'; actorId: string; kind: 'standard' | 'extreme'; therapistBase: number }
+  | { type: 'treatInjury'; medicId: string; targetId: string; injuryIndex: number; kind: 'quickFix' | 'treatment'; skill: string }
+  /** GM. Advance downtime: natural healing for these actors (default: everyone not dead). */
+  | { type: 'rest'; days: number; care: Care; actorIds?: string[] };
+  // --- end Track K ---
 
 export type StatKeyName = 'INT' | 'REF' | 'DEX' | 'TECH' | 'COOL' | 'WILL' | 'LUCK' | 'MOVE' | 'BODY' | 'EMP';
 

@@ -21,6 +21,9 @@ import {
 } from './helpers.js';
 import { executeTool, TOOL_GM_ONLY, TOOL_WHILE_PENDING } from './tools.js';
 import { doAreaAttack, doSuppressiveFire } from './grid-area.js';
+// --- Track K ---
+import { authorizeSystems, beforeDamage, executeSystems, isSystemsIntent, onTurnStart, SYSTEMS_GM_ONLY, SYSTEMS_WHILE_PENDING, wieldCheck } from './systems.js';
+// --- end Track K ---
 
 export { SessionError, currentActorId };
 import type {
@@ -38,7 +41,7 @@ const GM_ONLY: ReadonlySet<IntentType> = new Set([
   'addActor', 'replaceActor', 'removeActor', 'assignController', 'startEncounter', 'endEncounter', 'cancelPending', 'setMap', 'placeToken',
   ...TOOL_GM_ONLY,
 ]);
-const ALLOWED_WHILE_PENDING: ReadonlySet<IntentType> = new Set(['respondDodge', 'rollDamage', 'cancelPending', 'declineWatch', ...TOOL_WHILE_PENDING]);
+const ALLOWED_WHILE_PENDING: ReadonlySet<IntentType> = new Set(['respondDodge', 'rollDamage', 'cancelPending', 'declineWatch', ...TOOL_WHILE_PENDING, ...SYSTEMS_WHILE_PENDING /* Track K */]);
 
 export function authorId(v: Viewer): AuthorId {
   return v.role === 'gm' ? 'gm' : `player:${v.playerId}`;
@@ -77,6 +80,7 @@ function requireActing(state: SessionState, by: Viewer, actorId: string, outOfTu
 
 function authorize(state: SessionState, intent: Intent, by: Viewer) {
   if (GM_ONLY.has(intent.type) && by.role !== 'gm') throw new SessionError('FORBIDDEN', 'Only the GM can do that.');
+  if (SYSTEMS_GM_ONLY.has(intent.type) && by.role !== 'gm') throw new SessionError('FORBIDDEN', 'Only the GM can do that.'); // Track K
   const watch = state.pending?.kind === 'awaitingWatch' ? state.pending : null;
   const isWatchShot = !!watch && (intent.type === 'rangedAttack' || intent.type === 'meleeAttack')
     && intent.attackerId === watch.watcherId && intent.defenderId === watch.targetId;
@@ -84,6 +88,7 @@ function authorize(state: SessionState, intent: Intent, by: Viewer) {
     throw new SessionError('PENDING', watch ? 'Resolve the watch first.' : 'Finish the current attack first.');
   }
 
+  wieldCheck(state, intent); // Track K: arm injuries limit weapons
   switch (intent.type) {
     case 'rangedAttack':
     case 'meleeAttack':
@@ -143,6 +148,7 @@ function authorize(state: SessionState, intent: Intent, by: Viewer) {
       break;
     }
     default:
+      authorizeSystems(state, intent, by); // Track K
       break;
   }
 }
@@ -206,13 +212,15 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
     case 'endTurn': {
       const encounter = settleTurn({ ...advance(state.encounter), usage: undefined }, state.actors);
       const patch: StatePatch = { encounter };
+      const burn = onTurnStart(state, encounter); // Track K: On Fire
+      if (Object.keys(burn.actors).length) patch.actors = burn.actors;
       // A watch lasts until the watcher's next Turn.
       const next = encounter.order[encounter.turnIndex];
       if (state.map && next && state.map.watches[next]) {
         const { [next]: _ended, ...watches } = state.map.watches;
         patch.map = { ...state.map, watches };
       }
-      return { events: [], patch };
+      return { events: burn.events, patch };
     }
 
     case 'rangedAttack': {
@@ -256,13 +264,15 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
     case 'rollDamage': {
       const p = state.pending as Extract<Pending, { kind: 'awaitingDamage' }>;
       const target = getActor(state, p.targetId);
-      const roll = rollDamage(p.spec, dice);
-      const r = applyDamage(target.combatant, p.spec, roll, dice);
+      const k = beforeDamage(state, p); // Track K: Round stamp (Damage Deflection), Spot Weakness
+      const roll = rollDamage(k.spec, dice);
+      const r = applyDamage(target.combatant, k.spec, roll, dice);
       const events: CombatEvent[] = [
+        ...k.events,
         { type: 'damageRolled', visibility: 'public', dice: roll.dice, multiplier: roll.multiplier, total: roll.total, critTriggered: roll.critTriggered },
         ...r.events,
       ];
-      return { events, patch: { actors: { [target.id]: { ...target, combatant: r.target } }, pending: null } };
+      return { events, patch: { actors: { ...k.actors, [target.id]: { ...target, combatant: r.target } }, pending: null } };
     }
     case 'deathSave': {
       const a = getActor(state, intent.actorId);
@@ -336,10 +346,11 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       return { events: [], patch: { map: { ...map, watches } } };
     }
     case 'areaAttack':
-      return doAreaAttack(state, intent, by, dice);
+      return doAreaAttack(state, intent, by, dice, newId);
     case 'suppressiveFire':
       return doSuppressiveFire(state, intent, by, dice);
     default:
+      if (isSystemsIntent(intent)) return executeSystems(state, intent, by, dice, newId); // Track K
       return executeTool(state, intent, by, dice);
   }
 }

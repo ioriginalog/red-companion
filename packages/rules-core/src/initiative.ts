@@ -25,7 +25,7 @@ export function rollInitiative(
   opts: { explodeCrits?: boolean } = {},
 ): { order: InitiativeEntry[]; events: CombatEvent[] } {
   const entries: InitiativeEntry[] = participants.map(({ combatant, bonus = 0 }) => {
-    const base = effectiveStat(combatant, 'REF') + bonus;
+    const base = effectiveStat(combatant, 'REF') + bonus + (combatant.mods?.initiative ?? 0); // Track K: Initiative Reaction, cyberware
     const roll = opts.explodeCrits ? rollD10(dice).value : dice.d10();
     return { combatantId: combatant.id, base, roll, total: base + roll, tiebreaks: [] };
   });

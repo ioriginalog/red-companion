@@ -7,7 +7,8 @@
  * (see damage.ts). Keeping these separate lets the UI show "HIT — roll damage"
  * as its own tap, which is how tables actually play.
  */
-import { makeCheck, beats } from './checks.js';
+import { makeCheck, beats, rollD10 } from './checks.js';
+import { applyAmmo, SMART_MISS_WINDOW, SMART_SECOND_TRY_BASE } from './ammo.js';
 import {
   AIMED_SHOT_PENALTY, AUTOFIRE_AMMO, AUTOFIRE_DV, DODGE_REF_THRESHOLD, RANGE_BANDS, RANGE_BAND_LABELS, RANGE_DV,
   WEAPON_TYPES, unarmedDamageDice,
@@ -74,6 +75,21 @@ function evasionCheck(defender: Combatant, dice: Dice): CheckResult {
   );
 }
 
+// --- Track K --- Solo Fumble Recovery: a natural 1 on an attack is just a 1.
+export function withFumbleRecovery(attacker: Combatant, check: CheckResult): CheckResult {
+  if (!attacker.mods?.fumbleRecovery || check.roll.kind !== 'critFailure') return check;
+  const roll = { natural: check.roll.natural, kind: 'normal' as const, value: check.roll.natural };
+  return { ...check, roll, total: check.total - check.roll.value + roll.value };
+}
+
+/** Launchers fire at squares, not people: use an area attack. */
+function refuseDirectFire(weapon: Weapon, p: WeaponTypeProfile) {
+  if (p.rangeRow === 'grenadeLauncher' || p.rangeRow === 'rocketLauncher') {
+    throw new RulesError('ILLEGAL_MODE', `${weapon.name} fires at an area. Use an area attack.`);
+  }
+}
+// --- end Track K ---
+
 function checkAmmo(weapon: Weapon, need: number) {
   if (weapon.ammo && weapon.ammo.loaded < need) {
     throw new RulesError('NOT_ENOUGH_AMMO', `${weapon.name} needs ${need} rounds loaded; has ${weapon.ammo.loaded}.`);
@@ -106,6 +122,7 @@ export function resolveRangedAttack(input: RangedAttackInput, dice: Dice): Attac
   const mode = input.mode ?? 'single';
   const p = profileOf(weapon);
   if (p.melee) throw new RulesError('ILLEGAL_MODE', `${weapon.name} is a melee weapon.`);
+  refuseDirectFire(weapon, p);
 
   const band = rangeBandIndex(distance);
   let dv: number | null | undefined;
@@ -128,11 +145,11 @@ export function resolveRangedAttack(input: RangedAttackInput, dice: Dice): Attac
   }
   checkAmmo(weapon, ammo);
 
-  const attack = makeCheck(
+  const attack = withFumbleRecovery(attacker, makeCheck(
     [{ label: 'REF', value: effectiveStat(attacker, 'REF') }, { label: skill, value: skillLevel(attacker, skill) }],
     [...standingModifiers(attacker, 'rangedAttack'), ...aimMods(aimTarget), ...(input.situational ?? [])],
     dice,
-  );
+  ));
 
   let defense: CheckResult | undefined;
   let defenseValue = dv;
@@ -142,7 +159,7 @@ export function resolveRangedAttack(input: RangedAttackInput, dice: Dice): Attac
     defenseValue = defense.total; // replaces the range DV, even if lower
   }
 
-  const hit = beats(attack.total, defenseValue);
+  let hit = beats(attack.total, defenseValue);
   const margin = attack.total - defenseValue;
   const events: CombatEvent[] = [
     {
@@ -151,6 +168,14 @@ export function resolveRangedAttack(input: RangedAttackInput, dice: Dice): Attac
     },
     { type: 'ammoSpent', visibility: 'public', combatantId: attacker.id, weaponId: weapon.id, rounds: ammo },
   ];
+  // --- Track K --- Smart ammo: a single shot missing the range DV by 4 or less tracks for a second try at 10 + 1d10.
+  // @interpretation Only against the range DV (not a dodge), and only with a smartlink/Targeting Scope.
+  if (!hit && mode === 'single' && !defense && weapon.ammoType === 'smart' && attacker.mods?.smartLink && defenseValue - attack.total <= SMART_MISS_WINDOW) {
+    const roll = rollD10(dice);
+    const total = SMART_SECOND_TRY_BASE + roll.value;
+    hit = beats(total, defenseValue);
+    events.push({ type: 'smartAmmoRetry', visibility: 'public', attackerId: attacker.id, defenderId: defender.id, roll, total, dv: defenseValue, hit });
+  }
 
   let damage: DamageSpec | undefined;
   if (hit) {
@@ -161,6 +186,7 @@ export function resolveRangedAttack(input: RangedAttackInput, dice: Dice): Attac
           location: aimTarget === 'head' ? 'head' : 'body', halveSP: false, aimTarget, ablation: 1,
           critTable: aimTarget === 'head' ? 'head' : 'body',
         };
+    damage = applyAmmo(damage, weapon.ammoType); // Track K
   }
   return { attack, defenseValue, defense, hit, margin, ammoSpent: ammo, damage, events };
 }
@@ -222,11 +248,11 @@ export function resolveMeleeAttack(input: MeleeAttackInput, dice: Dice): AttackO
       break;
   }
 
-  const attack = makeCheck(
+  const attack = withFumbleRecovery(attacker, makeCheck(
     [{ label: 'DEX', value: effectiveStat(attacker, 'DEX') }, { label: skill, value: skillLevel(attacker, skill) }],
     [...standingModifiers(attacker, 'meleeAttack'), ...aimMods(aimTarget), ...(input.situational ?? [])],
     dice,
-  );
+  ));
 
   let defense: CheckResult | undefined;
   let defenseValue: number;
@@ -278,6 +304,7 @@ export function previewRangedAttack(input: Omit<RangedAttackInput, 'defenderDodg
   const mode = input.mode ?? 'single';
   const p = profileOf(weapon);
   if (p.melee) throw new RulesError('ILLEGAL_MODE', `${weapon.name} is a melee weapon.`);
+  refuseDirectFire(weapon, p);
   const band = rangeBandIndex(distance);
   let dv: number | null | undefined;
   let skill: string;

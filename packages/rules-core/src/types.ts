@@ -81,7 +81,71 @@ export interface Combatant {
     /** e.g. Pain Editor chipware. */
     ignoreSeriouslyWoundedPenalty?: boolean;
   };
+  // --- Track K ---
+  /** Role and rank. A Netrunner's rank is their Interface rank (see `interfaceRank`). */
+  role?: RoleState;
+  /** Humanity; current EMP = floor(current / 10). */
+  humanity?: { current: number; max: number };
+  cyberware?: CyberwareItem[];
+  /** Derived by `applySystems` from role and cyberware. The engine reads only this. */
+  mods?: CombatMods;
+  /** Once-per-Round abilities already used this Round (Damage Deflection, Spot Weakness). */
+  perRound?: { round: number; deflected?: boolean; spotWeakness?: boolean };
+  /** On Fire: HP lost at the start of each of this character's Turns until put out. */
+  onFire?: number;
+  // --- end Track K ---
 }
+
+// --- Track K ---
+export type RoleId = 'rockerboy' | 'solo' | 'netrunner' | 'tech' | 'medtech' | 'media' | 'exec' | 'lawman' | 'fixer' | 'nomad';
+export type AwarenessKey = 'damageDeflection' | 'fumbleRecovery' | 'initiativeReaction' | 'precisionAttack' | 'spotWeakness' | 'threatDetection';
+export interface RoleState {
+  id: RoleId;
+  /** 1–10. */
+  rank: number;
+  /** Solo: Combat Awareness points per sub-ability (total ≤ rank). */
+  awareness?: Partial<Record<AwarenessKey, number>>;
+  /** Medtech: Medicine specialty points (total ≤ rank). */
+  medicine?: { surgery: number; pharmaceuticals: number; cryosystem: number };
+  notes?: string;
+}
+export type CyberwareEffect =
+  | { kind: 'stat'; stat: StatKey; value: number }
+  | { kind: 'skill'; skill: string; value: number }
+  | { kind: 'armor'; location: HitLocation; sp: number }
+  | { kind: 'initiative'; value: number }
+  | { kind: 'smartLink' }
+  | { kind: 'interfacePlugs' }
+  | { kind: 'healingMultiplier'; value: number }
+  | { kind: 'ignoreSeriouslyWounded' };
+export interface CyberwareItem {
+  id: string;
+  name: string;
+  /** e.g. Neuralware, Cyberoptics, Fashionware. */
+  slot?: string;
+  /** Humanity actually lost when installed (rolled or set). */
+  humanityLoss: number;
+  effects: CyberwareEffect[];
+  notes?: string;
+}
+export interface CombatMods {
+  statBonuses?: Partial<Record<StatKey, number>>;
+  skillBonuses?: Record<string, number>;
+  /** Precision Attack. */
+  attack?: number;
+  /** Initiative Reaction plus cyberware. */
+  initiative?: number;
+  damageDeflection?: number;
+  spotWeakness?: number;
+  fumbleRecovery?: boolean;
+  smartLink?: boolean;
+  interfacePlugs?: boolean;
+  healingMultiplier?: number;
+  ignoreSeriouslyWounded?: boolean;
+}
+export type AmmoTypeId = 'basic' | 'armorPiercing' | 'expansive' | 'incendiary' | 'rubber' | 'smart'
+  | 'emp' | 'smoke' | 'teargas' | 'flashbang' | 'biotoxin' | 'poison' | 'sleep';
+// --- end Track K ---
 
 // ---------------------------------------------------------------------------
 // Weapons
@@ -121,6 +185,10 @@ export interface Weapon {
   /** Overrides for Exotic weapons, quality, homebrew. */
   damageDiceOverride?: number;
   rofOverride?: 1 | 2;
+  // --- Track K ---
+  /** Loaded ammunition type. Missing = Basic. */
+  ammoType?: AmmoTypeId;
+  // --- end Track K ---
 }
 
 // ---------------------------------------------------------------------------
@@ -172,6 +240,16 @@ export interface DamageSpec {
   /** SP lost per armor piece when damage gets through. */
   ablation: number;
   critTable: CritTable;
+  // --- Track K ---
+  /** Rubber ammo: no Critical Injuries, no ablation, can't drop the target below 1 HP. */
+  nonLethal?: boolean;
+  /** Incendiary: sets On Fire (HP per Turn) when damage gets through armor. */
+  ignite?: number;
+  /** Spot Weakness etc.: added to the damage roll before armor. */
+  bonusDamage?: number;
+  /** Encounter Round, for once-per-Round defenses (Damage Deflection). */
+  round?: number;
+  // --- end Track K ---
 }
 
 export interface DamageRoll {

@@ -6,6 +6,7 @@
  * Everything else: name, side, Wound State, conditions, injury names.
  */
 import { getInjury, woundState, type CheckResult, type CombatEvent } from '@cprc/rules-core';
+import { projectPendingForPlayer } from './systems.js'; // Track K
 import { allegianceOf, factionOf, projectMap } from './tactical.js';
 import type { Actor, LogEntry, ProjectedActor, ProjectedEntry, SessionState, TacticalMap, Viewer, ViewState } from './types.js';
 
@@ -51,7 +52,7 @@ export function projectState(state: SessionState, viewer: Viewer, opts?: Project
     seq: state.seq,
     actors: Object.fromEntries(Object.values(state.actors).map((a) => [a.id, projectActor(a, viewer, opts, state.map)])),
     encounter: state.encounter,
-    pending: state.pending,
+    pending: viewer.role === 'gm' ? state.pending : projectPendingForPlayer(state.pending, state), // Track K
     map: viewMap(state, viewer),
     ...(viewer.role === 'gm' ? { library: state.library } : {}),
   };
@@ -106,7 +107,7 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
   }
   if ('map' in entry.patch || (entry.patch.actors && after.map)) patch.map = viewMap(after, viewer);
   if (entry.patch.encounter) patch.encounter = entry.patch.encounter;
-  if ('pending' in entry.patch) patch.pending = entry.patch.pending ?? null;
+  if ('pending' in entry.patch) patch.pending = viewer.role === 'gm' ? entry.patch.pending ?? null : projectPendingForPlayer(entry.patch.pending ?? null, after); // Track K
   if (entry.patch.library && viewer.role === 'gm') patch.library = entry.patch.library;
   return { seq: entry.seq, id: entry.id, at: entry.at, by: entry.by, intentType: entry.intent.type, events, patch };
 }

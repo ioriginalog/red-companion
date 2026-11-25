@@ -281,13 +281,18 @@ describe('areaAttack', () => {
     expect(t.state.actors.ganger!.combatant.hp.current).toBe(t.state.actors.ganger!.combatant.hp.max - 6);
   });
 
-  it('eligible targets dodge automatically', () => {
+  it('eligible targets choose to dodge before damage is rolled (Track K)', () => {
     const t = setup();
     t.send({ type: 'replaceActor', actor: actor('ganger', 'npc', 'gm', { REF: 8, DEX: 9 }) }, GM);
-    t.send({ type: 'areaAttack', attackerId: 'solo', weaponId: 'gl', kind: 'launcher', at: { x: 6, y: 3 } }, P1, scriptedDice({ d10: [5, 9], d6: TWOS() }));
+    t.send({ type: 'areaAttack', attackerId: 'solo', weaponId: 'gl', kind: 'launcher', at: { x: 6, y: 3 } }, P1, scriptedDice({ d10: [5] }));
+    expect(t.state.pending).toMatchObject({ kind: 'awaitingAreaDodge', decisions: { ganger: null } });
+    const pid = t.state.pending!.id;
+    expect(t.send({ type: 'respondAreaDodge', pendingId: pid, actorId: 'ganger', dodge: true }, P1)).toMatchObject({ ok: false, code: 'FORBIDDEN' });
+    expect(t.send({ type: 'respondAreaDodge', pendingId: pid, actorId: 'ganger', dodge: true }, GM, scriptedDice({ d10: [9], d6: TWOS() })).ok).toBe(true);
     const dodge = t.last().events.find((e) => e.type === 'checkRolled' && e.label === 'Dodge');
     expect(dodge).toMatchObject({ combatantId: 'ganger', success: true }); // 9 + 4 + 9 = 22 beats 19
     expect(t.state.actors.ganger!.combatant.hp.current).toBe(t.state.actors.ganger!.combatant.hp.max);
+    expect(t.state.pending).toBeNull();
   });
 
   it('needs sight of the aimed square, and refuses walls', () => {

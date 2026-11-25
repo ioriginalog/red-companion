@@ -6,7 +6,7 @@
  * from player views (e.g. exact NPC HP).
  */
 import type { Cell } from './grid.js';
-import type { CheckResult, CritTable, D10Roll, HitLocation, WoundState } from './types.js';
+import type { AmmoTypeId, AwarenessKey, CheckResult, CritTable, D10Roll, HitLocation, WoundState } from './types.js';
 
 /**
  * `audience`: when present, only these viewers (player ids, or 'gm') receive
@@ -42,6 +42,24 @@ export type CombatEvent = Base & (
   | { type: 'conditionSet'; targetId: string; condition: string; value: boolean }
   | { type: 'sceneChanged'; mapId: string; name: string }
   | { type: 'areaResolved'; attackerId: string; kind: string; at: Cell; targetIds: string[] }
+  // --- Track K ---
+  | { type: 'injuryTreated'; medicId: string; targetId: string; injuryId: string; kind: 'quickFix' | 'treatment'; skill: string; check: CheckResult; dv: number; outcome: 'quickFixed' | 'removed' | 'failed' }
+  | { type: 'humanityChanged'; combatantId: string; from: number; to: number; empFrom: number; empTo: number; reason: 'cyberware' | 'removal' | 'therapy' | 'gm' }
+  | { type: 'cyberwareInstalled'; combatantId: string; itemId: string; name: string; humanityLoss: number; rolled?: number[] }
+  | { type: 'cyberwareRemoved'; combatantId: string; itemId: string; name: string; humanityRestored: number }
+  | { type: 'therapyResolved'; combatantId: string; kind: 'standard' | 'extreme'; check: CheckResult; dv: number; success: boolean; recovered: number; rolled: number[] }
+  | { type: 'awarenessSet'; combatantId: string; allocation: Partial<Record<AwarenessKey, number>> }
+  | { type: 'rested'; targetId: string; days: number; care: string; healed: number; hpAfter: number; blocked?: string }
+  | { type: 'coverDamaged'; at: Cell; material: string; hpBefore: number; hpAfter: number; destroyed: boolean; byId?: string }
+  | { type: 'burning'; targetId: string; damage: number; hpAfter: number }
+  | { type: 'ignited'; targetId: string; perTurn: number }
+  | { type: 'extinguished'; targetId: string }
+  | { type: 'ammoLoaded'; combatantId: string; weaponId: string; ammoType: AmmoTypeId }
+  | { type: 'smartAmmoRetry'; attackerId: string; defenderId: string; roll: D10Roll; total: number; dv: number; hit: boolean }
+  | { type: 'damageDeflected'; targetId: string; amount: number }
+  | { type: 'spotWeakness'; combatantId: string; bonus: number }
+  | { type: 'areaDodgeRequested'; combatantId: string; attackTotal: number }
+  // --- end Track K ---
 );
 
 export type { D10Roll };

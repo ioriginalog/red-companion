@@ -97,7 +97,7 @@ export function ablate(armor: ArmorPiece[], loc: HitLocation, amount: number) {
  * ("minimum 1") unless armor alone already took it to 0.
  */
 export function effectiveStat(c: Combatant, stat: StatKey): number {
-  const raw = c.stats[stat];
+  const raw = c.stats[stat] + (c.mods?.statBonuses?.[stat] ?? 0); // Track K: cyberware STAT bonuses
   if (stat !== 'REF' && stat !== 'DEX' && stat !== 'MOVE') return raw;
   const afterArmor = Math.max(0, raw + armorPenalty(c));
   if (stat !== 'MOVE') return afterArmor;
@@ -108,7 +108,7 @@ export function effectiveStat(c: Combatant, stat: StatKey): number {
 }
 
 export function skillLevel(c: Combatant, skill: string): number {
-  return c.skills[skill] ?? 0;
+  return (c.skills[skill] ?? 0) + (c.mods?.skillBonuses?.[skill] ?? 0); // Track K: Role and cyberware skill bonuses
 }
 
 // ----- Standing modifiers to checks -----------------------------------------
@@ -120,7 +120,7 @@ export function standingModifiers(c: Combatant, kind: ActionKind): Modifier[] {
   const mods: Modifier[] = [];
   const ws = woundState(c.hp);
   if (ws === 'mortally') mods.push({ label: 'Mortally Wounded', value: WOUND_PENALTIES.mortally.allActions });
-  else if (ws === 'seriously' && !c.flags?.ignoreSeriouslyWoundedPenalty) {
+  else if (ws === 'seriously' && !c.flags?.ignoreSeriouslyWoundedPenalty && !c.mods?.ignoreSeriouslyWounded) {
     mods.push({ label: 'Seriously Wounded', value: WOUND_PENALTIES.seriously.allActions });
   }
   for (const d of activeInjuries(c)) {
@@ -128,5 +128,7 @@ export function standingModifiers(c: Combatant, kind: ActionKind): Modifier[] {
     if (kind === 'rangedAttack' && d.effect.rangedAttacks) mods.push({ label: d.name, value: d.effect.rangedAttacks });
     if (kind === 'meleeAttack' && d.effect.meleeAttacks) mods.push({ label: d.name, value: d.effect.meleeAttacks });
   }
+  // --- Track K --- Solo Combat Awareness: Precision Attack.
+  if ((kind === 'rangedAttack' || kind === 'meleeAttack') && c.mods?.attack) mods.push({ label: 'Precision Attack', value: c.mods.attack });
   return mods;
 }

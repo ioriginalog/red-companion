@@ -12,3 +12,11 @@ export * from './initiative.js';
 export * from './data/core.js';
 export * from './data/critical-injuries.js';
 export * from './grid.js';
+// --- Track K ---
+export * from './ammo.js';
+export * from './wield.js';
+export * from './roles.js';
+export * from './cyberware.js';
+export * from './healing.js';
+export * from './cover.js';
+// --- end Track K ---

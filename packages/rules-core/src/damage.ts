@@ -47,21 +47,43 @@ export function applyDamage(target: Combatant, spec: DamageSpec, roll: DamageRol
   const wasMortal = wsBefore === 'mortally';
 
   // Steps 2–5
+  const raw = roll.total + (spec.bonusDamage ?? 0); // Track K: Spot Weakness
   const spBefore = effectiveSP(target, spec.location);
   const spCounted = spec.halveSP ? Math.ceil(spBefore / 2) : spBefore;
-  const penetrating = Math.max(0, roll.total - spCounted);
+  const penetrating = Math.max(0, raw - spCounted);
   const locationMultiplier = spec.aimTarget === 'head' ? headshotMultiplier(target) : 1;
-  const through = penetrating * locationMultiplier;
+  let through = penetrating * locationMultiplier;
 
-  let t: Combatant = { ...target, hp: { ...target.hp, current: target.hp.current - through } };
+  // --- Track K --- Damage Deflection: the first damage that gets through each Round is reduced.
+  // @interpretation "damage you take" = HP damage after armor; armor stopping everything doesn't use it up.
+  let pre: Combatant = target;
+  const deflect = target.mods?.damageDeflection ?? 0;
+  if (deflect > 0 && through > 0 && spec.round !== undefined && !(target.perRound?.round === spec.round && target.perRound.deflected)) {
+    const amount = Math.min(deflect, through);
+    through -= amount;
+    const base = target.perRound?.round === spec.round ? target.perRound : { round: spec.round };
+    pre = { ...target, perRound: { ...base, deflected: true } };
+    events.push({ type: 'damageDeflected', visibility: 'public', targetId: target.id, amount });
+  }
+  // Rubber: can't take the target below 1 HP.
+  if (spec.nonLethal) through = Math.max(0, Math.min(through, target.hp.current - 1));
+  // --- end Track K ---
+
+  let t: Combatant = { ...pre, hp: { ...target.hp, current: target.hp.current - through } };
   events.push({
     type: 'damageApplied', visibility: 'gm', targetId: t.id, location: spec.location,
-    rawDamage: roll.total, spBefore, spCounted, through, locationMultiplier,
+    rawDamage: raw, spBefore, spCounted, through, locationMultiplier,
     hpBefore: startHp, hpAfter: t.hp.current,
   });
 
+  // Track K: Incendiary sets the target On Fire when damage gets through.
+  if (penetrating > 0 && spec.ignite) {
+    t = { ...t, onFire: Math.max(t.onFire ?? 0, spec.ignite) };
+    events.push({ type: 'ignited', visibility: 'public', targetId: t.id, perTurn: spec.ignite });
+  }
+
   // Step 6
-  if (penetrating > 0) {
+  if (penetrating > 0 && spec.ablation > 0) {
     const { armor, changes } = ablate(t.armor, spec.location, spec.ablation);
     t = { ...t, armor };
     if (changes.length) events.push({ type: 'armorAblated', visibility: 'public', targetId: t.id, location: spec.location, pieces: changes });
@@ -71,17 +93,17 @@ export function applyDamage(target: Combatant, spec: DamageSpec, roll: DamageRol
   if (penetrating > 0 && spec.aimTarget === 'heldItem') {
     events.push({ type: 'heldItemDropped', visibility: 'public', targetId: t.id, reason: 'aimedShot' });
   }
-  if (penetrating > 0 && spec.aimTarget === 'leg' && !hasInjury(t, 'brokenLeg')) {
+  if (penetrating > 0 && spec.aimTarget === 'leg' && !hasInjury(t, 'brokenLeg') && !spec.nonLethal) {
     // @interpretation Being "suffered", it carries the standard +5 bonus damage.
     t = inflict(t, getInjury('brokenLeg'), 'aimedLeg', [], events);
   }
 
   // Step 8
-  if (roll.critTriggered) t = inflictRandom(t, spec.critTable, 'damageDice', dice, events);
+  if (roll.critTriggered && !spec.nonLethal) t = inflictRandom(t, spec.critTable, 'damageDice', dice, events); // Track K: Rubber never crits
 
   // Step 9 — @interpretation "damaged" = lost any HP to this attack (crit bonus included);
   // the state is checked BEFORE the attack, so the hit that drops you doesn't trigger it.
-  if (wasMortal && t.hp.current < startHp) {
+  if (wasMortal && t.hp.current < startHp && !spec.nonLethal) {
     t = inflictRandom(t, spec.critTable, 'mortallyWounded', dice, events);
     const from = t.deathSave.accumulatedPenalty;
     t = { ...t, deathSave: { accumulatedPenalty: from + 1 } };
