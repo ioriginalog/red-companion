@@ -91,6 +91,13 @@ Environment:
 | `TRUST_PROXY_HOPS` | Reverse proxies in front of the relay. Unset or `0` = rate limits and lockouts use the socket address and ignore `X-Forwarded-For` (it's client-controlled). `N` = use the Nth `X-Forwarded-For` entry from the right. **Railway: `1`.** |
 | `WEB_DIR` | Built client to serve; default `apps/web/dist`. |
 
+**Sync behavior worth knowing:**
+
+- **Failed hellos** (unknown join codes, wrong GM keys) draw from a per-address bucket of 10 that refills one every 30 seconds. A correct GM key or player token always gets in, even from a locked address; only guessing and brand-new joins wait. The client keeps its saved session and retries when the lock lifts.
+- **GM offline:** players' actions are held at the relay (50 per session, 10 per player, up to 10 minutes) and handed to the GM in order once it reconnects and has fetched the log. The GM device caches its log in IndexedDB, so actions taken offline survive a closed tab and sync on reopen.
+- **History:** a player's welcome carries their last 300 projected log entries (events only, redacted exactly like live updates); the GM rebuilds its feed from the whole log.
+- **Unseen hostiles** are absent from the players' Turn order; while one acts, players see a single "Unknown Contact Acting" slot, never a count.
+
 ## Edge Cases the Engine Enforces
 
 - **Ties go to the defender**, always: `attack > DV`, never `>=`.
