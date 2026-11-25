@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { effectiveStat, profileOf, type Weapon } from '@cprc/rules-core';
+import { profileOf, type Weapon } from '@cprc/rules-core';
 import type { Intent } from '@cprc/session';
 import { client, type ClientState } from './net.js';
 import { MapView, type MapMode } from './MapView.js';
@@ -18,8 +18,19 @@ import { narrate } from './narrate.js';
 import { areaKindFor } from './table/area.js';
 import { EFFECT_MS, effectsFor, type Effect } from './table/effects.js';
 import { play } from './table/sound.js';
+import { ActionBar } from './table/layout/ActionBar.js';
+import { TargetChips, targetChips } from './table/layout/TargetChips.js';
+import { TurnBanner } from './table/layout/TurnBanner.js';
+import { useLayout } from './table/layout/useMedia.js';
 
 type Tab = 'combat' | 'sheet' | 'chat' | 'notes' | 'net' | 'scene';
+/** Bottom sheet height on phones and portrait tablets. */
+type Sheet = 'closed' | 'half' | 'full';
+
+const store = {
+  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+};
 
 /** Entries arriving faster than this (log fetch, reconnect) are history, not live play. */
 const BACKFILL_BATCH = 3;
@@ -41,7 +52,12 @@ export function Table({ s }: { s: ClientState }) {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string[]>([]);
   const [tab, setTab] = useState<Tab>('combat');
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheet, setSheet] = useState<Sheet>('closed');
+  const sheetOpen = sheet !== 'closed';
+  const setSheetOpen = (v: boolean) => setSheet(v ? 'half' : 'closed');
+  const [sideCollapsed, setSideCollapsed] = useState(() => store.get('nsc.sideCollapsed') === '1');
+  const [showMini, setShowMini] = useState(() => store.get('nsc.minimap') === '1');
+  const layout = useLayout();
   const [help, setHelp] = useState(false);
   const [effects, setEffects] = useState<Effect[]>([]);
   const [unread, setUnread] = useState(0);
@@ -205,9 +221,21 @@ export function Table({ s }: { s: ClientState }) {
   useEffect(() => { if (tab === 'net' && !showNet) setTab('combat'); }, [tab, showNet]);
   const tabs: [Tab, string][] = [['combat', 'Combat'], ['sheet', 'Sheet'], ['chat', 'Chat'], ['notes', 'Notes'], ...(showNet ? [['net', 'NET'] as [Tab, string]] : []), ...(isGm ? [['scene', 'Scene'] as [Tab, string]] : [])];
   const fireNow = canAct && !!targetId && !!weapon && !fireBlocked({ attack, usage, weapon }, !!view.pending);
+  const chips = useMemo(() => (canAct ? targetChips(view, actingId, chances) : []), [view, actingId, chances, canAct]);
+  const targetHint = !canAct ? undefined
+    : chips.length === 0 ? 'No enemies in sight. Move to find a line of sight.'
+      : layout.compact || layout.sheet ? 'Tap an enemy on the map or in the target strip.' : 'Click an enemy on the map.';
+  // Turn banner: your own characters (for the GM, the NPCs the GM runs).
+  const bannerTitle = currentId && view.actors[currentId] && !view.actors[currentId]!.placeholder && mine(currentId) && (!isGm || view.actors[currentId]!.controller === 'gm')
+    ? (isGm ? `${name(currentId)}’s Turn` : 'Your Turn') : null;
+  const turnKey = enc.active && currentId ? `${enc.round}:${enc.turnIndex}:${currentId}` : null;
+  // Track P: put the Delay/Hold button here; it shows in both the desktop bar and the phone dock.
+  const delaySlot: React.ReactNode = null;
+  const sheetMode = layout.sheet;
+  const toggleSide = () => { const v = !sideCollapsed; setSideCollapsed(v); store.set('nsc.sideCollapsed', v ? '1' : '0'); };
 
   return (
-    <div className={`table${sheetOpen ? ' sheet-open' : ''}`} ref={rootRef}>
+    <div className={`table sheet-${sheet}${sideCollapsed && !sheetMode && !layout.shortLandscape ? ' side-collapsed' : ''}${layout.compact ? ' compact' : ''}`} ref={rootRef}>
       <TopBar c={c} onHelp={() => setHelp(true)} />
       <InitiativeStrip c={c} onPick={(id, friendly) => (view.actors[id]?.placeholder ? undefined : friendly ? (setSelected(id), isGm && setFocusId(id)) : setTargetId(id))} />
 
@@ -215,6 +243,11 @@ export function Table({ s }: { s: ClientState }) {
         {view.map ? (
           <MapView
             view={view} isGm={isGm} actingId={actingId} canAct={canAct} targetId={targetId} attack={attack} chances={chances}
+            compact={layout.compact || layout.sheet}
+            bottomInset={(layout.compact || layout.sheet) && canAct && mapMode === 'move' && chips.length ? 62 : 0}
+            followIds={[...(actingId && view.map.tokens[actingId] ? [actingId] : []), ...(targetId && targetId !== actingId ? [targetId] : [])]}
+            followKey={`${turnKey ?? 'free'}|${actingId ?? ''}|${targetId ?? ''}|${sheet}`}
+            showMini={showMini} onToggleMini={() => { const v = !showMini; setShowMini(v); store.set('nsc.minimap', v ? '1' : '0'); }}
             mode={mapMode} areaKind={areaKind} partyFog={partyFog} focusId={isGm ? focusId : null} highlight={highlight}
             shareCursor={!isGm || gmCursor}
             signals={s.signals} effects={effects} nameOf={(f) => client.nameOf(f)}
@@ -254,6 +287,11 @@ export function Table({ s }: { s: ClientState }) {
             ) : <p className="dim">The GM hasn’t loaded a map.</p>}
           </div>
         )}
+        {(layout.compact || layout.sheet) && canAct && mapMode === 'move' && <TargetChips chips={chips} targetId={targetId} onPick={setTargetId} />}
+        <TurnBanner turnKey={turnKey} title={bannerTitle} sub={bannerTitle && !isGm ? name(currentId!) : undefined} />
+        {!sheetMode && !layout.shortLandscape && sideCollapsed && (
+          <button className="btn side-open" onClick={toggleSide} aria-label="Show Panels" title="Show Panels">Panels ‹</button>
+        )}
         {view.map && (
           <div className="legend">
             <span><i style={{ background: 'rgba(34,227,255,0.5)' }} />Move</span>
@@ -271,37 +309,11 @@ export function Table({ s }: { s: ClientState }) {
         } <button className="link" onClick={() => setMapMode('move')}>Cancel (Esc)</button></div>}
       </main>
 
-      <footer className="actions">
-        {canAct && enc.active && (
-          <div className="econ">
-            <span>Move <b className="mono">{usage?.moveUsed ?? 0}/{acting?.combatant ? effectiveStat(acting.combatant, 'MOVE') : '?'}</b></span>
-            <span className={usage?.actionUsed ? 'used' : ''}>Action</span>
-          </div>
-        )}
-        <button className={`btn${mapMode === 'move' ? ' on' : ''}`} onClick={() => setMapMode('move')} title="Move (M)">Move</button>
-        <button className={`btn${mapMode === 'watch' ? ' on' : ''}`} disabled={!canAct || !view.map || !!usage?.actionUsed} onClick={() => setMapMode(mapMode === 'watch' ? 'move' : 'watch')} title="House rule: spend your Action to watch a 90° cone until your next Turn. (W)">Watch</button>
-        <button className={`btn${mapMode === 'ruler' ? ' on' : ''}`} disabled={!view.map} onClick={() => setMapMode(mapMode === 'ruler' ? 'move' : 'ruler')} title="Ruler (R)">Ruler</button>
-        <button className="btn hide-sm" disabled={!canAct || !weapon?.ammo || weapon.ammo.loaded === weapon.ammo.capacity} onClick={() => actingId && weapon && c.act({ type: 'reload', actorId: actingId, weaponId: weapon.id })}>Reload</button>
-        <button className="btn hide-sm" disabled={!canAct || !targetId} onClick={() => actingId && targetId && c.act({ type: 'meleeAttack', attackerId: actingId, defenderId: targetId, with: { kind: 'brawling' } })}>Brawl</button>
-        {isGm && <button className={`btn hide-sm${mapMode === 'place' ? ' on' : ''}`} disabled={!view.map} onClick={() => setMapMode(mapMode === 'place' ? 'move' : 'place')} title="Select a token, then tap a square to put it there.">Place</button>}
-        {isGm && <button className={`btn hide-sm${partyFog ? ' on' : ''}`} disabled={!view.map} onClick={() => setPartyFog(!partyFog)}>Party View</button>}
-        {isGm && <button className="btn" onClick={() => client.undo()}>Undo</button>}
-        {(() => {
-          // Stabilize a friendly who's Mortally Wounded (or down): Paramedic if trained, else First Aid.
-          const t = targetId ? view.actors[targetId] : undefined;
-          if (!canAct || !actingId || !t || !acting || isFriendly(t) !== isFriendly(acting) || t.public.conditions.dead || t.public.conditions.stabilized) return null;
-          if (t.public.woundState !== 'mortally' && !t.public.conditions.unconscious) return null;
-          const skill = (acting.combatant?.skills.Paramedic ?? 0) > 0 ? 'Paramedic' as const : 'First Aid' as const;
-          return <button className="btn" disabled={!!usage?.actionUsed || !!view.pending} onClick={() => c.act({ type: 'stabilize', medicId: actingId, targetId: t.id, skill })} title={`Stabilize ${t.public.name} with ${skill} (uses your Action; must be adjacent)`}>Stabilize</button>;
-        })()}
-        <div className="spacer" />
-        {canAct && targetId && weapon && <button className="btn yellow show-sm" disabled={!fireNow} onClick={fire} title="Fire (F)">{profileOf(weapon).melee ? 'Strike' : 'Fire'}</button>}
-        {isGm && !enc.active && view.map && (
-          <button className="btn yellow" onClick={() => c.act({ type: 'startEncounter', participants: Object.keys(view.map!.tokens).map((actorId) => ({ actorId })) })}>Start Encounter</button>
-        )}
-        {isGm && enc.active && <button className="btn hide-sm" onClick={() => c.act({ type: 'endEncounter' })}>End Encounter</button>}
-        {enc.active && (isGm || mine(currentId)) && <button className="btn danger" disabled={!canEndTurn} onClick={() => c.act({ type: 'endTurn' })} title="End Turn (E)">End Turn</button>}
-      </footer>
+      <ActionBar
+        c={c} compact={layout.compact} mapMode={mapMode} setMapMode={setMapMode} actingId={actingId} acting={acting} canAct={canAct}
+        usage={usage} weapon={weapon} targetId={targetId} attack={attack} fireNow={fireNow} onFire={fire} canEndTurn={canEndTurn}
+        partyFog={partyFog} setPartyFog={setPartyFog} extra={delaySlot}
+      />
 
       <aside className="side" aria-label="Panels">
         <div className="tabs" role="tablist">
@@ -311,7 +323,12 @@ export function Table({ s }: { s: ClientState }) {
               {t === 'notes' && notesUnread > 0 && <span className="badge">{notesUnread}</span>}
             </button>
           ))}
-          <button className="tab grip" aria-label={sheetOpen ? 'Collapse Panel' : 'Expand Panel'} onClick={() => setSheetOpen(!sheetOpen)}>{sheetOpen ? '▾' : '▴'}</button>
+          {sheetMode && sheetOpen && (
+            <button className="tab grip" aria-label={sheet === 'full' ? 'Half-Height Panel' : 'Full-Height Panel'} title={sheet === 'full' ? 'Half Height' : 'Full Height'} onClick={() => setSheet(sheet === 'full' ? 'half' : 'full')}>{sheet === 'full' ? '⇩' : '⇧'}</button>
+          )}
+          {sheetMode
+            ? <button className="tab grip" aria-label={sheetOpen ? 'Collapse Panel' : 'Expand Panel'} onClick={() => setSheetOpen(!sheetOpen)}>{sheetOpen ? '▾' : '▴'}</button>
+            : !layout.shortLandscape && <button className="tab grip side-hide" aria-label="Hide Panels" title="Hide Panels" onClick={toggleSide}>›</button>}
         </div>
         <div className="side-body">
           <Prompts c={c} />
@@ -323,7 +340,7 @@ export function Table({ s }: { s: ClientState }) {
                 c={c} actingId={actingId} currentId={currentId} canAct={canAct} weapon={weapon} setWeaponId={setWeaponId} mode={mode} setMode={setMode}
                 targetId={targetId} setTargetId={setTargetId} attack={attack} usage={usage} mapMode={mapMode} setMapMode={setMapMode}
                 setHighlight={setHighlight} onFire={fire}
-                ownIds={ownIds} onSelectOwn={(id) => setSelected(id)}
+                ownIds={ownIds} onSelectOwn={(id) => setSelected(id)} targetHint={targetHint}
               />
             </>
           )}

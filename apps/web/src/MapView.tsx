@@ -5,7 +5,10 @@ import { isFriendly, moveRings, occupancy, partyVision, watchCells, wedgePath, t
 import { pct } from './odds.js';
 import { PING_MS, type Signals } from './net.js';
 import { blastCells, shellCells, tokensIn, type AreaKind } from './table/area.js';
-import { clampBox, fitBox, panBy, reaspect, zoomAt, type Box } from './table/viewport.js';
+import { clampBox, panBy, reaspect, zoomAt, type Box } from './table/viewport.js';
+import { centerOn, comfortablyInside, easeOut, fitMap, frameFocus, lerpBox, limitWidth, maxViewWidth, toStage, type Viewport } from './table/layout/camera.js';
+import { MiniMap } from './table/layout/MiniMap.js';
+import { usePrefersReducedMotion } from './table/layout/useMedia.js';
 import { EFFECT_MS, type Effect } from './table/effects.js';
 import { labelSpots, tokenLabels } from './table/labels.js';
 import { ALLEGIANCE, WOUND } from './table/ctx.js';
@@ -39,7 +42,23 @@ interface Props {
   onArea: (at: Cell) => void;
   onReveal: (cells: string[], add: boolean) => void;
   onSignal: (s: Signal) => void;
+  /** Phone layout: fill the screen, keep tokens readable, follow the action. */
+  compact?: boolean;
+  /** Tokens the camera keeps in frame (acting first, then the target). */
+  followIds?: string[];
+  /** Changes when the camera should re-frame (new Turn, new target). Manual pan/zoom pauses following until it changes. */
+  followKey?: string;
+  /** Overview map in the corner (desktop). */
+  showMini?: boolean;
+  onToggleMini?: () => void;
+  /** Pixels at the bottom covered by overlays (target chips); framing keeps the action above them. */
+  bottomInset?: number;
 }
+
+/** Smallest on-screen square in compact (phone) layout, in CSS px. */
+const MIN_CELL_PX_COMPACT = 34;
+const COMFY_CELL_PX = 46;
+const CAMERA_MS = 380;
 
 const COLOR = { party: 'var(--party)', ally: 'var(--ally)', neutral: 'var(--neutral)', hostile: 'var(--hostile)' } as const;
 const SIGNAL_COLORS = ['#22e3ff', '#3dff8a', '#b46bff', '#ff9d2b', '#ff2bd6', '#7cf'];
@@ -61,7 +80,32 @@ export function MapView(p: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [aspect, setAspect] = useState(1.5);
-  const [box, setBox] = useState<Box>(() => fitBox(W, H, 1.5));
+  const [vp, setVp] = useState<Viewport>({ w: 0, h: 0 });
+  const [box, setBoxState] = useState<Box>(() => fitMap(W, H, 1.5, !!p.compact));
+  const boxRef = useRef(box);
+  boxRef.current = box;
+  const anim = useRef<number | null>(null);
+  /** The viewer moved the camera by hand: stop following until the action changes. */
+  const userMoved = useRef(false);
+  const reduced = usePrefersReducedMotion();
+  const stopAnim = () => { if (anim.current) { cancelAnimationFrame(anim.current); anim.current = null; } };
+  /** Camera change from the viewer's own gesture (wheel, pan, pinch, buttons). */
+  const setBox = useCallback((b: Box | ((prev: Box) => Box)) => { stopAnim(); userMoved.current = true; setBoxState(b); }, []);
+  /** Programmatic camera move; animated unless reduced motion. */
+  const animateTo = useCallback((to: Box, instant = false) => {
+    stopAnim();
+    const from = boxRef.current;
+    if (instant || reduced || (Math.abs(from.w - to.w) < 1 && Math.hypot(from.x - to.x, from.y - to.y) < 1)) { setBoxState(to); return; }
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - t0) / CAMERA_MS);
+      setBoxState(lerpBox(from, to, easeOut(t)));
+      anim.current = t < 1 ? requestAnimationFrame(step) : null;
+    };
+    anim.current = requestAnimationFrame(step);
+  }, [reduced]);
+  useEffect(() => stopAnim, []);
+  const [tipFor, setTipFor] = useState<string | null>(null);
   const [hover, setHover] = useState<Cell | null>(null);
   const [dragTo, setDragTo] = useState<{ id: string; at: Cell } | null>(null);
   const [ruler, setRuler] = useState<{ from: Cell; to: Cell } | null>(null);
@@ -86,14 +130,61 @@ export function MapView(p: Props) {
       if (r.width < 10 || r.height < 10) return;
       const a = r.width / r.height;
       setAspect(a);
-      setBox((b) => reaspect(b, a));
+      setVp({ w: r.width, h: r.height });
+      stopAnim();
+      setBoxState((b) => reaspect(b, a));
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const fit = useCallback(() => setBox(fitBox(W, H, aspect)), [W, H, aspect]);
-  // Refit when a new map loads.
-  useEffect(() => { fit(); }, [map.id, W, H]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Whole map: contained on desktop; on phones it fills the screen using the tighter side. */
+  const fit = useCallback(() => setBox(fitMap(W, H, aspect, !!p.compact)), [W, H, aspect, p.compact, setBox]);
+
+  // ----- Camera follow -----
+  const followPts = (p.followIds ?? []).map((id) => map.tokens[id]).filter((c): c is Cell => !!c).map((c) => ({ x: c.x * S + S / 2, y: c.y * S + S / 2 }));
+  const followSig = followPts.map((q) => `${q.x},${q.y}`).join('|');
+  const frame = useCallback((instant = false) => {
+    if (vp.w < 10) return;
+    const cover = fitMap(W, H, aspect, !!p.compact);
+    if (p.compact) {
+      const maxW = maxViewWidth(S, vp.w, MIN_CELL_PX_COMPACT);
+      // A lone token frames at a comfortable ~44 px per square; a pair zooms out as needed (down to the minimum).
+      const minCells = Math.max(7, vp.w / COMFY_CELL_PX);
+      // Frame inside the part of the stage not covered by overlays, then extend the box down under them.
+      const inset = Math.min(vp.h * 0.4, p.bottomInset ?? 0);
+      const a2 = vp.w / Math.max(40, vp.h - inset);
+      const b = frameFocus(followPts, a2, S, { maxW, minCells, fallback: limitWidth(cover, maxW, a2), mapW: W, mapH: H });
+      animateTo({ ...b, h: b.w / aspect }, instant);
+      return;
+    }
+    const a = followPts[0];
+    if (!a) return;
+    const cur = boxRef.current;
+    if (!followPts.every((q) => comfortablyInside(cur, q))) {
+      // Desktop: keep the zoom the GM chose; pan so the action is in view.
+      const mid = followPts.length > 1 && Math.abs(followPts[1]!.x - a.x) < cur.w * 0.7 && Math.abs(followPts[1]!.y - a.y) < cur.h * 0.7
+        ? { x: (a.x + followPts[1]!.x) / 2, y: (a.y + followPts[1]!.y) / 2 } : a;
+      animateTo(centerOn(cur, mid, W, H), instant);
+    }
+  }, [vp.w, vp.h, W, H, aspect, p.compact, S, followSig, animateTo, p.bottomInset]); // eslint-disable-line react-hooks/exhaustive-deps
+  // New map: start from the fit (or the framed action on phones), no animation.
+  const mapKey = `${map.id}:${W}x${H}`;
+  const lastMap = useRef('');
+  useEffect(() => {
+    if (vp.w < 10) return;
+    if (lastMap.current !== mapKey) {
+      lastMap.current = mapKey;
+      userMoved.current = false;
+      setBoxState(fitMap(W, H, aspect, !!p.compact));
+      if (p.compact) frame(true);
+    }
+  }, [mapKey, vp.w]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The action changed (new Turn, new target): follow again.
+  useEffect(() => { userMoved.current = false; }, [p.followKey]);
+  useEffect(() => {
+    if (!userMoved.current) frame();
+  }, [p.followKey, followSig, vp.w, vp.h, p.compact]); // eslint-disable-line react-hooks/exhaustive-deps
+  const focusAction = () => { userMoved.current = false; frame(); };
 
   // Re-render while time-based overlays (pings, effects) are alive.
   const alive = p.signals.pings.length > 0 || p.effects.length > 0;
@@ -108,7 +199,13 @@ export function MapView(p: Props) {
     if (mode !== 'ruler' && ruler) { setRuler(null); p.onSignal({ kind: 'measure', from: ruler.from, to: null }); }
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const vision = useMemo(() => partyVision(view), [view.map, view.actors]);
+  // Vision depends only on the map and on which friendly tokens can see. The GM's view rebuilds
+  // `actors` on every entry, so key on a signature instead of the object (LOS is the hot path).
+  const seerSig = Object.keys(map.tokens).filter((id) => {
+    const a = view.actors[id];
+    return a && isFriendly(a) && !a.public.conditions.dead && !a.public.conditions.unconscious;
+  }).sort().join(',');
+  const vision = useMemo(() => partyVision(view), [view.map, seerSig]); // eslint-disable-line react-hooks/exhaustive-deps
   const showFog = !p.isGm || p.partyFog;
   const rings = useMemo(() => (actingId && p.canAct ? moveRings(view, actingId) : null), [view, actingId, p.canAct]);
   const actingAt = actingId ? map.tokens[actingId] : undefined;
@@ -203,6 +300,8 @@ export function MapView(p: Props) {
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const c = cellAtClient(e.clientX, e.clientY);
+    const tipNow = e.pointerType === 'mouse' && !gesture.current ? tokenAt(c) : null;
+    if (tipNow !== tipFor) setTipFor(tipNow);
     if (!hover || !c || hover.x !== c.x || hover.y !== c.y) {
       setHover(c);
       if (p.shareCursor) p.onSignal({ kind: 'cursor', at: c });
@@ -290,8 +389,28 @@ export function MapView(p: Props) {
     return { kind: 'shell' as const, all: [] as Cell[], hit, ids: tokensIn(map.tokens, hit, actingId ?? undefined), clear: true };
   }, [mode, hover, p.areaKind, actingAt, map, actingId]);
 
+  // Watch cones are LOS-heavy; recompute only when the map or watches change.
+  const watchSets = useMemo(() => {
+    const out: Record<string, Set<string>> = {};
+    for (const [id, w] of Object.entries(map.watches)) { const at = map.tokens[id]; if (at) out[id] = watchCells(map, at, w); }
+    return out;
+  }, [map.watches, map.tokens, map.cells, map.width]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const center = (c: Cell) => ({ x: c.x * S + S / 2, y: c.y * S + S / 2 });
   const target = p.targetId ? map.tokens[p.targetId] : undefined;
+  // Static layers, memoized so hover and camera frames don't rebuild hundreds of elements.
+  const gridLayer = useMemo(() => (
+    <g stroke="rgba(120,160,255,0.13)" strokeWidth={1} pointerEvents="none">
+      {Array.from({ length: map.width + 1 }, (_, x) => <line key={`x${x}`} x1={x * S} y1={0} x2={x * S} y2={H} />)}
+      {Array.from({ length: map.height + 1 }, (_, y) => <line key={`y${y}`} x1={0} y1={y * S} x2={W} y2={y * S} />)}
+    </g>
+  ), [map.width, map.height, S, W, H]);
+  const ringsLayer = useMemo(() => rings && (
+    <g pointerEvents="none">
+      {[...rings.run.keys()].map((k) => { const [x, y] = k.split(',').map(Number); return <rect key={k} x={x! * S + 2} y={y! * S + 2} width={S - 4} height={S - 4} fill="rgba(255,212,0,0.13)" stroke="rgba(255,212,0,0.5)" strokeWidth={1} />; })}
+      {[...rings.move.keys()].map((k) => { const [x, y] = k.split(',').map(Number); return <rect key={k} x={x! * S + 2} y={y! * S + 2} width={S - 4} height={S - 4} fill="rgba(34,227,255,0.16)" stroke="rgba(34,227,255,0.6)" strokeWidth={1} />; })}
+    </g>
+  ), [rings, S]);
   const now = Date.now();
   const highlight = new Set([...p.highlight, ...(template?.ids ?? [])]);
   const labels = useMemo(
@@ -366,7 +485,7 @@ export function MapView(p: Props) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={(e) => { pointers.current.delete(e.pointerId); gesture.current = null; clearLong(); setDragTo(null); }}
-        onPointerLeave={() => { setHover(null); if (p.shareCursor) p.onSignal({ kind: 'cursor', at: null }); }}
+        onPointerLeave={() => { setHover(null); setTipFor(null); if (p.shareCursor) p.onSignal({ kind: 'cursor', at: null }); }}
         onContextMenu={(e) => {
           e.preventDefault();
           const tok = tokenAt(cellAtClient(e.clientX, e.clientY));
@@ -391,18 +510,10 @@ export function MapView(p: Props) {
         <rect x={-W} y={-H} width={W * 3} height={H * 3} fill="#03050f" />
         {map.background ? <image href={map.background} x={0} y={0} width={W} height={H} preserveAspectRatio="none" /> : <rect width={W} height={H} fill="#0b1230" />}
 
-        <g stroke="rgba(120,160,255,0.13)" strokeWidth={1}>
-          {Array.from({ length: map.width + 1 }, (_, x) => <line key={`x${x}`} x1={x * S} y1={0} x2={x * S} y2={H} />)}
-          {Array.from({ length: map.height + 1 }, (_, y) => <line key={`y${y}`} x1={0} y1={y * S} x2={W} y2={y * S} />)}
-        </g>
+        {gridLayer}
 
         {/* Movement rings: cyan = Move, yellow = Run (uses the Action). */}
-        {rings && (mode === 'move' || dragTo) && (
-          <g pointerEvents="none">
-            {[...rings.run.keys()].map((k) => { const [x, y] = k.split(',').map(Number); return <rect key={k} x={x! * S + 2} y={y! * S + 2} width={S - 4} height={S - 4} fill="rgba(255,212,0,0.13)" stroke="rgba(255,212,0,0.5)" strokeWidth={1} />; })}
-            {[...rings.move.keys()].map((k) => { const [x, y] = k.split(',').map(Number); return <rect key={k} x={x! * S + 2} y={y! * S + 2} width={S - 4} height={S - 4} fill="rgba(34,227,255,0.16)" stroke="rgba(34,227,255,0.6)" strokeWidth={1} />; })}
-          </g>
-        )}
+        {(mode === 'move' || dragTo) && ringsLayer}
 
         {/* Watch cones: magenta for the party; hostile watches only reach the GM. */}
         {Object.entries(map.watches).map(([id, w]) => {
@@ -413,7 +524,7 @@ export function MapView(p: Props) {
           const col = isFriendly(a) ? '#ff2bd6' : '#ff3b4e';
           return (
             <g key={`w-${id}`} pointerEvents="none">
-              {cellRects(watchCells(map, at, w), col, { opacity: 0.12 })}
+              {cellRects(watchSets[id] ?? [], col, { opacity: 0.12 })}
               <path d={wedgePath(c.x, c.y, w.facing, w.arc, w.range * S)} fill="none" stroke={col} strokeWidth={2} strokeDasharray="10 8" opacity={0.8} className="march" />
             </g>
           );
@@ -607,11 +718,40 @@ export function MapView(p: Props) {
         {hover && mode !== 'watch' && mode !== 'area' && <rect x={hover.x * S} y={hover.y * S} width={S} height={S} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={2} pointerEvents="none" />}
         {hasFocus && kbdMode && kbd && <rect x={kbd.x * S + 1} y={kbd.y * S + 1} width={S - 2} height={S - 2} fill="none" stroke="#ffd400" strokeWidth={4} strokeDasharray="10 5" pointerEvents="none" className="kbd-focus" />}
       </svg>
-      <div className="zoom" role="group" aria-label="Map zoom">
+      <div className="zoom" role="group" aria-label="Map Zoom">
         <button className="btn" onClick={() => zoomButton(1.25)} aria-label="Zoom In" title="Zoom In">+</button>
         <button className="btn" onClick={() => zoomButton(0.8)} aria-label="Zoom Out" title="Zoom Out">−</button>
         <button className="btn" onClick={fit} title="Fit Map to Screen">Fit</button>
+        {(p.followIds?.length ?? 0) > 0 && <button className="btn" onClick={focusAction} title="Center on the Action" aria-label="Center on the Action">◎</button>}
+        {p.onToggleMini && <button className={`btn hide-compact${p.showMini ? ' on' : ''}`} onClick={p.onToggleMini} aria-pressed={!!p.showMini} title="Overview Map">Mini</button>}
       </div>
+      {p.showMini && !p.compact && (
+        <MiniMap map={map} view={view} box={box} fogPath={fogPath} fogFill={p.isGm ? 'rgba(2,4,14,0.5)' : 'rgba(2,4,14,0.78)'}
+          onCenter={(x, y) => setBox((b) => clampBox({ ...b, x: x - b.w / 2, y: y - b.h / 2 }, W, H))} />
+      )}
+      {tipFor && !dragTo && (() => {
+        const at = map.tokens[tipFor];
+        const a = view.actors[tipFor];
+        if (!at || !a || vp.w < 10) return null;
+        const pt = toStage(box, vp, { x: at.x * S + S / 2, y: at.y * S });
+        const d = actingAt && tipFor !== actingId ? gridDistance(actingAt, at) : null;
+        const ch = p.chances[tipFor];
+        const left = Math.min(vp.w - 110, Math.max(110, pt.x));
+        const below = pt.y < 90;
+        const top = below ? pt.y + (S / box.w) * vp.w + 12 : pt.y - 10;
+        return (
+          <div className={`token-tip${below ? ' below' : ''}`} style={{ left, top }} aria-hidden>
+            <div className="tt-name h" style={{ color: a.public.conditions.dead ? 'var(--dim)' : COLOR[a.public.allegiance] }}>{a.public.name}</div>
+            <div className="tt-sub">{ALLEGIANCE[a.public.allegiance]} · {a.public.conditions.dead ? 'Dead' : WOUND[a.public.woundState]}{a.public.conditions.prone ? ' · Prone' : ''}</div>
+            {(d != null || ch != null) && (
+              <div className="tt-row mono">
+                {d != null && <span>{d} sq · {d * 2} m</span>}
+                {ch != null && <span className="tt-chance">{pct(ch)} to Hit</span>}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

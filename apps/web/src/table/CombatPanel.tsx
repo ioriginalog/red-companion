@@ -28,6 +28,8 @@ interface Props {
   /** This player's characters, for picking one when no Turn is active. */
   ownIds?: string[];
   onSelectOwn?: (id: string) => void;
+  /** Track M: what to tell the viewer when no target is picked (depends on layout and line of sight). */
+  targetHint?: string;
 }
 
 export function fireBlocked(p: Pick<Props, 'attack' | 'usage' | 'weapon'>, pending: boolean): boolean {
@@ -119,7 +121,7 @@ export function CombatPanel(p: Props) {
             <span>Target</span>
             {actingId && <button className="link" onClick={() => p.setTargetId(nearestTarget(view, actingId))}>Nearest</button>}
           </div>
-          {!target ? <p className="dim">Tap an enemy on the map.</p> : (
+          {!target ? <p className="dim">{p.targetHint ?? 'Tap an enemy on the map.'}</p> : (
             <>
               <div className="row" style={{ marginBottom: 10 }}>
                 <Portrait a={target} />
