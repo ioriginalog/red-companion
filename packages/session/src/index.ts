@@ -4,3 +4,7 @@ export * from './authority.js';
 export * from './projection.js';
 export * from './protocol.js';
 export * from './tactical.js';
+// --- Track N ---
+export * from './netrun-types.js';
+export { emptyNet, executeNet, parseNetOp, projectNet, validateArchitecture, validateRig } from './netrun.js';
+// --- end Track N ---

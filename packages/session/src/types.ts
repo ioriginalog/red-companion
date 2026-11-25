@@ -10,6 +10,9 @@
  * Clients never re-run the rules engine; they apply patches. That keeps replay
  * trivially deterministic and lets the relay redact patches per viewer.
  */
+// --- Track N ---
+import type { NetOp, NetState, NetView } from './netrun-types.js';
+// --- end Track N ---
 import type { AimTarget, Cell, CombatEvent, Combatant, DamageSpec, GridMap, Modifier, Weapon, WoundState } from '@cprc/rules-core';
 
 export type Viewer = { role: 'gm' } | { role: 'player'; playerId: string };
@@ -115,6 +118,9 @@ export interface SessionState {
   map: TacticalMap | null;
   /** GM prep: saved maps (scenes) and NPC templates. Stripped from player views. */
   library: Library;
+  // --- Track N ---
+  netrun?: NetState;
+  // --- end Track N ---
 }
 
 export interface StatePatch {
@@ -127,6 +133,9 @@ export interface StatePatch {
   map?: TacticalMap | null;
   /** Replace the whole library. GM only; never projected. */
   library?: Library;
+  // --- Track N ---
+  netrun?: NetState;
+  // --- end Track N ---
 }
 
 export interface LogEntry {
@@ -203,7 +212,10 @@ export type Intent =
   | { type: 'setLighting'; lighting: NonNullable<TacticalMap['lighting']> }
   // Area attacks on the grid
   | { type: 'areaAttack'; attackerId: string; weaponId: string; kind: 'shotgunShell' | 'launcher' | 'thrownGrenade'; at: Cell }
-  | { type: 'suppressiveFire'; attackerId: string; weaponId: string };
+  | { type: 'suppressiveFire'; attackerId: string; weaponId: string }
+  // --- Track N ---
+  | { type: 'net'; op: NetOp };
+  // --- end Track N ---
 
 export type StatKeyName = 'INT' | 'REF' | 'DEX' | 'TECH' | 'COOL' | 'WILL' | 'LUCK' | 'MOVE' | 'BODY' | 'EMP';
 
@@ -243,6 +255,9 @@ export interface ViewState {
   map: TacticalMap | null;
   /** GM view only. */
   library?: Library;
+  // --- Track N ---
+  netrun?: NetView;
+  // --- end Track N ---
 }
 
 export interface ProjectedEntry {
@@ -252,5 +267,5 @@ export interface ProjectedEntry {
   by: AuthorId;
   intentType: IntentType;
   events: CombatEvent[];
-  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: Pending | null; map?: TacticalMap | null; library?: Library };
+  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: Pending | null; map?: TacticalMap | null; library?: Library; /* Track N */ netrun?: NetView };
 }

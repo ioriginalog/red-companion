@@ -20,6 +20,9 @@ import {
   checkAttackAction, checkOtherAction, controls, currentActorId, freshUsage, getActor, getWeapon, requireMap, SessionError, usageFor, visibilityFor,
 } from './helpers.js';
 import { executeTool, TOOL_GM_ONLY, TOOL_WHILE_PENDING } from './tools.js';
+// --- Track N ---
+import { executeNet } from './netrun.js';
+// --- end Track N ---
 import { doAreaAttack, doSuppressiveFire } from './grid-area.js';
 
 export { SessionError, currentActorId };
@@ -339,6 +342,10 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       return doAreaAttack(state, intent, by, dice);
     case 'suppressiveFire':
       return doSuppressiveFire(state, intent, by, dice);
+    // --- Track N ---
+    case 'net':
+      return executeNet(state, (intent as { op: unknown }).op, by, dice);
+    // --- end Track N ---
     default:
       return executeTool(state, intent, by, dice);
   }

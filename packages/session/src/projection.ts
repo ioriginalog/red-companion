@@ -7,6 +7,9 @@
  */
 import { getInjury, woundState, type CheckResult, type CombatEvent } from '@cprc/rules-core';
 import { allegianceOf, factionOf, projectMap } from './tactical.js';
+// --- Track N ---
+import { projectNet } from './netrun.js';
+// --- end Track N ---
 import type { Actor, LogEntry, ProjectedActor, ProjectedEntry, SessionState, TacticalMap, Viewer, ViewState } from './types.js';
 
 export interface ProjectionOptions {
@@ -54,6 +57,9 @@ export function projectState(state: SessionState, viewer: Viewer, opts?: Project
     pending: state.pending,
     map: viewMap(state, viewer),
     ...(viewer.role === 'gm' ? { library: state.library } : {}),
+    // --- Track N ---
+    ...(state.netrun ? { netrun: projectNet(state, viewer) } : {}),
+    // --- end Track N ---
   };
 }
 
@@ -108,6 +114,9 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
   if (entry.patch.encounter) patch.encounter = entry.patch.encounter;
   if ('pending' in entry.patch) patch.pending = entry.patch.pending ?? null;
   if (entry.patch.library && viewer.role === 'gm') patch.library = entry.patch.library;
+  // --- Track N --- (Turn changes move NET Actions left; controller changes move ownership.)
+  if (after.netrun && (entry.patch.netrun || entry.patch.actors || entry.patch.encounter)) patch.netrun = projectNet(after, viewer);
+  // --- end Track N ---
   return { seq: entry.seq, id: entry.id, at: entry.at, by: entry.by, intentType: entry.intent.type, events, patch };
 }
 
@@ -171,5 +180,8 @@ export function applyProjectedEntry(view: ViewState, entry: ProjectedEntry): Vie
     pending: 'pending' in entry.patch ? (entry.patch.pending ?? null) : view.pending,
     map: 'map' in entry.patch ? (entry.patch.map ?? null) : view.map,
     ...(entry.patch.library ? { library: entry.patch.library } : {}),
+    // --- Track N ---
+    ...(entry.patch.netrun ? { netrun: entry.patch.netrun } : {}),
+    // --- end Track N ---
   };
 }
