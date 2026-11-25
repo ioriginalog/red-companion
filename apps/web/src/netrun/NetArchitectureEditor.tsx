@@ -5,11 +5,12 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  DECK_SLOTS, depthOf, ICE_TEMPLATES, NET_DV, PROGRAM_TEMPLATES,
+  DECK_SLOTS, depthOf, ICE_TEMPLATES, NET_DV,
   type IceStats, type NetArchitecture, type NetDifficulty, type NetFloor, type NetFloorKind, type NetRig,
 } from '@cprc/rules-core';
 import type { Intent, NetOp, ViewState } from '@cprc/session';
 import './netrun.css';
+import { programCatalog, usePacks } from '../data/catalog.js'; // Round 3 D
 
 export interface NetArchitectureEditorProps {
   view: ViewState;
@@ -240,7 +241,7 @@ function IceList({ ice, onChange }: { ice: IceStats[]; onChange: (ice: IceStats[
       ))}
       {ice.length < 3 && (
         <select aria-label="Add ICE" value="" onChange={(e) => { const t = ICE_TEMPLATES.find((x) => x.name === e.target.value); if (t) onChange([...ice, { ...t }]); }}>
-          <option value="">Add ICE From a Template</option>
+          <option value="">Add ICE from a Template</option>
           {ICE_TEMPLATES.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
         </select>
       )}
@@ -263,6 +264,7 @@ function RigRow({ actorId, name, rig, send }: { actorId: string; name: string; r
   const [draft, setDraft] = useState<NetRig | null>(rig ?? null);
   useEffect(() => setDraft(rig ?? null), [rig]);
   const chosen = useMemo(() => new Set(draft?.programs.map((p) => p.id)), [draft]);
+  const catalog = programCatalog(usePacks()); // Round 3 D: original starters + the GM's imported Programs
   if (!draft) {
     return (
       <div className="row net-row">
@@ -272,7 +274,7 @@ function RigRow({ actorId, name, rig, send }: { actorId: string; name: string; r
     );
   }
   const toggle = (id: string) => {
-    const t = PROGRAM_TEMPLATES.find((p) => p.id === id)!;
+    const t = catalog.find((p) => p.id === id)!;
     setDraft({ ...draft, programs: chosen.has(id) ? draft.programs.filter((p) => p.id !== id) : [...draft.programs, { ...t }] });
   };
   return (
@@ -288,7 +290,7 @@ function RigRow({ actorId, name, rig, send }: { actorId: string; name: string; r
         <input aria-label="Deck name" value={draft.deckName} maxLength={40} onChange={(e) => setDraft({ ...draft, deckName: e.target.value })} />
       </div>
       <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
-        {PROGRAM_TEMPLATES.map((p) => (
+        {catalog.map((p) => (
           <button key={p.id} className={`mode ${chosen.has(p.id) ? 'sel' : ''}`} onClick={() => toggle(p.id)} title={p.summary}>{p.name}</button>
         ))}
       </div>

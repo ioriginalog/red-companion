@@ -99,7 +99,7 @@ describe('actors', () => {
     const back = actorFromDraft(draftFromActor(vex), { previous: vex });
     // The builder gives every character a Humanity track (EMP × 10) — Track K.
     const h = vex.combatant.stats.EMP * 10;
-    expect(back.combatant).toEqual({ ...vex.combatant, humanity: { current: h, max: h } });
+    expect(back.combatant).toEqual({ ...vex.combatant, humanity: { current: h, max: h, base: h } });
     expect(back.weapons).toEqual(vex.weapons);
   });
   it('preserves damage, ablation and ammo on edit, unless reset', () => {
@@ -178,7 +178,8 @@ describe('Track K: role, cyberware and ammo in the builder', async () => {
       role: { id: 'solo' as const, rank: 4, awareness: { precisionAttack: 3 } },
       cyberware: [{ id: 'cw-1', name: 'Subdermal Armor', humanityLoss: 14, effects: [{ kind: 'armor' as const, location: 'body' as const, sp: 11 }] }] };
     const a = actorFromDraft(d);
-    expect(a.combatant.humanity).toEqual({ current: 46, max: 60 });
+    // Round 3 D: each item with Humanity Loss also lowers maximum Humanity by 2.
+    expect(a.combatant.humanity).toEqual({ base: 60, max: 58, current: 46 });
     expect(a.combatant.stats.EMP).toBe(4);
     expect(a.combatant.mods?.attack).toBe(1);
     expect(a.combatant.armor.some((p) => p.id === 'cw:cw-1:body')).toBe(true);
@@ -190,12 +191,43 @@ describe('Track K: role, cyberware and ammo in the builder', async () => {
   it('keeps Humanity changes made in play when the GM edits', () => {
     const prev = actorFromDraft({ ...emptyDraft(), id: 'a-1', name: 'X', stats: { ...emptyDraft().stats, EMP: 5 } });
     const played = { ...prev.combatant, humanity: { current: 41, max: 50 } };
-    expect(humanityFor(5, [{ id: 'c', name: 'C', humanityLoss: 3, effects: [] }], played)).toEqual({ current: 38, max: 50 });
+    expect(humanityFor(5, [{ id: 'c', name: 'C', humanityLoss: 3, effects: [] }], played)).toEqual({ base: 50, max: 48, current: 38 });
   });
   it('validates role, cyberware and ammo', () => {
     const base = { ...emptyDraft(), name: 'X' };
     expect(validateDraft({ ...base, role: { id: 'solo', rank: 2, awareness: { precisionAttack: 3 } } })).toContainEqual(expect.stringMatching(/exceed rank 2/));
     expect(validateDraft({ ...base, cyberware: [{ id: 'bad id!', name: 'X', humanityLoss: 1, effects: [] }] })).toHaveLength(1);
     expect(validateDraft({ ...base, weapons: [{ id: 'w', name: 'P', type: 'heavyPistol', capacity: 8, rofOverride: null, damageDiceOverride: null, ammoType: 'smoke' }] })).toContainEqual(expect.stringMatching(/grenades/));
+  });
+});
+
+describe('Round 3 D: smart weapons, gear and rules packs in the builder', () => {
+  it('round-trips weapon smart options and gear', async () => {
+    const { actorFromDraft, draftFromActor, emptyDraft } = await import('../src/editors/actorModel.js');
+    const d = { ...emptyDraft(), id: 'a-2', name: 'S', gear: [{ name: 'Medkit', qty: 2 }],
+      weapons: [{ id: 'w', name: 'Rifle', type: 'assaultRifle' as const, capacity: 25, rofOverride: null, damageDiceOverride: null, smartgunLink: true, smart: 'rebuild' as const }] };
+    const a = actorFromDraft(d);
+    expect(a.weapons[0]).toMatchObject({ smartgunLink: true, smart: 'rebuild' });
+    expect(a.combatant.gear).toEqual([{ name: 'Medkit', qty: 2 }]);
+    const back = draftFromActor(a);
+    expect(back.weapons[0]).toMatchObject({ smartgunLink: true, smart: 'rebuild' });
+    expect(back.gear).toEqual([{ name: 'Medkit', qty: 2 }]);
+  });
+  it('refuses a Smart Rebuild of a Tech weapon', async () => {
+    const { emptyDraft, validateDraft } = await import('../src/editors/actorModel.js');
+    const d = { ...emptyDraft(), name: 'X', weapons: [{ id: 'w', name: 'Rail', type: 'assaultRifle' as const, capacity: 25, rofOverride: null, damageDiceOverride: null, smart: 'rebuild' as const, tech2070s: 'tech' as const }] };
+    expect(validateDraft(d)).toContainEqual(expect.stringMatching(/Smart Rebuild/));
+  });
+  it('imports and removes rules packs on this device only', async () => {
+    const store = new Map<string, string>();
+    (globalThis as { localStorage?: unknown }).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
+    const cat = await import('../src/data/catalog.js');
+    expect(cat.importPackText('not json')).toMatch(/JSON/);
+    expect(cat.importPackText(JSON.stringify({ format: 'nsc-rules-pack', version: 1, name: 'Mine', cyberware: [{ name: 'Eye', hlDice: '2d6', hlFixed: 7 }] }))).toBeNull();
+    expect(cat.getPacks().map((p) => p.name)).toEqual(['Mine']);
+    expect(cat.cyberwareGroups(cat.getPacks()).at(-1)!.items[0]!.name).toBe('Eye');
+    expect(JSON.parse(store.get('nsc.rulesPacks')!)).toHaveLength(1);
+    cat.removePack('Mine');
+    expect(cat.getPacks()).toEqual([]);
   });
 });

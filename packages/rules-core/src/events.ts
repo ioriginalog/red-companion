@@ -61,8 +61,8 @@ export type CombatEvent = Base & (
   // --- Track K ---
   | { type: 'injuryTreated'; medicId: string; targetId: string; injuryId: string; kind: 'quickFix' | 'treatment'; skill: string; check: CheckResult; dv: number; outcome: 'quickFixed' | 'removed' | 'failed' }
   | { type: 'humanityChanged'; combatantId: string; from: number; to: number; empFrom: number; empTo: number; reason: 'cyberware' | 'removal' | 'therapy' | 'gm' }
-  | { type: 'cyberwareInstalled'; combatantId: string; itemId: string; name: string; humanityLoss: number; rolled?: number[] }
-  | { type: 'cyberwareRemoved'; combatantId: string; itemId: string; name: string; humanityRestored: number }
+  | { type: 'cyberwareInstalled'; combatantId: string; itemId: string; name: string; humanityLoss: number; rolled?: number[]; lossMode?: 'roll' | 'fixed' | 'none'; maxFrom?: number; maxTo?: number }
+  | { type: 'cyberwareRemoved'; combatantId: string; itemId: string; name: string; humanityRestored: number; maxFrom?: number; maxTo?: number }
   | { type: 'therapyResolved'; combatantId: string; kind: 'standard' | 'extreme'; check: CheckResult; dv: number; success: boolean; recovered: number; rolled: number[] }
   | { type: 'awarenessSet'; combatantId: string; allocation: Partial<Record<AwarenessKey, number>> }
   | { type: 'rested'; targetId: string; days: number; care: string; healed: number; hpAfter: number; blocked?: string }
@@ -71,7 +71,7 @@ export type CombatEvent = Base & (
   | { type: 'ignited'; targetId: string; perTurn: number }
   | { type: 'extinguished'; targetId: string }
   | { type: 'ammoLoaded'; combatantId: string; weaponId: string; ammoType: AmmoTypeId }
-  | { type: 'smartAmmoRetry'; attackerId: string; defenderId: string; roll: D10Roll; total: number; dv: number; hit: boolean }
+  | { type: 'smartAmmoRetry'; attackerId: string; defenderId: string; roll: D10Roll; total: number; dv: number; hit: boolean; kind?: 'smart' | 'improvedSmart'; defense?: CheckResult }
   | { type: 'damageDeflected'; targetId: string; amount: number }
   | { type: 'spotWeakness'; combatantId: string; bonus: number }
   | { type: 'areaDodgeRequested'; combatantId: string; attackTotal: number }

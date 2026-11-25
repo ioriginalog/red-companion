@@ -1,6 +1,7 @@
+import { TEST_PROGRAMS as PROGRAM_TEMPLATES } from './net-fixtures.js';
 import { describe, expect, it } from 'vitest';
 import {
-  freshRun, maxHP, pathfinderReveal, PROGRAM_TEMPLATES, scriptedDice, ICE_TEMPLATES,
+  freshRun, maxHP, pathfinderReveal, scriptedDice, ICE_TEMPLATES,
   type Combatant, type Dice, type NetArchitecture, type NetRig, type Stats,
 } from '@cprc/rules-core';
 import {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { architectureProblem, boostFor, brainDamage, depthOf, netActionsFor, neighborsOf, PROGRAM_TEMPLATES, type NetArchitecture, type NetRig } from '../src/index.js';
+import { TEST_PROGRAMS as PROGRAM_TEMPLATES } from './net-fixtures.js';
+import { architectureProblem, boostFor, brainDamage, depthOf, netActionsFor, neighborsOf, type NetArchitecture, type NetRig } from '../src/index.js';
 
 const A: NetArchitecture = {
   id: 'a', name: 'A', difficulty: 'basic', rootId: 'r', virusDv: 6, access: [],

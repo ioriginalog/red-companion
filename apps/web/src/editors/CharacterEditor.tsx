@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ARMOR_TYPES, ROLES, WEAPON_TYPES, type RoleId, type StatKey, type WeaponType } from '@cprc/rules-core';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { ARMOR_TYPES, creationHumanity, ROLES, WEAPON_TYPES, type RoleId, type StatKey, type WeaponType } from '@cprc/rules-core';
 import type { Actor, Allegiance, Intent, ProjectedActor } from '@cprc/session';
 import { client, type ClientState } from '../net.js';
 import { downloadText, loadImage, pickFile } from '../assets.js';
@@ -11,7 +11,7 @@ import {
 } from './actorModel.js';
 import { freeSquares } from './mapModel.js';
 import { PortraitCropper } from './PortraitCropper.js';
-import { AmmoSelect, CyberwareField, RoleField } from './SystemsFields.js';
+import { AmmoSelect, CyberwareField, GearField, RoleField } from './SystemsFields.js';
 import './editors.css';
 
 const ROLE_NAME = Object.fromEntries(ROLES.map((r) => [r.id, r.name])) as Record<RoleId, string>;
@@ -22,7 +22,9 @@ const ALLEGIANCES: { v: Allegiance; label: string }[] = [
   { v: 'party', label: 'Party (PC)' }, { v: 'ally', label: 'Ally' }, { v: 'neutral', label: 'Neutral' }, { v: 'hostile', label: 'Hostile' },
 ];
 const ALLEGIANCE_TAG: Record<Allegiance, string> = { party: 'Party', ally: 'Ally', neutral: 'Neutral', hostile: 'Hostile' };
-const RANGED = (Object.keys(WEAPON_TYPES) as WeaponType[]).filter((t) => !WEAPON_TYPES[t].melee);
+const RANGED = (Object.keys(WEAPON_TYPES) as WeaponType[]).filter((t) => !WEAPON_TYPES[t].melee && t !== 'grenade');
+const THROWN: WeaponType[] = ['grenade'];
+const isFirearm = (t: WeaponType) => !WEAPON_TYPES[t].melee && !['grenade', 'grenadeLauncher', 'rocketLauncher'].includes(t);
 const MELEE = (Object.keys(WEAPON_TYPES) as WeaponType[]).filter((t) => WEAPON_TYPES[t].melee);
 
 export function CharacterEditor({ s }: { s: ClientState }) {
@@ -214,7 +216,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
                     {ALLEGIANCES.map((a) => <option key={a.v} value={a.v}>{a.label}</option>)}
                   </select>
                 </label>
-                <label className="fld"><span>Played By</span>
+                <label className="fld"><span>Played by</span>
                   <select value={draft.allegiance === 'party' ? draft.controller : 'gm'} disabled={draft.allegiance !== 'party'} onChange={(e) => set({ controller: e.target.value })}>
                     <option value="gm">GM</option>
                     {s.players.map((p) => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
@@ -283,15 +285,17 @@ export function CharacterEditor({ s }: { s: ClientState }) {
             const p = WEAPON_TYPES[w.type];
             const upd = (patch: Partial<typeof w>) => set({ weapons: draft.weapons.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
             return (
-              <div className="wrow" key={w.id}>
+              <Fragment key={w.id}>
+              <div className="wrow">
                 <label className="fld"><span>Name</span><input value={w.name} maxLength={40} onChange={(e) => upd({ name: e.target.value })} /></label>
                 <label className="fld"><span>Type</span>
                   <select value={w.type} onChange={(e) => { const t = e.target.value as WeaponType; const fresh = newWeaponDraft(t, []); upd({ type: t, capacity: fresh.capacity }); }}>
                     <optgroup label="Ranged">{RANGED.map((t) => <option key={t} value={t}>{WEAPON_TYPES[t].displayName}</option>)}</optgroup>
+                    <optgroup label="Thrown">{THROWN.map((t) => <option key={t} value={t}>{WEAPON_TYPES[t].displayName}</option>)}</optgroup>
                     <optgroup label="Melee">{MELEE.map((t) => <option key={t} value={t}>{WEAPON_TYPES[t].displayName}</option>)}</optgroup>
                   </select>
                 </label>
-                <label className="fld"><span>Magazine</span>
+                <label className="fld"><span>{w.type === 'grenade' ? 'Count' : 'Magazine'}</span>
                   <input type="number" min={1} max={200} disabled={p.melee} value={p.melee ? '' : w.capacity ?? ''} placeholder={p.melee ? '—' : ''}
                     onChange={(e) => upd({ capacity: e.target.value === '' ? null : Number(e.target.value) })} />
                 </label>
@@ -307,11 +311,30 @@ export function CharacterEditor({ s }: { s: ClientState }) {
                 </label>
                 <button className="iconbtn" aria-label={`Remove ${w.name}`} onClick={() => set({ weapons: draft.weapons.filter((_, j) => j !== i) })}>✕</button>
               </div>
+              {isFirearm(w.type) && (
+                <div className="wopts" aria-label={`${w.name} attachments`}>
+                  <label title="+1 to ranged attacks when wired in through a Neural Link with Interface Plugs or a Subdermal Grip.">
+                    <input type="checkbox" checked={!!w.smartgunLink} onChange={(e) => upd({ smartgunLink: e.target.checked || undefined })} /> Smartgun Link
+                  </label>
+                  <label title="2070s option: Smart Weapons get +1 to hit and can load Improved Smart ammo.">Smart Weapon
+                    <select value={w.smart ?? ''} onChange={(e) => upd({ smart: (e.target.value || undefined) as 'built' | 'rebuild' | undefined })}>
+                      <option value="">No</option><option value="built">Built Smart</option><option value="rebuild">Smart Rebuild (2 Slots)</option>
+                    </select>
+                  </label>
+                  <label title="2070s weapon class. Power and Tech weapons can’t take a Smart Rebuild.">2070s Class
+                    <select value={w.tech2070s ?? ''} onChange={(e) => upd({ tech2070s: (e.target.value || undefined) as 'power' | 'tech' | undefined })}>
+                      <option value="">None</option><option value="power">Power</option><option value="tech">Tech</option>
+                    </select>
+                  </label>
+                </div>
+              )}
+              </Fragment>
             );
           })}
           <div className="row" style={{ marginTop: 8 }}>
             <select aria-label="Weapon type to add" id="add-weapon" defaultValue="heavyPistol">
               <optgroup label="Ranged">{RANGED.map((t) => <option key={t} value={t}>{WEAPON_TYPES[t].displayName}</option>)}</optgroup>
+              <optgroup label="Thrown">{THROWN.map((t) => <option key={t} value={t}>{WEAPON_TYPES[t].displayName}</option>)}</optgroup>
               <optgroup label="Melee">{MELEE.map((t) => <option key={t} value={t}>{WEAPON_TYPES[t].displayName}</option>)}</optgroup>
             </select>
             <button className="btn" onClick={() => {
@@ -333,6 +356,8 @@ export function CharacterEditor({ s }: { s: ClientState }) {
         </section>
 
         <CyberwareField value={draft.cyberware} emp={draft.stats.EMP} onChange={(cyberware) => set({ cyberware })} />
+
+        <GearField value={draft.gear} onChange={(gear) => set({ gear })} />
 
         <section className="card">
           <div className="ttl">Notes</div>
@@ -384,7 +409,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
             <span>Evasion Base</span><span className="mono">{draft.stats.DEX + (draft.skills.Evasion ?? 0)}</span>
             <span>Can Dodge Bullets</span><span>{draft.stats.REF >= 8 ? 'Yes (REF 8+)' : 'No'}</span>
             <span>Initiative</span><span className="mono">REF {draft.stats.REF}{initBonus ? ` + ${initBonus}` : ''} + 1d10</span>
-            <span>Humanity</span><span className="mono">{draft.stats.EMP * 10 - draft.cyberware.reduce((t, i) => t + i.humanityLoss, 0)} / {draft.stats.EMP * 10}</span>
+            <span>Humanity</span><span className="mono">{creationHumanity(draft.stats.EMP, draft.cyberware).current} / {creationHumanity(draft.stats.EMP, draft.cyberware).max}</span>
             {draft.role && <><span>Role</span><span>{ROLE_NAME[draft.role.id]} {draft.role.rank}</span></>}
           </div>
         </section>
