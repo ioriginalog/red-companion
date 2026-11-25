@@ -15,7 +15,7 @@ import {
   applyEntry, LogGapError, parseClientMessage, projectEntry, projectState, PROTOCOL_VERSION, replay,
   type ClientMessage, type LogEntry, type PlayerInfo, type ServerMessage, type SessionState, type Viewer,
 } from '@cprc/session';
-import type { SessionMeta, Store } from './store.js';
+import { ASSET_NAME, type SessionMeta, type Store } from './store.js';
 
 export interface RelayOptions {
   store: Store;
@@ -25,6 +25,8 @@ export interface RelayOptions {
   /** Session creations allowed per IP per hour. */
   createPerHour?: number;
   allowedOrigins?: string[] | '*';
+  /** Per-session image storage cap. Default 200 MB. */
+  assetQuotaBytes?: number;
   /** Built web client to serve from the same origin (SPA fallback to index.html). */
   webDir?: string;
   log?: (msg: string) => void;
@@ -48,7 +50,22 @@ interface Room {
   players: Map<WebSocket, string>; // socket → playerId
 }
 
-type Conn = { ws: WebSocket; room?: Room; role?: 'gm' | 'player'; playerId?: string; alive: boolean; ip: string };
+type Conn = {
+  ws: WebSocket; room?: Room; role?: 'gm' | 'player'; playerId?: string; alive: boolean; ip: string;
+  /** Token bucket for signals. */
+  signalTokens: number; signalAt: number;
+};
+
+export const ASSET_MAX_BYTES = 8 * 1024 * 1024;
+export const ASSET_QUOTA_BYTES = 200 * 1024 * 1024;
+const SIGNAL_RATE = 10; // per second
+const SIGNAL_BURST = 20;
+const ASSET_TYPES: Record<string, { ext: 'webp' | 'png' | 'jpg'; magic: (b: Buffer) => boolean }> = {
+  'image/webp': { ext: 'webp', magic: (b) => b.length > 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP' },
+  'image/png': { ext: 'png', magic: (b) => b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
+  'image/jpeg': { ext: 'jpg', magic: (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+};
+const ASSET_MIME: Record<string, string> = { webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg' };
 
 const JOIN_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -129,12 +146,84 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     if (allowed === '*') res.setHeader('Access-Control-Allow-Origin', '*');
     else if (origin && allowed.includes(origin)) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   }
   const json = (res: ServerResponse, code: number, body: unknown) => {
     res.writeHead(code, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(body));
   };
+
+  /** GM auth for HTTP: `Authorization: Bearer <gmKey>` against the session's stored hash. */
+  function gmAuthorized(req: IncomingMessage, r: Room): boolean {
+    const h = req.headers.authorization;
+    const m = typeof h === 'string' ? /^Bearer (\S{1,128})$/.exec(h) : null;
+    return !!m && sameHash(sha256(m[1]!), r.meta.gmKeyHash);
+  }
+
+  function readBody(req: IncomingMessage, max: number): Promise<Buffer | 'too_large'> {
+    return new Promise((resolveBody, reject) => {
+      const chunks: Buffer[] = [];
+      let n = 0;
+      let over = false;
+      req.on('data', (c: Buffer) => {
+        if (over) return;
+        n += c.length;
+        if (n > max) { over = true; chunks.length = 0; return; }
+        chunks.push(c);
+      });
+      req.on('end', () => resolveBody(over ? 'too_large' : Buffer.concat(chunks)));
+      req.on('error', reject);
+    });
+  }
+
+  async function uploadAsset(req: IncomingMessage, res: ServerResponse, r: Room) {
+    if (!originOk(req)) return json(res, 403, { error: 'Origin not allowed.' });
+    if (!gmAuthorized(req, r)) return json(res, 401, { error: 'GM key required.' });
+    const type = ASSET_TYPES[(req.headers['content-type'] ?? '').split(';')[0]!.trim().toLowerCase()];
+    if (!type) return json(res, 415, { error: 'Upload a WebP, PNG or JPEG image.' });
+    const declared = Number(req.headers['content-length'] ?? 0);
+    if (declared > ASSET_MAX_BYTES) { req.resume(); return json(res, 413, { error: 'Images are limited to 8 MB.' }); }
+    const body = await readBody(req, ASSET_MAX_BYTES);
+    if (body === 'too_large') return json(res, 413, { error: 'Images are limited to 8 MB.' });
+    if (!type.magic(body)) return json(res, 415, { error: 'The file doesn’t match its image type.' });
+    const id = r.meta.sessionId;
+    const name = `${createHash('sha256').update(body).digest('hex')}.${type.ext}`;
+    if (!store.hasAsset(id, name)) {
+      if (store.assetBytes(id) + body.length > (opts.assetQuotaBytes ?? ASSET_QUOTA_BYTES)) return json(res, 413, { error: 'This session has used its 200 MB of image storage.' });
+      store.putAsset(id, name, body);
+      log(`asset stored ${id}/${name} (${body.length} bytes)`);
+    }
+    json(res, 201, { url: `/u/${id}/${name}` });
+  }
+
+  function serveAsset(req: IncomingMessage, res: ServerResponse, sessionId: string, name: string) {
+    const data = rooms.has(sessionId) && ASSET_NAME.test(name) ? store.getAsset(sessionId, name) : null;
+    if (!data) return json(res, 404, { error: 'Not found' });
+    res.writeHead(200, {
+      'Content-Type': ASSET_MIME[name.split('.').pop()!]!,
+      'Content-Length': data.length,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "default-src 'none'",
+    });
+    res.end(req.method === 'HEAD' ? undefined : data);
+  }
+
+  function exportLog(req: IncomingMessage, res: ServerResponse, r: Room) {
+    if (!gmAuthorized(req, r)) return json(res, 401, { error: 'GM key required.' });
+    ensureLoaded(r);
+    const { sessionId, joinCode, createdAt, players } = r.meta;
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      'Content-Disposition': `attachment; filename="session-${sessionId}.json"`,
+    });
+    res.end(JSON.stringify({
+      format: 'nsc-session-export', version: 1, exportedAt: new Date().toISOString(),
+      meta: { sessionId, joinCode, createdAt, players: players.map((p) => ({ playerId: p.playerId, name: p.name })) },
+      log: r.log,
+    }));
+  }
 
   const server = createServer((req, res) => {
     cors(req, res);
@@ -157,6 +246,20 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
       indexRoom({ meta, log: [], state: replay(sessionId, []), gm: null, players: new Map() });
       log(`session created ${sessionId}`);
       json(res, 201, { sessionId, gmKey, joinCode });
+      return;
+    }
+    const asset = /^\/u\/([a-f0-9-]{36})\/([^/]+)$/.exec(url.pathname);
+    if (asset && (req.method === 'GET' || req.method === 'HEAD')) { serveAsset(req, res, asset[1]!, asset[2]!); return; }
+    const api = /^\/api\/sessions\/([a-f0-9-]{36})\/(assets|export)$/.exec(url.pathname);
+    if (api) {
+      const r = rooms.get(api[1]!);
+      if (!r) { json(res, 404, { error: 'Unknown session.' }); return; }
+      if (api[2] === 'assets' && req.method === 'POST') {
+        uploadAsset(req, res, r).catch((e: Error) => { log(`upload failed: ${e.message}`); if (!res.headersSent) json(res, 500, { error: 'Upload failed.' }); });
+        return;
+      }
+      if (api[2] === 'export' && req.method === 'GET') { exportLog(req, res, r); return; }
+      json(res, 405, { error: 'Method not allowed.' });
       return;
     }
     if (!url.pathname.startsWith('/api/') && serveStatic(req, res, url.pathname)) return;
@@ -194,7 +297,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
   }
 
   wss.on('connection', (ws, req) => {
-    const c: Conn = { ws, alive: true, ip: clientIp(req) };
+    const c: Conn = { ws, alive: true, ip: clientIp(req), signalTokens: SIGNAL_BURST, signalAt: Date.now() };
     const helloTimer = setTimeout(() => { if (!c.room) ws.close(4000, 'HELLO_TIMEOUT'); }, 10_000);
     ws.on('pong', () => { c.alive = true; });
     (ws as WebSocket & { conn?: Conn }).conn = c;
@@ -209,6 +312,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
         clearTimeout(helloTimer);
         return onHello(c, msg);
       }
+      if (msg.t === 'signal') return onSignal(c, c.room, msg.signal);
       if (c.role === 'gm') onGm(c, c.room, msg);
       else onPlayer(c, c.room, msg);
     });
@@ -318,6 +422,18 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
       default:
         return fail(c, 'NOT_ALLOWED', `GM can't send ${msg.t}.`);
     }
+  }
+
+  /** Ephemeral: relayed to everyone else in the room, never logged. Excess is dropped silently. */
+  function onSignal(c: Conn, r: Room, signal: Extract<ClientMessage, { t: 'signal' }>['signal']) {
+    const now = Date.now();
+    c.signalTokens = Math.min(SIGNAL_BURST, c.signalTokens + ((now - c.signalAt) / 1000) * SIGNAL_RATE);
+    c.signalAt = now;
+    if (c.signalTokens < 1) return;
+    c.signalTokens -= 1;
+    const out: ServerMessage = { t: 'signal', from: c.role === 'gm' ? 'gm' : c.playerId!, signal };
+    if (r.gm && r.gm !== c.ws) send(r.gm, out);
+    for (const p of r.players.keys()) if (p !== c.ws) send(p, out);
   }
 
   function onPlayer(c: Conn, r: Room, msg: ClientMessage) {

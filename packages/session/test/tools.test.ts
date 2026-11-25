@@ -325,3 +325,16 @@ describe('suppressiveFire', () => {
     expect(t.send({ type: 'suppressiveFire', attackerId: 'solo', weaponId: 'smg' }, P1)).toMatchObject({ ok: false, code: 'INVALID' });
   });
 });
+
+describe('signal parsing', () => {
+  it('accepts the three kinds, strips extras, rejects junk', async () => {
+    const { parseSignal, parseClientMessage } = await import('../src/index.js');
+    expect(parseSignal({ kind: 'ping', at: { x: 1, y: 2, z: 3 } })).toEqual({ kind: 'ping', at: { x: 1, y: 2 } });
+    expect(parseSignal({ kind: 'cursor', at: null })).toEqual({ kind: 'cursor', at: null });
+    expect(parseSignal({ kind: 'measure', from: { x: 0, y: 0 }, to: { x: 4, y: 1 } })).toEqual({ kind: 'measure', from: { x: 0, y: 0 }, to: { x: 4, y: 1 } });
+    expect(parseSignal({ kind: 'ping', at: { x: 1.5, y: 2 } })).toBeNull();
+    expect(parseSignal({ kind: 'ping', at: { x: -1, y: 2 } })).toBeNull();
+    expect(parseSignal({ kind: 'teleport', at: { x: 1, y: 2 } })).toBeNull();
+    expect(parseClientMessage(JSON.stringify({ t: 'signal', signal: { kind: 'ping', at: { x: 1, y: 1 } }, junk: 1 }))).toEqual({ t: 'signal', signal: { kind: 'ping', at: { x: 1, y: 1 } } });
+  });
+});
