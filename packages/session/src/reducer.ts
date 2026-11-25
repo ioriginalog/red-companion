@@ -32,6 +32,9 @@ export function applyEntry(state: SessionState, entry: LogEntry): SessionState {
     map: 'map' in entry.patch ? (entry.patch.map ?? null) : state.map,
     library: entry.patch.library ?? state.library,
     handouts: entry.patch.handouts ?? state.handouts ?? {}, // Track U
+    // --- Track N ---
+    ...(entry.patch.netrun ? { netrun: entry.patch.netrun } : {}),
+    // --- end Track N ---
   };
 }
 

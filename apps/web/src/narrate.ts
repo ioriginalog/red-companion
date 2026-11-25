@@ -65,6 +65,8 @@ export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: 
       return { text: `GM ${e.delta >= 0 ? 'restores' : 'removes'} ${Math.abs(e.delta)} HP ${e.delta >= 0 ? 'to' : 'from'} ${name(e.targetId)}${e.reason ? ` (${e.reason})` : ''}.`, tone: e.delta >= 0 ? 'good' : 'bad' };
     case 'conditionSet':
       return { text: `${name(e.targetId)} is ${e.value ? '' : 'no longer '}${CONDITION[e.condition] ?? e.condition}.`, tone: 'info' };
+    case 'netAction':
+      return { text: e.text, tone: e.success === false ? 'miss' : 'info' };
     case 'handoutShared':
       return { text: `GM shared a handout: ${e.title}.`, tone: 'info' };
     case 'sceneChanged':

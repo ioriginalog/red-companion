@@ -12,12 +12,13 @@ import { SheetPanel } from './table/SheetPanel.js';
 import { ChatPanel } from './table/ChatPanel.js';
 import { Inspector, ScenePanel } from './table/GmPanels.js';
 import { NotesPanel } from './table/NotesPanel.js';
+import { NetPanel } from './netrun/index.js';
 import { narrate } from './narrate.js';
 import { areaKindFor } from './table/area.js';
 import { EFFECT_MS, effectsFor, type Effect } from './table/effects.js';
 import { play } from './table/sound.js';
 
-type Tab = 'combat' | 'sheet' | 'chat' | 'notes' | 'scene';
+type Tab = 'combat' | 'sheet' | 'chat' | 'notes' | 'net' | 'scene';
 
 /** Entries arriving faster than this (log fetch, reconnect) are history, not live play. */
 const BACKFILL_BATCH = 3;
@@ -196,7 +197,12 @@ export function Table({ s }: { s: ClientState }) {
     setTargetId(id);
   };
 
-  const tabs: [Tab, string][] = [['combat', 'Combat'], ['sheet', 'Sheet'], ['chat', 'Chat'], ['notes', 'Notes'], ...(isGm ? [['scene', 'Scene'] as [Tab, string]] : [])];
+  // NET: always for the GM; for players once one of their characters has a cyberdeck rig.
+  const ownRunner = ownIds.find((id) => view.netrun?.rigs[id]) ?? null;
+  const showNet = isGm || !!ownRunner;
+  const netActorId = isGm ? (focusId ?? actingId ?? selected) : (actingId && view.netrun?.rigs[actingId] ? actingId : selected && view.netrun?.rigs[selected] ? selected : ownRunner);
+  useEffect(() => { if (tab === 'net' && !showNet) setTab('combat'); }, [tab, showNet]);
+  const tabs: [Tab, string][] = [['combat', 'Combat'], ['sheet', 'Sheet'], ['chat', 'Chat'], ['notes', 'Notes'], ...(showNet ? [['net', 'NET'] as [Tab, string]] : []), ...(isGm ? [['scene', 'Scene'] as [Tab, string]] : [])];
   const fireNow = canAct && !!targetId && !!weapon && !fireBlocked({ attack, usage, weapon }, !!view.pending);
 
   return (
@@ -321,6 +327,7 @@ export function Table({ s }: { s: ClientState }) {
           )}
           {tab === 'sheet' && <SheetPanel c={c} preferId={isGm ? (focusId ?? actingId) : actingId} />}
           {tab === 'notes' && <NotesPanel c={c} />}
+          {tab === 'net' && showNet && <NetPanel view={view} actorId={netActorId} isGm={isGm} canAct={mine(netActorId)} act={(i) => client.act(i)} feed={s.feed} />}
           {tab === 'chat' && <ChatPanel c={c} rollerId={isGm ? (focusId ?? actingId) : (actingId ?? ownIds[0] ?? null)} onUnreadReset={() => setUnread(0)} />}
           {tab === 'scene' && isGm && <ScenePanel c={c} mapMode={mapMode} setMapMode={setMapMode} shareCursor={gmCursor} setShareCursor={(v) => { setGmCursor(v); if (!v) client.signal({ kind: 'cursor', at: null }); }} onFocus={(id) => { setFocusId(id); setTab('combat'); }} />}
         </div>

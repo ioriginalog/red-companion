@@ -10,6 +10,9 @@
  * Clients never re-run the rules engine; they apply patches. That keeps replay
  * trivially deterministic and lets the relay redact patches per viewer.
  */
+// --- Track N ---
+import type { NetOp, NetState, NetView } from './netrun-types.js';
+// --- end Track N ---
 import type { AimTarget, Cell, CombatEvent, Combatant, DamageSpec, GridMap, Modifier, Weapon, WoundState } from '@cprc/rules-core';
 
 export type Viewer = { role: 'gm' } | { role: 'player'; playerId: string };
@@ -123,6 +126,9 @@ export interface SessionState {
   // --- Track U ---
   /** Handouts and GM journal pages, filtered by audience in projections. */
   handouts: Record<string, Handout>;
+  // --- Track N ---
+  netrun?: NetState;
+  // --- end Track N ---
 }
 
 // --- Track U ---
@@ -141,6 +147,9 @@ export interface StatePatch {
   library?: Library;
   /** Track U: replace all handouts. */
   handouts?: Record<string, Handout>;
+  // --- Track N ---
+  netrun?: NetState;
+  // --- end Track N ---
 }
 
 export interface LogEntry {
@@ -220,7 +229,10 @@ export type Intent =
   | { type: 'suppressiveFire'; attackerId: string; weaponId: string }
   // --- Track U ---
   | { type: 'setHandout'; id: string; title: string; body: string; imageUrl?: string; audience: 'all' | 'gm' | string[] }
-  | { type: 'removeHandout'; id: string };
+  | { type: 'removeHandout'; id: string }
+  // --- Track N ---
+  | { type: 'net'; op: NetOp };
+  // --- end Track N ---
 
 export type StatKeyName = 'INT' | 'REF' | 'DEX' | 'TECH' | 'COOL' | 'WILL' | 'LUCK' | 'MOVE' | 'BODY' | 'EMP';
 
@@ -264,6 +276,9 @@ export interface ViewState {
   library?: Library;
   /** Track U: handouts this viewer may read. */
   handouts?: Record<string, Handout>;
+  // --- Track N ---
+  netrun?: NetView;
+  // --- end Track N ---
 }
 
 export interface ProjectedEntry {
@@ -273,5 +288,5 @@ export interface ProjectedEntry {
   by: AuthorId;
   intentType: IntentType;
   events: CombatEvent[];
-  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: ProjectedPending | null; map?: TacticalMap | null; library?: Library; handouts?: Record<string, Handout> };
+  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: ProjectedPending | null; map?: TacticalMap | null; library?: Library; handouts?: Record<string, Handout>; /* Track N */ netrun?: NetView };
 }

@@ -59,6 +59,34 @@ Status key: **Easy Mode** = matches the free Easy Mode PDF · **Errata** = match
 | Scene switches | Allowed mid-encounter; the encounter, Turn order and actors carry over; watches end. | Interpretation |
 | Watch | **House rule, not RED Core.** Spend the Action to watch a 90° cone (30°–180°) until your next Turn. The first opposing token to step into a visible watched square stops there and the watcher may attack out of Turn, or hold fire. | House Rule |
 
+## Netrunning (2026-11)
+
+Built from community references (not the Core Rulebook). Starter Programs and Black ICE are original placeholders with this tool's own numbers; no RTG ICE or Program stat blocks or text are reproduced. The GM edits everything in NET Prep.
+
+| Rule | Engine Behavior | Status |
+|---|---|---|
+| NET Actions per Turn | By Interface rank: 1–3 → 2, 4–6 → 3, 7–9 → 4, 10 → 5. | Secondary |
+| Meat vs NET Actions | A runner's Turn is a Meat Action **or** their NET Actions, plus the Move Action. Players are held to it; the GM is recorded, never refused. | Secondary |
+| Jack In / Jack Out | Each costs 1 NET Action. Jack In needs an access point within 6 m/yds (3 squares) with line of sight. Without a map, the GM rules. | Secondary |
+| Unsafe Jack Out | Forced out (GM), or jacking out after leaving access range: every live Black ICE the runner met applies its effect (damage rolled, no attack roll). | Secondary |
+| Floor DVs | Basic 6, Standard 8, Uncommon 10, Advanced 12 (GM can set any DV). | Secondary |
+| Floors and branches | Tree of floors; you move one floor up or down per NET Action; you can't go below a Password until it's Backdoored. | Secondary |
+| Backdoor, Eye-Dee, Control, Virus | Interface + Booster + 1d10 must beat the DV. Control and Virus raise GM prompts for what the runner does with them. Virus only on a lowest floor. | Secondary |
+| Pathfinder | Reveals floors below in breadth-first order, at most the check total, never past a Password whose DV beats the roll (that Password is shown). Shows what floors are, not their DVs. | Interpretation |
+| Cloak | Check total becomes the DV to find the runner's traces. | Secondary |
+| Scanner | Meat Action. Finds access points on the current map within (check total) squares of the runner. | Interpretation |
+| Speed Check | On arrival, each live Black ICE: Interface + Speed Boosters + 1d10 vs ICE SPD + 1d10. The ICE strikes first on a tie or better. | Secondary (tie rule: Interpretation) |
+| Black ICE attacks | ICE ATK + 1d10 vs Interface + 1d10; ties go to the runner. The GM triggers ICE attacks on the ICE's Turn. | Secondary (GM-triggered timing: Interpretation) |
+| Runner attacks | Zap: Interface + 1d10 vs ICE DEF + 1d10, 1d6 REZ. Attacker Programs add their ATK and roll their damage; once per Round each. Demons defend with their Interface. | Secondary |
+| Engagement | On a floor with live Black ICE or a live Demon, you can't move away; Slide (Interface + 1d10 vs PER + 1d10, once per Turn, not vs Demons), derez it, or jack out. | Secondary |
+| Brain damage | Straight to HP, ignores armor, no Critical Injuries. Shield negates the first hit of a run; the best active Armor-type Defender reduces it (they don't stack). | Secondary (stacking: Interpretation) |
+| Anti-program ICE | Damages the first running Program (then a ready one) and destroys it at 0 REZ. | Secondary (target choice: Interpretation) |
+| Programs | Boosters stack; activating or stopping costs 1 NET Action; restarting a Derezzed Program costs 2 and restores REZ. Deck slots: Poor 5, Standard 7, Excellent 9. | Secondary |
+| ICE state | Each runner's ICE state is their own and resets when they jack out safely. | Interpretation |
+| 2070s Quickhacks (option) | Jack In to a visible target's neuroport within 50 m/yds (25 squares), 1 NET Action; the quickhack's effect is a GM prompt (the kit's tables aren't in the tool). Off by default. | Secondary (public summaries) |
+
+Not built for Netrunning: rival netrunners fighting each other, Demon turns (GM runs them), Relentless ICE following the runner, the Edgerunners Mission Kit quickhack tables, and Improved Smart Ammo (a weapon option, not NET).
+
 ## Interpretations the GM Should Confirm
 
 1. **Armor penalties don't stack.** Worst single penalty across all worn pieces.
@@ -78,4 +106,4 @@ Status key: **Easy Mode** = matches the free Easy Mode PDF · **Errata** = match
 
 ## Not Built Yet
 
-Martial Arts special moves, Grab/Choke/Throw, shields, human shields, ammo types (AP, incendiary, etc.), weapon quality, cyberware effects, Solo/Medtech Role Abilities, Facedowns, vehicles, Netrunning, re-bleed automation for Broken Ribs/Foreign Object, Spinal Injury lost-Action tracking.
+Martial Arts special moves, Grab/Choke/Throw, shields, human shields, ammo types (AP, incendiary, etc.), weapon quality, cyberware effects, Solo/Medtech Role Abilities, Facedowns, vehicles, re-bleed automation for Broken Ribs/Foreign Object, Spinal Injury lost-Action tracking.

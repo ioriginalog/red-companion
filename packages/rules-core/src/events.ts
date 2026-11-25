@@ -43,6 +43,10 @@ export type CombatEvent = Base & (
   | { type: 'sceneChanged'; mapId: string; name: string }
   // --- Track U ---
   | { type: 'handoutShared'; id: string; title: string }
+  // --- Track N ---
+  /** Netrunning: one line per NET Action, with its check(s). `text` is ready to narrate (sentence case). */
+  | { type: 'netAction'; combatantId: string; action: string; text: string; check?: CheckResult; vs?: CheckResult; dv?: number; success?: boolean; dice?: number[]; amount?: number }
+  // --- end Track N ---
   | { type: 'areaResolved'; attackerId: string; kind: string; at: Cell; targetIds: string[] }
 );
 

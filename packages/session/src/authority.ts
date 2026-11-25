@@ -21,6 +21,9 @@ import {
 } from './helpers.js';
 import { executeTool, TOOL_GM_ONLY, TOOL_WHILE_PENDING } from './tools.js';
 import { executeHandout } from './handouts.js'; // Track U
+// --- Track N ---
+import { executeNet } from './netrun.js';
+// --- end Track N ---
 import { doAreaAttack, doSuppressiveFire } from './grid-area.js';
 import { validateIntent } from './validate.js';
 
@@ -345,6 +348,10 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       return doSuppressiveFire(state, intent, by, dice);
     case 'setHandout': case 'removeHandout': // Track U
       return executeHandout(state, intent, by);
+    // --- Track N ---
+    case 'net':
+      return executeNet(state, (intent as { op: unknown }).op, by, dice);
+    // --- end Track N ---
     default:
       return executeTool(state, intent, by, dice);
   }
