@@ -1,6 +1,7 @@
 /** Combat log lines. Sentence case (Chicago); names come from the viewer's projection. */
 import { getInjury, type CheckResult, type CombatEvent } from '@cprc/rules-core';
 import { narrateSystems } from './systems/narrate.js'; // Track K
+import { narrateExtras } from './extras/narrate.js'; // Round 3 X
 
 export type Tone = 'hit' | 'miss' | 'info' | 'bad' | 'good' | 'chat' | 'roll';
 export interface Line { text: string; tone: Tone }
@@ -19,6 +20,7 @@ export function injuryName(id: string): string {
 export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: string) => string = (b) => (b === 'gm' ? 'GM' : 'A player')): Line | null {
   const k = narrateSystems(e, name); // Track K events
   if (k !== undefined) return k;
+  if (e.type === 'extraResolved') return narrateExtras(e); // Round 3 X
   switch (e.type) {
     case 'initiativeRolled':
       if (e.entries.length === 1) return { text: `${name(e.entries[0]!.combatantId)} joins the Turn order.`, tone: 'info' }; // Round 3 P

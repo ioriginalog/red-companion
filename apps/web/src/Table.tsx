@@ -11,6 +11,7 @@ import { coverAt, coverLabel } from './table/cover.js'; // Round 3 P
 import { CombatPanel, fireBlocked } from './table/CombatPanel.js';
 import { SheetPanel } from './table/SheetPanel.js';
 import { AreaDodgePrompt, GmSystemsPanel } from './systems/index.js'; // Track K
+import { CombatExtrasPanel } from './extras/index.js'; // Round 3 X
 import { ChatPanel } from './table/ChatPanel.js';
 import { Inspector, ScenePanel } from './table/GmPanels.js';
 import { NotesPanel } from './table/NotesPanel.js';
@@ -379,6 +380,7 @@ export function Table({ s }: { s: ClientState }) {
                 setHighlight={setHighlight} onFire={fire} coverPick={coverPick} setCoverPick={setCoverPick}
                 ownIds={ownIds} onSelectOwn={(id) => setSelected(id)} targetHint={targetHint}
               />
+              <CombatExtrasPanel c={c} actingId={actingId} targetId={targetId} canAct={canAct} />{/* Round 3 X */}
             </>
           )}
           {tab === 'sheet' && <SheetPanel c={c} preferId={isGm ? (focusId ?? actingId) : actingId} />}

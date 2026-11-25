@@ -26,6 +26,7 @@ import { executeNet } from './netrun.js';
 // --- end Track N ---
 import { doAreaAttack, doSuppressiveFire } from './grid-area.js';
 import { validateIntent } from './validate.js';
+import { executeExtra, extrasAdjust, extrasGate, trackExtras } from './extras.js'; // Round 3 X
 // --- Track K ---
 import { authorizeSystems, beforeDamage, executeSystems, isSystemsIntent, onTurnStart, SYSTEMS_GM_ONLY, SYSTEMS_WHILE_PENDING, wieldCheck } from './systems.js';
 // --- end Track K ---
@@ -60,8 +61,9 @@ export function handleIntent(state: SessionState, intent: Intent, by: Viewer, ct
   const newId = ctx.newId ?? (() => globalThis.crypto.randomUUID());
   try {
     validateIntent(state, intent, by);
-    authorize(state, intent, by);
-    const { events, patch } = execute(state, intent, by, ctx.dice, newId);
+    const effective = extrasAdjust(state, intent); // Round 3 X: Grapple and Facedown penalties
+    authorize(state, effective, by);
+    const { events, patch } = trackExtras(state, effective, execute(state, effective, by, ctx.dice, newId)); // Round 3 X
     const entry: LogEntry = {
       seq: state.seq + 1,
       id: newId(),
@@ -99,6 +101,7 @@ function authorize(state: SessionState, intent: Intent, by: Viewer) {
   }
 
   wieldCheck(state, intent); // Track K: arm injuries limit weapons
+  extrasGate(state, intent); // Round 3 X: what a grapple forbids
   switch (intent.type) {
     case 'rangedAttack':
     case 'meleeAttack':
@@ -377,6 +380,8 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
     case 'net':
       return executeNet(state, (intent as { op: unknown }).op, by, dice);
     // --- end Track N ---
+    case 'extra': // Round 3 X
+      return executeExtra(state, (intent as { op: unknown }).op, by, dice, newId);
     default:
       if (isSystemsIntent(intent)) return executeSystems(state, intent, by, dice, newId); // Track K
       return executeTool(state, intent, by, dice);

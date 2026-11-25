@@ -35,6 +35,7 @@ export function applyEntry(state: SessionState, entry: LogEntry): SessionState {
     // --- Track N ---
     ...(entry.patch.netrun ? { netrun: entry.patch.netrun } : {}),
     // --- end Track N ---
+    ...(entry.patch.extras ? { extras: entry.patch.extras } : {}), // Round 3 X
   };
 }
 

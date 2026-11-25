@@ -117,6 +117,36 @@ Not built for Netrunning: rival netrunners fighting each other, Demon turns (GM 
 | Natural healing | Home: BODY HP per day. Hospital bed or Enhanced Antibodies: BODY × 2 (the best applies, no stacking). Street: none. Mortally Wounded must be Stabilized first. | Secondary (stacking is Interpretation) |
 | Critical Injury treatment | Quick Fix and Treatment use the injury table's skills and DVs (TECH + skill + 1d10, beat the DV). A Quick Fix that the table marks permanent removes the injury. | Easy Mode (body table) |
 
+## Grapples, Martial Arts, Facedowns and Role Abilities (Round 3 X)
+
+Sources: a community player handbook (melee, Martial Arts, combat and Role pages) and a community Reputation summary; never the Core book. Descriptions in the app are our own summaries.
+
+| Rule | Engine Behavior | Status |
+|---|---|---|
+| Grab | Action, adjacent. DEX + Brawling + 1d10 vs the target's DEX + Brawling + 1d10; ties to the defender. Win: start a Grapple, or take one held item (the GM names it if players can't see the target's gear). An Unconscious target is grabbed automatically. | Secondary (auto-grab: Interpretation) |
+| While grappling | Holder and held: −2 to all Actions (attacks and checks); no two-handed weapons; the held can't take the Move Action. The holder lets go for free. | Secondary |
+| Hold breaks | When either token ends more than one square apart (holder moved off, GM moved a token), or the holder is down. | Interpretation |
+| Escape | Action by the held character or an adjacent ally: same opposed check vs the holder. | Secondary |
+| Choke | Action by the holder: BODY damage straight to HP, never below 1 (the target falls Unconscious instead); three Choke Actions on consecutive Rounds knock the target out. | Secondary |
+| Throw | Action by the holder: BODY damage straight to HP; the hold ends; the target is Prone. | Secondary |
+| Damage "straight to HP" | Skips armor (no ablation) but still counts for Wound State, the Mortally Wounded extra crit and Damage Deflection. | Interpretation |
+| Special Move check | DEX + Form + 1d10 vs DV 15 unless stated; needs Form 1+. Triggered moves are free once per Turn; Action moves use the Action; strike moves replace both attacks. Triggers are checked from this Round's attack history; the GM can force a move. | Secondary |
+| Core Forms | Aikido (Disarming Combination, Iron Grip), Judo (Armor Breaking Combination, Counter Throw), Karate (Bone Breaking Strike, Armor Breaking Blow), Taekwondo (Pressure Point Strike, Flying Kick). | Secondary ⚠ confirm |
+| Strike injuries | Bone Breaking Strike adds Broken Ribs (aimed at the head, −8: Cracked Skull); Pressure Point Strike adds Spinal Injury (head: Brain Injury); each with the usual +5 bonus damage. | Secondary / bonus damage: Interpretation |
+| Armor Breaking Blow | While held, after two Martial Arts hits on the holder this Turn: break free and the holder gets a Broken Arm. | Secondary ⚠ one source |
+| Recovery | All Forms: when taking Get Up, beat DV 13 (DEX + Form) and it costs no Action; on a miss the Action is spent (no Action left: stay Prone). | Secondary (miss handling: Interpretation) |
+| Expanded Forms | Moves from later books are GM prompts: the app rolls DEX + Form vs the DV and states the effect for the GM. | Secondary |
+| Facedown | COOL + Reputation + 1d10 each; a tie means nothing happens; the loser backs down or fights on at −2 to all Actions against the winner. No Action cost; it lasts until the GM or the winner ends it. | Secondary (duration, cost: Interpretation) |
+| Reputation | GM sets 0–10 per character. | Secondary |
+| Charismatic Impact | Rank + 1d10 must beat DV 8 (one person), 10 (up to 6) or 12 (huge crowd, Rank 3+). Favors scale with Rank; a failure blocks those fans for a week. | Secondary |
+| Backup | Action. 1d10 at or under Rank → help in 1d6 Rounds; a 6 upgrades it one tier; Rank 10 sends two groups. | Secondary |
+| Operator | Haggling is COOL + Trading + Rank + 1d10 vs the seller's roll; perks listed by Rank. | Secondary |
+| Credibility | Publish: Rank + 1d10 + evidence (max +3) vs a GM DV; believability 1d10 at or under 2/2/3/3/4/4/5/5/6/7 by Rank. Rumors: Rank + 1d10 vs a GM DV. | Secondary |
+| Teamwork | Members at Ranks 3, 5 and 9; new members at Loyalty 1d6+1 (max 10). Risky orders: secret 1d6, at or above Loyalty they may refuse, botch or betray. | Secondary |
+| Moto | Rank added to driving, piloting and vehicle-tech skills; Family vehicles and upgrades tracked by name. | Secondary |
+| Maker | 2 points per Rank, each specialty ≤ Rank. Upgrade/Fabrication/Invention: TECH + Tech skill + specialty + 1d10 vs DV 9/13/17/21/24/29/29 by price; Invention at least Expensive (DV 21). Field Expertise: jury-rig for 10 minutes × Field rank, no roll. | Secondary |
+| Role checks vs DV | Like every DV check in the engine, the total must beat the DV (ties fail). | Interpretation |
+
 ## Interpretations the GM Should Confirm
 
 1. **Armor penalties don't stack.** Worst single penalty across all worn pieces.
@@ -136,7 +166,7 @@ Not built for Netrunning: rival netrunners fighting each other, Demon turns (GM 
 
 ## Not Built Yet
 
-Martial Arts special moves, Grab/Choke/Throw, shields, human shields, weapon quality, the other eight Role Abilities' mechanics (rank and notes only), drug effects, Facedowns, vehicles, re-bleed automation for Broken Ribs/Foreign Object, Spinal Injury lost-Action tracking.
+Shields, human shields, weapon quality, drug effects, vehicles (Moto tracks Family vehicles by name only), re-bleed automation for Broken Ribs/Foreign Object, Spinal Injury lost-Action tracking.
 
 ## Rules Packs and Book Values (Round 3)
 

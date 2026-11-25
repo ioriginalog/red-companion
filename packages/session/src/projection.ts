@@ -9,6 +9,7 @@ import { getInjury, woundState, type CheckResult, type CombatEvent } from '@cprc
 import { projectPendingForPlayer } from './systems.js'; // Track K
 import { allegianceOf, factionOf, projectMap } from './tactical.js';
 import { visibleHandouts } from './handouts.js'; // Track U
+import { projectExtras } from './extras.js'; // Round 3 X
 // --- Track N ---
 import { projectNet } from './netrun.js';
 // --- end Track N ---
@@ -181,6 +182,7 @@ export function projectState(state: SessionState, viewer: Viewer, opts?: Project
       // --- Track N ---
       ...(state.netrun ? { netrun: projectNet(state, viewer) } : {}),
       // --- end Track N ---
+      ...(state.extras ? { extras: state.extras } : {}), // Round 3 X
     };
   }
   const kn = knowledge(state);
@@ -195,6 +197,7 @@ export function projectState(state: SessionState, viewer: Viewer, opts?: Project
     // --- Track N ---
     ...(state.netrun ? { netrun: projectNet(state, viewer) } : {}),
     // --- end Track N ---
+    ...(state.extras ? { extras: projectExtras(state, viewer) } : {}), // Round 3 X
   };
 }
 
@@ -243,6 +246,7 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
     // --- Track N ---
     if (entry.patch.netrun) patch.netrun = projectNet(after, viewer);
     // --- end Track N ---
+    if (entry.patch.extras) patch.extras = entry.patch.extras; // Round 3 X
     return { ...base, events: entry.events, patch };
   }
 
@@ -297,6 +301,7 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
   // --- Track N --- (Turn changes move NET Actions left; controller changes move ownership.)
   if (after.netrun && (entry.patch.netrun || entry.patch.actors || entry.patch.encounter)) patch.netrun = projectNet(after, viewer);
   // --- end Track N ---
+  if (after.extras && (entry.patch.extras || entry.patch.actors || 'map' in entry.patch)) patch.extras = projectExtras(after, viewer); // Round 3 X
   return { ...base, events, patch };
 }
 
@@ -363,6 +368,7 @@ export function applyProjectedEntry(view: ViewState, entry: ProjectedEntry): Vie
     ...(entry.patch.handouts ? { handouts: entry.patch.handouts } : {}), // Track U
     // --- Track N ---
     ...(entry.patch.netrun ? { netrun: entry.patch.netrun } : {}),
+    ...(entry.patch.extras ? { extras: entry.patch.extras } : {}), // Round 3 X
     // --- end Track N ---
   };
 }
