@@ -26,6 +26,8 @@ export interface Actor {
   allegiance?: Allegiance;
   /** Portrait image URL. */
   portrait?: string;
+  /** Free-text notes (cyberware, gear, background). Full-sheet viewers only. */
+  notes?: string;
 }
 
 export type Allegiance = 'party' | 'ally' | 'neutral' | 'hostile';
@@ -229,6 +231,7 @@ export interface ProjectedActor {
   /** Only when the viewer may see full stats (own actor, PCs, or GM). */
   combatant?: Combatant;
   weapons?: Weapon[];
+  notes?: string;
 }
 
 export interface ViewState {

@@ -131,6 +131,13 @@ export function SheetPanel({ c, preferId }: { c: TableCtx; preferId: string | nu
         )}
       </section>
 
+      {a.notes && (
+        <section className="card">
+          <div className="ttl">Notes</div>
+          <p className="notes">{a.notes}</p>
+        </section>
+      )}
+
       <section className="card">
         <div className="ttl">Critical Injuries</div>
         {cb.criticalInjuries.length === 0 ? <p className="dim">None.</p> : (

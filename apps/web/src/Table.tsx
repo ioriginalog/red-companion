@@ -38,6 +38,7 @@ export function Table({ s }: { s: ClientState }) {
   const [effects, setEffects] = useState<Effect[]>([]);
   const [unread, setUnread] = useState(0);
   const [gmCursor, setGmCursor] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const mine = useCallback((id: string | null | undefined) => !!id && (isGm || view.actors[id]?.controller === me), [isGm, view.actors, me]);
   const name = useCallback((id: string) => view.actors[id]?.public.name ?? 'Someone', [view.actors]);
@@ -123,6 +124,9 @@ export function Table({ s }: { s: ClientState }) {
   keys.current = keyState;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // The GM shell keeps the Table mounted while another tab shows: ignore keys then.
+      const root = rootRef.current;
+      if (!root || root.closest('[hidden]') || root.offsetParent === null) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -156,7 +160,7 @@ export function Table({ s }: { s: ClientState }) {
   const tabs: [Tab, string][] = [['combat', 'Combat'], ['sheet', 'Sheet'], ['chat', 'Chat'], ...(isGm ? [['scene', 'Scene'] as [Tab, string]] : [])];
 
   return (
-    <div className={`table${sheetOpen ? ' sheet-open' : ''}`}>
+    <div className={`table${sheetOpen ? ' sheet-open' : ''}`} ref={rootRef}>
       <TopBar c={c} onHelp={() => setHelp(true)} />
       <InitiativeStrip c={c} onPick={(id, friendly) => (friendly ? (setSelected(id), isGm && setFocusId(id)) : setTargetId(id))} />
 

@@ -8,7 +8,7 @@
 import { cryptoDice, type Cell, type CombatEvent } from '@cprc/rules-core';
 import {
   applyEntry, applyProjectedEntry, emptySession, handleIntent, projectState, PROTOCOL_VERSION, replay,
-  type Intent, type LogEntry, type PlayerInfo, type ServerMessage, type SessionState, type Signal, type ViewState,
+  type Actor, type Intent, type LogEntry, type PlayerInfo, type ServerMessage, type SessionState, type Signal, type ViewState,
 } from '@cprc/session';
 
 export interface FeedItem { seq: number; by: string; intentType: string; events: CombatEvent[] }
@@ -67,6 +67,7 @@ export class Client {
   private retry = 0;
   private dice = cryptoDice();
   private msgN = 0;
+  private gmCreds: GmCreds | null = null;
 
   subscribe = (l: Listener) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
   getState = () => this.state;
@@ -88,10 +89,36 @@ export class Client {
   }
 
   resumeGm(creds: GmCreds) {
+    this.gmCreds = creds;
     this.full = emptySession(creds.sessionId);
     this.log = [];
     this.set({ role: 'gm', sessionId: creds.sessionId, joinCode: creds.joinCode, view: projectState(this.full, { role: 'gm' }), feed: [] });
     this.connect({ t: 'hello', v: PROTOCOL_VERSION, role: 'gm', sessionId: creds.sessionId, gmKey: creds.gmKey });
+  }
+
+  /**
+   * GM: upload an image to the session's Assets API. Returns the served URL,
+   * or null when the relay has no Assets API (callers fall back to inline/local URLs).
+   */
+  async uploadAsset(blob: Blob, contentType: string): Promise<string | null> {
+    const c = this.gmCreds;
+    if (!c) return null;
+    const res = await fetch(`/api/sessions/${encodeURIComponent(c.sessionId)}/assets`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${c.gmKey}`, 'Content-Type': contentType },
+      body: blob,
+    });
+    if (res.status === 404 || res.status === 405) return null;
+    if (!res.ok) {
+      const msg = ((await res.json().catch(() => ({}))) as { error?: string }).error;
+      throw new Error(msg ?? `Upload failed (${res.status}).`);
+    }
+    return ((await res.json()) as { url: string }).url;
+  }
+
+  /** GM: the authoritative actor record (projections drop extras like notes). */
+  gmActor(id: string): Actor | null {
+    return this.full?.actors[id] ?? null;
   }
 
   join(joinCode: string, name: string) {
@@ -105,6 +132,7 @@ export class Client {
     this.hello = null;
     this.ws?.close();
     if (this.state.role === 'gm') store.del(GM_KEY);
+    this.gmCreds = null;
     this.full = null;
     this.set({ status: 'idle', role: null, view: null, sessionId: null, joinCode: null, feed: [] });
   }

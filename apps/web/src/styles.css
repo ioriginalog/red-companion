@@ -264,7 +264,10 @@ kbd, code { font: 600 12px ui-monospace, monospace; background: #071030; border:
   .table.sheet-open .side { height: min(72vh, 640px); }
   .tab.grip { display: block; }
   .chatcard .feed { height: 34vh; }
+  /* Inside the GM shell the Table still owns the viewport below the tab bar. */
+  .shell-pane > .table.table { height: 100%; }
 }
+.notes { white-space: pre-wrap; font-size: 14px; }
 @media (max-width: 640px) {
   .hide-sm { display: none !important; }
   .table { grid-template-rows: 46px 70px minmax(260px, 1fr) 56px; }
