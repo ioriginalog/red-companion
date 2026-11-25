@@ -1,9 +1,11 @@
 import { useState, useSyncExternalStore } from 'react';
 import { client } from './net.js';
 import { Table } from './Table.js';
+import { GmShell } from './editors/GmShell.js';
 
 export function App() {
   const s = useSyncExternalStore(client.subscribe, client.getState);
+  if (s.role === 'gm' && s.view) return <GmShell s={s} table={<Table s={s} />} />;
   if (s.role && s.view) return <Table s={s} />;
   return <Home busy={s.status === 'connecting'} toast={s.toast?.text ?? null} />;
 }
