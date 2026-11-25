@@ -315,3 +315,29 @@ describe('netrunning: Scanner, Virus and 2070s Quickhacks', () => {
     expect(t.net(q, P1)).toMatchObject({ ok: false, code: 'NO_LINE_OF_SIGHT' });
   });
 });
+
+describe('netrunning: descending without Pathfinder (Round 3 P)', () => {
+  it('steps down into an unrevealed floor, revealing it on arrival, and tells the runner how many ways lead down', () => {
+    const t = setup();
+    t.net({ op: 'revealAccess', archId: 'lab', found: true }, GM);
+    t.net({ op: 'jackIn', actorId: 'kes', archId: 'lab' }, P1);
+    t.net({ op: 'activate', actorId: 'kes', programId: 'worm', active: true }, P1);
+    t.net({ op: 'ability', actorId: 'kes', ability: 'backdoor' }, P1, d10(3));
+    expect(run(t).revealed).toEqual(['f1']);
+    const view = projectState(t.state, P1).netrun!.runs.kes!;
+    expect(view.floors.f1!.exitsDown).toBe(1);
+    expect(t.net({ op: 'descend', actorId: 'kes', branch: 0 }, P1).ok).toBe(true);
+    expect(run(t)).toMatchObject({ floorId: 'f2' });
+    expect(run(t).revealed).toContain('f2');
+    expect(projectState(t.state, P1).netrun!.runs.kes!.floors.f2!.exitsDown).toBe(2);
+  });
+
+  it('refuses a missing branch, a locked Password and bad payloads', () => {
+    const t = setup();
+    t.net({ op: 'revealAccess', archId: 'lab', found: true }, GM);
+    t.net({ op: 'jackIn', actorId: 'kes', archId: 'lab' }, P1);
+    expect(t.net({ op: 'descend', actorId: 'kes', branch: 0 }, P1)).toMatchObject({ ok: false, code: 'INVALID' }); // Password
+    expect(t.net({ op: 'descend', actorId: 'kes', branch: 3 }, P1)).toMatchObject({ ok: false });
+    for (const branch of [-1, 'a', 1.5, 99] as unknown[]) expect(t.net({ op: 'descend', actorId: 'kes', branch } as Record<string, unknown>, P1)).toMatchObject({ ok: false });
+  });
+});

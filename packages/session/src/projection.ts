@@ -93,8 +93,9 @@ function placeholder(id: string): ProjectedActor {
 }
 
 function projectEncounter(enc: Encounter, kn: Knowledge): Encounter {
+  const { initiative: _totals, ...rest } = enc; // Round 3 P: totals name every combatant; players don't get them
   return {
-    ...enc,
+    ...rest,
     order: enc.order.map(kn.aliasOf),
     deathSaveRequiredFor: enc.deathSaveRequiredFor ? kn.aliasOf(enc.deathSaveRequiredFor) : null,
     ...(enc.usage ? { usage: { ...enc.usage, actorId: kn.aliasOf(enc.usage.actorId) } } : {}),
@@ -133,6 +134,10 @@ function projectPending(p: Pending | null, viewer: Viewer, state: SessionState, 
       };
     }
     // --- end Track K ---
+    // --- Round 3 P --- (NPC damage dice are stats)
+    case 'awaitingScatter':
+      return { ...p, attackerId: kn.aliasOf(p.attackerId), damageDice: full(p.attackerId) ? p.damageDice : 0 };
+    // --- end Round 3 P ---
   }
 }
 

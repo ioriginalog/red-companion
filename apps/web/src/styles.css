@@ -341,3 +341,10 @@ kbd, code { font: 600 12px ui-monospace, monospace; background: #071030; border:
   .topbar .chip, .topbar .btn { padding: 3px 7px; }
 }
 .chip.warn-chip { border-color: var(--yellow); color: var(--yellow); }
+
+/* --- Round 3 P: Delay menu --- */
+.menu-wrap { position: relative; display: inline-flex; }
+.menu { position: fixed; z-index: 40; display: grid; min-width: 200px; background: var(--panel); border: 1px solid var(--cyan); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6); }
+.menu button { text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--line); padding: 9px 12px; font: 700 14px var(--head); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text); }
+.menu button:hover, .menu button:focus-visible { background: #0a1a45; color: var(--cyan); }
+/* --- end Round 3 P --- */

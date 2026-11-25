@@ -7,6 +7,7 @@ import { aimOf, isFriendly, previewAttack, type AttackMode } from './tactics.js'
 import { demoIntents } from './demo.js';
 import type { TableCtx } from './table/ctx.js';
 import { HelpOverlay, InitiativeStrip, Prompts, TopBar } from './table/panels.js';
+import { coverAt, coverLabel } from './table/cover.js'; // Round 3 P
 import { CombatPanel, fireBlocked } from './table/CombatPanel.js';
 import { SheetPanel } from './table/SheetPanel.js';
 import { AreaDodgePrompt, GmSystemsPanel } from './systems/index.js'; // Track K
@@ -37,6 +38,11 @@ export function Table({ s }: { s: ClientState }) {
   const [weaponId, setWeaponId] = useState<string | null>(null);
   const [mode, setMode] = useState<AttackMode>('single');
   const [mapMode, setMapMode] = useState<MapMode>('move');
+  // --- Round 3 P --- one-shot map picks: a cover square to shoot, or where a missed explosive lands.
+  const [coverPick, setCoverPick] = useState(false);
+  const [scatterPick, setScatterPick] = useState(false);
+  const [delayOpen, setDelayOpen] = useState<DOMRect | null>(null);
+  // --- end Round 3 P ---
   const [partyFog, setPartyFog] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string[]>([]);
@@ -74,6 +80,12 @@ export function Table({ s }: { s: ClientState }) {
     if (targetId === actingId || !t || t.placeholder || (acting && isFriendly(t) === isFriendly(acting))) setTargetId(null);
   }, [actingId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (mapMode === 'area' && !areaKind) setMapMode('move'); }, [areaKind, mapMode]);
+  // --- Round 3 P ---
+  const scatter = view.pending?.kind === 'awaitingScatter' ? view.pending : null;
+  useEffect(() => { if (!scatter) setScatterPick(false); }, [scatter?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setCoverPick(false); setDelayOpen(null); }, [actingId, weapon?.id]);
+  const effMode: MapMode = scatterPick ? 'area' : coverPick ? 'place' : mapMode;
+  // --- end Round 3 P ---
 
   const attack = useMemo(
     () => (actingId && targetId && weapon && canAct ? previewAttack(view, actingId, targetId, weapon, mode) : null),
@@ -173,7 +185,7 @@ export function Table({ s }: { s: ClientState }) {
         case 'r': case 'R': setMapMode(k.mapMode === 'ruler' ? 'move' : 'ruler'); break;
         case 'f': case 'F': if (k.canAct && !fireBlocked({ attack: k.attack, usage: k.usage, weapon: k.weapon }, !!view.pending)) fire(); break;
         case 'e': case 'E': if (k.canEndTurn) client.act({ type: 'endTurn' }); break;
-        case 'Escape': setMapMode('move'); setHelp(false); setFocusId(null); setHighlight([]); break;
+        case 'Escape': setScatterPick(false); setCoverPick(false); setDelayOpen(null); setMapMode('move'); setHelp(false); setFocusId(null); setHighlight([]); break;
         case '?': setHelp((h) => !h); break;
         case 'g': case 'G': (root.querySelector('.mapstage svg') as SVGSVGElement | null)?.focus(); break;
         default: return;
@@ -215,13 +227,18 @@ export function Table({ s }: { s: ClientState }) {
         {view.map ? (
           <MapView
             view={view} isGm={isGm} actingId={actingId} canAct={canAct} targetId={targetId} attack={attack} chances={chances}
-            mode={mapMode} areaKind={areaKind} partyFog={partyFog} focusId={isGm ? focusId : null} highlight={highlight}
+            mode={effMode} areaKind={scatterPick ? 'blast' : areaKind} partyFog={partyFog}
+            hoverInfo={(cell) => { const ci = view.map ? coverAt(view.map, cell) : null; return ci ? coverLabel(ci, isGm) : null; } /* Round 3 P */} focusId={isGm ? focusId : null} highlight={highlight}
             shareCursor={!isGm || gmCursor}
             signals={s.signals} effects={effects} nameOf={(f) => client.nameOf(f)}
             canDrag={(id) => isGm || (mine(id) && (!enc.active || currentId === id))}
             onToken={pickToken}
             onTokenContext={(id) => { if (isGm) { setFocusId(id); openTab('combat'); } else pickToken(id); }}
             onCell={(cell, { run }) => {
+              if (coverPick) { // Round 3 P
+                if (actingId && weapon && c.act({ type: 'attackCover', attackerId: actingId, weaponId: weapon.id, at: cell })) setCoverPick(false);
+                return;
+              }
               if (mapMode === 'place' && isGm && (focusId ?? selected)) { c.act({ type: 'placeToken', actorId: (focusId ?? selected)!, at: cell }); return; }
               if (!actingId || !canAct) return;
               c.act({ type: 'moveToken', actorId: actingId, to: cell, ...(run ? { run: true } : {}) });
@@ -232,6 +249,7 @@ export function Table({ s }: { s: ClientState }) {
             }}
             onWatchFacing={(deg) => { if (actingId) { c.act({ type: 'setWatch', actorId: actingId, facing: deg, arc: 90 }); setMapMode('move'); } }}
             onArea={(at) => {
+              if (scatterPick && scatter) { if (c.act({ type: 'placeScatter', pendingId: scatter.id, at })) setScatterPick(false); return; } // Round 3 P
               if (!actingId || !weapon || !areaKind) return;
               if (c.act({ type: 'areaAttack', attackerId: actingId, weaponId: weapon.id, kind: areaKind === 'blast' ? 'launcher' : 'shotgunShell', at })) setMapMode('move');
             }}
@@ -262,7 +280,8 @@ export function Table({ s }: { s: ClientState }) {
             <span><i style={{ background: 'rgba(2,4,14,0.9)', border: '1px solid #445' }} />Unseen</span>
           </div>
         )}
-        {mapMode !== 'move' && <div className="mode-banner h">{
+        {(scatterPick || coverPick) && <div className="mode-banner h">{scatterPick ? 'Scatter: tap where the explosive lands.' : 'Shoot Cover: tap a cover square.'} <button className="link" onClick={() => { setScatterPick(false); setCoverPick(false); }}>Cancel (Esc)</button></div>}
+        {!scatterPick && !coverPick && mapMode !== 'move' && <div className="mode-banner h">{
           mapMode === 'ruler' ? 'Ruler: drag to measure. Everyone sees it.'
             : mapMode === 'watch' ? 'Watch: tap where to face (90° cone).'
               : mapMode === 'area' ? (areaKind === 'blast' ? 'Blast: tap the aim square.' : 'Shell: tap the direction to fire.')
@@ -294,6 +313,25 @@ export function Table({ s }: { s: ClientState }) {
           const skill = (acting.combatant?.skills.Paramedic ?? 0) > 0 ? 'Paramedic' as const : 'First Aid' as const;
           return <button className="btn" disabled={!!usage?.actionUsed || !!view.pending} onClick={() => c.act({ type: 'stabilize', medicId: actingId, targetId: t.id, skill })} title={`Stabilize ${t.public.name} with ${skill} (uses your Action; must be adjacent)`}>Stabilize</button>;
         })()}
+        {(() => {
+          // Round 3 P: Delay (house rule): act later this Round, before moving or acting.
+          if (!enc.active || !canAct || !currentId || actingId !== currentId || enc.delayAllowed === false) return null;
+          const fresh = !usage || (usage.moveUsed === 0 && !usage.actionUsed);
+          const later = enc.order.slice(enc.turnIndex + 1).filter((id) => view.actors[id] && !view.actors[id]!.placeholder);
+          const canEnd = enc.turnIndex < enc.order.length - 1;
+          return (
+            <span className="menu-wrap">
+              <button className={`btn${delayOpen ? ' on' : ''}`} disabled={!fresh || !canEnd || !!view.pending} aria-expanded={!!delayOpen} aria-haspopup="menu"
+                onClick={(e) => setDelayOpen(delayOpen ? null : e.currentTarget.getBoundingClientRect())} title="House rule: take your Turn later this Round (before you move or act)">Delay</button>
+              {delayOpen && (
+                <span className="menu" role="menu" style={{ left: Math.max(8, Math.min(delayOpen.left, window.innerWidth - 230)), bottom: window.innerHeight - delayOpen.top + 6 }}>
+                  {later.map((id) => <button key={id} role="menuitem" onClick={() => { setDelayOpen(null); c.act({ type: 'delayTurn', after: id }); }}>After {c.name(id)}</button>)}
+                  <button role="menuitem" onClick={() => { setDelayOpen(null); c.act({ type: 'delayTurn' }); }}>To the End of the Round</button>
+                </span>
+              )}
+            </span>
+          );
+        })()}
         <div className="spacer" />
         {canAct && targetId && weapon && <button className="btn yellow show-sm" disabled={!fireNow} onClick={fire} title="Fire (F)">{profileOf(weapon).melee ? 'Strike' : 'Fire'}</button>}
         {isGm && !enc.active && view.map && (
@@ -314,7 +352,7 @@ export function Table({ s }: { s: ClientState }) {
           <button className="tab grip" aria-label={sheetOpen ? 'Collapse Panel' : 'Expand Panel'} onClick={() => setSheetOpen(!sheetOpen)}>{sheetOpen ? '▾' : '▴'}</button>
         </div>
         <div className="side-body">
-          <Prompts c={c} />
+          <Prompts c={c} onPickScatter={setScatterPick} scatterPicking={scatterPick} />
           <AreaDodgePrompt view={view} isGm={isGm} mine={(id) => c.mine(id)} name={c.name} act={c.act} />
           {tab === 'combat' && (
             <>
@@ -322,7 +360,7 @@ export function Table({ s }: { s: ClientState }) {
               <CombatPanel
                 c={c} actingId={actingId} currentId={currentId} canAct={canAct} weapon={weapon} setWeaponId={setWeaponId} mode={mode} setMode={setMode}
                 targetId={targetId} setTargetId={setTargetId} attack={attack} usage={usage} mapMode={mapMode} setMapMode={setMapMode}
-                setHighlight={setHighlight} onFire={fire}
+                setHighlight={setHighlight} onFire={fire} coverPick={coverPick} setCoverPick={setCoverPick}
                 ownIds={ownIds} onSelectOwn={(id) => setSelected(id)}
               />
             </>

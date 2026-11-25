@@ -45,6 +45,12 @@ export interface Encounter {
   deathSaveRequiredFor: string | null;
   /** What the current actor has spent this Turn. Absent outside encounters. */
   usage?: TurnUsage;
+  // --- Round 3 P ---
+  /** Initiative totals by actor id, kept so late arrivals can be slotted in. */
+  initiative?: Record<string, number>;
+  /** House rule: may the current actor Delay? Default on. Survives across encounters. */
+  delayAllowed?: boolean;
+  // --- end Round 3 P ---
 }
 
 /**
@@ -120,8 +126,15 @@ export type Pending =
     targets: { id: string; coverHp?: number }[];
     /** Eligible defenders: null until they decide. */
     decisions: Record<string, boolean | null>;
-  };
+  }
   // --- end Track K ---
+  // --- Round 3 P ---
+  /** A missed explosive: the GM places where it lands (or rolls), then the blast resolves there. */
+  | {
+    kind: 'awaitingScatter'; id: string; attackerId: string; areaKind: 'launcher' | 'thrownGrenade'; at: Cell;
+    attack: CheckResult; damageDice: number;
+  };
+  // --- end Round 3 P ---
 
 /** What a player sees of a pending step: NPC damage dice are withheld. */
 export type ProjectedPending =
@@ -263,6 +276,16 @@ export type Intent =
   // --- Track U ---
   | { type: 'setHandout'; id: string; title: string; body: string; imageUrl?: string; audience: 'all' | 'gm' | string[] }
   | { type: 'removeHandout'; id: string }
+  // --- Round 3 P ---
+  /** GM: put a late arrival into the Turn order (rolled, or a given total). */
+  | { type: 'addToInitiative'; actorId: string; roll?: 'roll' | number }
+  | { type: 'removeFromInitiative'; actorId: string }
+  /** House rule: the current actor acts later this Round: after `after`, or last. */
+  | { type: 'delayTurn'; after?: string }
+  | { type: 'setDelayRule'; allowed: boolean }
+  /** GM: where a missed explosive lands (omit `at` to roll it within the blast area). */
+  | { type: 'placeScatter'; pendingId: string; at?: Cell }
+  // --- end Round 3 P ---
   // --- Track N ---
   | { type: 'net'; op: NetOp };
   // --- end Track N ---

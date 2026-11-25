@@ -48,6 +48,16 @@ export type CombatEvent = Base & (
   | { type: 'netAction'; combatantId: string; action: string; text: string; check?: CheckResult; vs?: CheckResult; dv?: number; success?: boolean; dice?: number[]; amount?: number }
   // --- end Track N ---
   | { type: 'areaResolved'; attackerId: string; kind: string; at: Cell; targetIds: string[] }
+  // --- Round 3 P ---
+  /** A missed explosive is waiting for the GM to place it. */
+  | { type: 'explosiveMissed'; attackerId: string; at: Cell }
+  /** Where a missed explosive landed (`rolled` = random square, else GM placed). */
+  | { type: 'explosiveScattered'; attackerId: string; from: Cell; to: Cell; rolled: boolean }
+  /** A hit that did no damage (armor stopped it): safe to show players without SP numbers. */
+  | { type: 'noEffect'; targetId: string }
+  | { type: 'turnDelayed'; combatantId: string; after: string | null }
+  | { type: 'leftInitiative'; combatantId: string }
+  // --- end Round 3 P ---
   // --- Track K ---
   | { type: 'injuryTreated'; medicId: string; targetId: string; injuryId: string; kind: 'quickFix' | 'treatment'; skill: string; check: CheckResult; dv: number; outcome: 'quickFixed' | 'removed' | 'failed' }
   | { type: 'humanityChanged'; combatantId: string; from: number; to: number; empFrom: number; empTo: number; reason: 'cyberware' | 'removal' | 'therapy' | 'gm' }

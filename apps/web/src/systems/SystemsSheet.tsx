@@ -119,7 +119,9 @@ function AmmoSection({ c, a, cb, can }: { c: SystemsCtx; a: ProjectedActor; cb: 
     <section className="card">
       <div className="ttl">Ammunition</div>
       {guns.map((w) => {
-        const options = AMMO_TYPES.filter((t) => !ammoProblem(w, t.id));
+        // Round 3 P (#11): 2070s ammo only when the GM has the 2070s options on.
+        const era = !!c.view.netrun?.quickhacks2070s;
+        const options = AMMO_TYPES.filter((t) => !ammoProblem(w, t.id) && (era || !t.era2070s || t.id === w.ammoType));
         const cur = w.ammoType ?? 'basic';
         const def = AMMO_TYPES.find((t) => t.id === cur)!;
         const hands = wieldProblem(cb, w);

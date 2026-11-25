@@ -15,7 +15,8 @@
  *     rolled (an `awaitingAreaDodge` step). The GM can resolve the rest as "dodge".
  *   - Suppressive Fire covers opposing tokens within 25 m/yds (12 squares) and the
  *     weapon's Autofire range, in the shooter's line of sight.
- *   - A missed explosive scatters: the GM places it (Core gives no scatter table).
+ *   - A missed explosive scatters: an `awaitingScatter` step; the GM places it or rolls a
+ *     random square in the blast area (playloop.ts), then it resolves like a hit there.
  */
 import {
   applyAreaDamage, AUTOFIRE_DV, bearing, gridDistance, hasLineOfSight, inBounds, inCone, metersBetween,
@@ -138,8 +139,10 @@ export function doAreaAttack(state: SessionState, intent: AreaIntent, by: Viewer
   const patch: StatePatch = { actors };
   if (encounter) patch.encounter = encounter;
   if (out.scattered) {
-    events.push({ type: 'gmRulingRequired', visibility: 'public', reason: 'The explosive missed and scatters. The GM places it within the blast area around the target square.' });
-    events.push({ type: 'areaResolved', visibility: 'public', attackerId: attacker.id, kind: intent.kind, at, targetIds: [] });
+    // Round 3 P: the GM places (or rolls) where it lands, then the blast resolves there (placeScatter).
+    events.push({ type: 'explosiveMissed', visibility: 'public', attackerId: attacker.id, at });
+    const areaKind = intent.kind === 'launcher' ? 'launcher' : 'thrownGrenade';
+    patch.pending = { kind: 'awaitingScatter', id: newId(), attackerId: attacker.id, areaKind, at, attack: out.attack, damageDice: out.damageDice };
     return { events, patch };
   }
   if (!out.hit) {
@@ -179,6 +182,10 @@ export function finishArea(state: SessionState, p: AreaPendingT, dice: Dice): { 
       events.push({ type: 'checkRolled', visibility: 'public', by: base.controller, combatantId: r.targetId, label: 'Dodge', check: r.dodge, dv: p.attack.total, success: r.avoided });
     }
     events.push(...r.events);
+    // Round 3 P: players learn the hit did nothing, without SP numbers.
+    if (!r.avoided && factionOf(base) !== 'friendly' && base.combatant.hp.current === r.target.hp.current) {
+      events.push({ type: 'noEffect', visibility: 'public', targetId: r.targetId });
+    }
     actors[r.targetId] = { ...base, combatant: r.target };
   }
   const patch: StatePatch = { actors, pending: null };

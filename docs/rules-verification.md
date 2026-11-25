@@ -57,6 +57,11 @@ Status key: **Easy Mode** = matches the free Easy Mode PDF · **Errata** = match
 | Free checks | STAT + skill + 1d10 + standing modifiers (wound penalties) vs an optional DV; ties fail. Not tied to the Turn or the Action: the GM rules what a check costs. | Easy Mode |
 | GM HP edits | Healing caps at max HP; damage has no floor; HP edits never kill on their own (only Death Saves do). | Interpretation |
 | Scene switches | Allowed mid-encounter; the encounter, Turn order and actors carry over; watches end. | Interpretation |
+| Late arrivals (Round 3) | The GM rolls a newcomer in with REF + 1d10 (the engine's initiative roll) and slots them by total; a tie with an existing slot goes to a d10 roll-off between those two only, so nobody else moves. Slotting before the current Turn means they act next Round. | Interpretation |
+| Delay (Round 3) | **House rule, not RED Core** (we found no Delay or Hold Action in Core). On by default; the GM can switch it off. The acting character, before moving or acting, takes their Turn later this Round (after a chosen character, or last). The new position sticks for later Rounds. | House Rule |
+| Missed explosives (Round 3) | A miss waits for the GM, who taps where it lands or rolls it: a random square in the 5 × 5 blast area around the aim point (never the aim square, never a wall). It then goes off there like a hit, dodges included, against the original attack total. Core leaves the landing spot to the GM. | Interpretation |
+| Netrunner movement (Round 3) | A runner can go down to the next floor without Pathfinder; the floor reveals itself on arrival (a Password must be Backdoored first). Pathfinder still reveals floors ahead. Costs 1 NET Action. | Secondary |
+| Armor stopped it (Round 3) | Players see "no effect" when a hit on an NPC does no HP damage; SP values stay hidden. | Interpretation |
 | Watch | **House rule, not RED Core.** Spend the Action to watch a 90° cone (30°–180°) until your next Turn. The first opposing token to step into a visible watched square stops there and the watcher may attack out of Turn, or hold fire. | House Rule |
 
 ## Netrunning (2026-11)
