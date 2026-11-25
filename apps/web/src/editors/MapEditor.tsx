@@ -115,7 +115,10 @@ export function MapEditor({ s }: { s: ClientState }) {
   function saveToLibrary(m = current): boolean {
     if (!m) return false;
     const { tokens: _t, watches: _w, ...rest } = m;
-    const ok = act({ type: 'saveToLibrary', kind: 'map', item: { ...rest, tokens: {}, watches: {}, spotted: [] } });
+    // Keep tokens a parked scene already has; the live map is saved as a clean copy.
+    const parked = library[m.id];
+    const item = parked && m.id !== active?.id ? { ...rest, tokens: parked.tokens, watches: {}, spotted: parked.spotted } : { ...rest, tokens: {}, watches: {}, spotted: [] };
+    const ok = act({ type: 'saveToLibrary', kind: 'map', item });
     if (ok) {
       setDraft(m);
       setSource((src) => (src === 'new' ? 'library' : src));
@@ -142,9 +145,16 @@ export function MapEditor({ s }: { s: ClientState }) {
       if (act({ type: 'switchScene', mapId: current.id })) { setSource('active'); setMsg({ tone: 'ok', text: `“${current.name}” is now the live map.` }); }
       return;
     }
-    // New scene. Stash the live map in the library first so it isn't lost.
-    if (active && !library[active.id]) saveToLibrary(active);
-    if (act({ type: 'setMap', map: current })) { setSource('active'); setDraft(current); setMsg({ tone: 'ok', text: `“${current.name}” is now the live map. Place tokens from the Table with Place.` }); }
+    // New scene: save it, then switch. Switching parks the live map (tokens and all) in the library.
+    if (!active) {
+      if (act({ type: 'setMap', map: current })) { setSource('active'); setDraft(current); setMsg({ tone: 'ok', text: `“${current.name}” is now the live map. Place tokens from the Table with Place.` }); }
+      return;
+    }
+    if (!saveToLibrary()) return;
+    if (act({ type: 'switchScene', mapId: current.id })) {
+      setSource('active');
+      setMsg({ tone: 'ok', text: `“${current.name}” is now the live map. “${active.name}” was parked in the library with its tokens. Place tokens from the Table with Place.` });
+    }
   }
 
   function duplicate() {
@@ -275,7 +285,7 @@ export function MapEditor({ s }: { s: ClientState }) {
                 </div>
                 <div className="note">{source === 'active'
                   ? 'Updating keeps every token where it stands.'
-                  : 'A new map replaces the live one; the live map is saved to the library first. Tokens start off the map.'}</div>
+                  : 'Switching parks the live map in the library with its tokens, so you can come back to it. Tokens start off a new map.'}</div>
               </div>
             </section>
             <section className="card">

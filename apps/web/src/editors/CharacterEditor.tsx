@@ -107,7 +107,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
       if (!act({ type: 'spawnFromLibrary', templateId: sel.id, newId, name: names[i]!, ...(at ? { at } : {}) })) break;
       done++;
     }
-    if (done) setMsg({ tone: 'ok', text: `Spawned ${done} ${draft.name}${done > 1 ? ' copies' : ''}.` });
+    if (done) setMsg({ tone: 'ok', text: `Spawned ${done} ${done > 1 ? 'copies' : 'copy'} of ${draft.name}.` });
   }
 
   function removeCurrent() {
