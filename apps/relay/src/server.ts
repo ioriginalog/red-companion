@@ -38,3 +38,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
     void close().then(() => process.exit(0));
   });
 }
+
+// Last line of defense: log and keep serving rather than dropping every table.
+process.on('uncaughtException', (err) => { console.error('uncaught', err); });
+process.on('unhandledRejection', (err) => { console.error('unhandled rejection', err); });

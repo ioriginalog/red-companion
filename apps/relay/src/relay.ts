@@ -365,6 +365,12 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     const c: Conn = { ws, alive: true, ip: ipOf(req), signalTokens: SIGNAL_BURST, signalAt: Date.now() };
     const helloTimer = setTimeout(() => { if (!c.room) ws.close(4000, 'HELLO_TIMEOUT'); }, 10_000);
     ws.on('pong', () => { c.alive = true; });
+    // Oversized or malformed frames raise here; without a listener ws would
+    // rethrow and take down the whole process (every session).
+    ws.on('error', (err) => {
+      log(`ws error: ${(err as Error).message}`);
+      try { ws.terminate(); } catch { /* already closed */ }
+    });
     (ws as WebSocket & { conn?: Conn }).conn = c;
 
     ws.on('message', (data, isBinary) => {

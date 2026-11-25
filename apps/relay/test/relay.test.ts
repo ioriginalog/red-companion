@@ -473,3 +473,19 @@ describe('round 2 hardening', () => {
     gm.ws.close(); gm2.ws.close();
   });
 });
+
+describe('oversized frames', () => {
+  it('drops the connection without crashing the relay', async () => {
+    const relay = createRelay({ store: new MemoryStore(), maxPayloadBytes: 1024 });
+    await new Promise<void>((r) => relay.server.listen(0, '127.0.0.1', () => r()));
+    const port = (relay.server.address() as AddressInfo).port;
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    await new Promise((r) => ws.on('open', r));
+    const closed = new Promise((r) => ws.on('close', r));
+    ws.send('x'.repeat(4096));
+    await closed;
+    const res = await fetch(`http://127.0.0.1:${port}/health`);
+    expect(res.status).toBe(200);
+    await relay.close();
+  });
+});
