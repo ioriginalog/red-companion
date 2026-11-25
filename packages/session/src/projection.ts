@@ -42,7 +42,7 @@ export function projectActor(actor: Actor, viewer: Viewer, opts?: ProjectionOpti
       injuries: c.criticalInjuries.map((i) => getInjury(i.injuryId).name),
     },
   };
-  return canSeeFull(actor, viewer, opts) ? { ...base, combatant: c, weapons: actor.weapons } : base;
+  return canSeeFull(actor, viewer, opts) ? { ...base, combatant: c, weapons: actor.weapons, ...(actor.notes ? { notes: actor.notes } : {}) } : base;
 }
 
 export function projectState(state: SessionState, viewer: Viewer, opts?: ProjectionOptions): ViewState {
