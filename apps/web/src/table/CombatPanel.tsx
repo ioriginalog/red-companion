@@ -40,8 +40,10 @@ export function fireBlocked(p: Pick<Props, 'attack' | 'usage' | 'weapon'>, pendi
 export function CombatPanel(p: Props) {
   const { c, actingId, canAct, weapon, attack, usage } = p;
   const { view } = c;
-  const acting = actingId ? view.actors[actingId] : undefined;
-  const target = p.targetId ? view.actors[p.targetId] : undefined;
+  const a0 = actingId ? view.actors[actingId] : undefined;
+  const acting = a0 && !a0.placeholder ? a0 : undefined;
+  const t0 = p.targetId ? view.actors[p.targetId] : undefined;
+  const target = t0 && !t0.placeholder ? t0 : undefined;
   const hp = acting?.combatant?.hp;
   const weapons = acting?.weapons ?? [];
   const area = areaKindFor(weapon);

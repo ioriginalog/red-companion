@@ -340,3 +340,4 @@ kbd, code { font: 600 12px ui-monospace, monospace; background: #071030; border:
   .brand .slash::before { font-size: 18px; margin-right: 0; }
   .topbar .chip, .topbar .btn { padding: 3px 7px; }
 }
+.chip.warn-chip { border-color: var(--yellow); color: var(--yellow); }

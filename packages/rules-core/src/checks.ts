@@ -1,4 +1,5 @@
 import type { Dice } from './dice.js';
+import { RulesError } from './errors.js';
 import type { CheckResult, D10Roll, Modifier } from './types.js';
 
 /**
@@ -20,8 +21,13 @@ export function rollD10(dice: Dice): D10Roll {
   return { natural, kind: 'normal', value: natural };
 }
 
+/** Sum of modifier values. Rejects anything that isn't a finite number, so a bad payload can't reach a total. */
 export function sumModifiers(mods: Modifier[]): number {
-  return mods.reduce((s, m) => s + m.value, 0);
+  if (!Array.isArray(mods)) throw new RulesError('INVALID_INPUT', 'Modifiers must be a list.');
+  return mods.reduce((s, m) => {
+    if (typeof m?.value !== 'number' || !Number.isFinite(m.value)) throw new RulesError('INVALID_INPUT', 'Every modifier needs a numeric value.');
+    return s + m.value;
+  }, 0);
 }
 
 /** STAT + Skill + 1d10 + modifiers. `baseBreakdown` lists the STAT and Skill parts. */

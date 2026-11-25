@@ -129,7 +129,8 @@ describe('relay', () => {
     const e1 = await p.nextOf('entries');
     const e2 = await p.nextOf('entries');
     expect(e1.entries[0]!.patch.actors!.solo!.combatant).toBeDefined();
-    expect(e2.entries[0]!.patch.actors!.ganger!.combatant).toBeUndefined(); // NPC redacted
+    // An unseen hostile (no map, no encounter) isn't sent to players at all.
+    expect(JSON.stringify(e2)).not.toContain('ganger');
 
     // Player shoots; relay forwards to GM; GM authority decides.
     p.send({ t: 'intent', clientMsgId: 'm1', intent: { type: 'rangedAttack', attackerId: 'solo', defenderId: 'ganger', weaponId: 'pistol', distance: 5 } });
@@ -394,5 +395,81 @@ describe('FileStore assets', () => {
     expect(() => fs.getAsset('../etc', name)).toThrow();
     // Survives a restart (new store on the same directory).
     expect(new FileStore(tmp).getAsset(id, name)).not.toBeNull();
+  });
+});
+
+describe('round 2 hardening', () => {
+  it('ignores X-Forwarded-For unless proxies are configured, then reads from the right (critic #5)', async () => {
+    const { clientIp } = await import('../src/relay.js');
+    const req = (xff: string) => ({ headers: { 'x-forwarded-for': xff }, socket: { remoteAddress: '10.0.0.9' } }) as never;
+    expect(clientIp(req('1.1.1.1'), 0)).toBe('10.0.0.9');
+    expect(clientIp(req('6.6.6.6, 2.2.2.2'), 1)).toBe('2.2.2.2'); // spoofed left entry ignored
+    expect(clientIp(req('6.6.6.6, 2.2.2.2, 3.3.3.3'), 2)).toBe('2.2.2.2');
+    // Spoofed headers no longer dodge the creation limit.
+    await relay.close();
+    relay = createRelay({ store: new MemoryStore(), createPerHour: 3 });
+    await new Promise<void>((r) => relay.server.listen(0, '127.0.0.1', () => r()));
+    base = `127.0.0.1:${(relay.server.address() as AddressInfo).port}`;
+    const codes: number[] = [];
+    for (let i = 0; i < 5; i++) codes.push((await fetch(`http://${base}/api/sessions`, { method: 'POST', headers: { 'X-Forwarded-For': `9.9.9.${i}` } })).status);
+    expect(codes).toEqual([201, 201, 201, 429, 429]);
+  });
+
+  it('defaults to same-origin when no origin list is configured', async () => {
+    const ok = await fetch(`http://${base}/api/sessions`, { method: 'POST', headers: { Origin: `http://${base}` } });
+    expect(ok.status).toBe(201);
+    const evil = await fetch(`http://${base}/api/sessions`, { method: 'POST', headers: { Origin: 'https://evil.example' } });
+    expect(evil.status).toBe(403);
+    const ws = new WebSocket(`ws://${base}/ws`, { headers: { Origin: 'https://evil.example' } });
+    const code = await new Promise<string>((r) => { ws.on('unexpected-response', (_q, res) => r(String(res.statusCode))); ws.on('open', () => r('open')); });
+    expect(code).toBe('401');
+  });
+
+  it('gives players a player directory and tells them when others join or leave (critic #10)', async () => {
+    const { sessionId, gmKey, joinCode } = await createSession();
+    const gm = new Client(`ws://${base}/ws`); await gm.open();
+    gm.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'gm', sessionId, gmKey });
+    await gm.nextOf('welcome');
+    const a = new Client(`ws://${base}/ws`); await a.open();
+    a.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode, name: 'Alice' });
+    const wa = await a.nextOf('welcome');
+    if (wa.role !== 'player') throw new Error('player');
+    expect(wa.players.map((p) => p.name)).toEqual(['Alice']);
+    const b = new Client(`ws://${base}/ws`); await b.open();
+    b.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode, name: 'Bob' });
+    const wb = await b.nextOf('welcome');
+    if (wb.role !== 'player') throw new Error('player');
+    expect(wb.players.map((p) => p.name).sort()).toEqual(['Alice', 'Bob']);
+    expect(JSON.stringify(wb.players)).not.toContain('token');
+    expect((await a.nextOf('playerJoined')).player.name).toBe('Bob');
+    b.ws.close();
+    expect((await a.nextOf('playerLeft')).playerId).toBe(wb.playerId);
+    a.ws.close(); gm.ws.close();
+  });
+
+  it('imports a session export as a new session, and refuses broken logs', async () => {
+    const { sessionId, gmKey } = await createSession();
+    const gm = new Client(`ws://${base}/ws`); await gm.open();
+    gm.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'gm', sessionId, gmKey });
+    await gm.nextOf('welcome');
+    const auth = gmAuthority(gm, sessionId);
+    auth.act({ type: 'addActor', actor: npc('solo', 'gm', 'pc') });
+    auth.act({ type: 'addActor', actor: npc('ganger') });
+    await new Promise((r) => setTimeout(r, 100));
+    const exp = await (await fetch(`http://${base}/api/sessions/${sessionId}/export`, { headers: { Authorization: `Bearer ${gmKey}` } })).json();
+    const post = (body: unknown) => fetch(`http://${base}/api/sessions/import`, { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+    const res = await post(exp);
+    expect(res.status).toBe(201);
+    const made = (await res.json()) as { sessionId: string; gmKey: string; joinCode: string };
+    expect(made.sessionId).not.toBe(sessionId);
+    const gm2 = new Client(`ws://${base}/ws`); await gm2.open();
+    gm2.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'gm', sessionId: made.sessionId, gmKey: made.gmKey });
+    expect(await gm2.nextOf('welcome')).toMatchObject({ headSeq: 2 });
+    // Broken chains, wrong formats and garbage are refused.
+    expect((await post({ ...exp, log: [{ ...exp.log[0], patch: 'x' }] })).status).toBe(400);
+    expect((await post({ ...exp, log: [exp.log[1]] })).status).toBe(400);
+    expect((await post({ format: 'other', version: 1, log: [] })).status).toBe(400);
+    expect((await fetch(`http://${base}/api/sessions/import`, { method: 'POST', body: '{nope' })).status).toBe(400);
+    gm.ws.close(); gm2.ws.close();
   });
 });

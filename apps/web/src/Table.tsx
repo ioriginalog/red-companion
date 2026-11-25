@@ -56,7 +56,8 @@ export function Table({ s }: { s: ClientState }) {
   const ownIds = Object.values(view.actors).filter((a) => !isGm && a.controller === me).map((a) => a.id);
   const actingId = currentId ?? (selected && mine(selected) ? selected : ownIds.length === 1 ? ownIds[0]! : null);
   const canAct = mine(actingId);
-  const acting = actingId ? view.actors[actingId] : undefined;
+  const acting0 = actingId ? view.actors[actingId] : undefined;
+  const acting = acting0 && !acting0.placeholder ? acting0 : undefined;
   const weapons: Weapon[] = acting?.weapons ?? [];
   const weapon = weapons.find((w) => w.id === weaponId) ?? weapons[0];
   const usage = enc.usage?.actorId === actingId ? enc.usage : null;
@@ -68,7 +69,7 @@ export function Table({ s }: { s: ClientState }) {
   useEffect(() => {
     if (!targetId) return;
     const t = view.actors[targetId];
-    if (targetId === actingId || !t || (acting && isFriendly(t) === isFriendly(acting))) setTargetId(null);
+    if (targetId === actingId || !t || t.placeholder || (acting && isFriendly(t) === isFriendly(acting))) setTargetId(null);
   }, [actingId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (mapMode === 'area' && !areaKind) setMapMode('move'); }, [areaKind, mapMode]);
 
@@ -185,7 +186,7 @@ export function Table({ s }: { s: ClientState }) {
 
   const pickToken = (id: string) => {
     const a = view.actors[id];
-    if (!a) return;
+    if (!a || a.placeholder) return;
     if (isGm) setFocusId(id);
     if (id === actingId) return;
     // Opposing the actor who's acting (a GM's NPC shooting a PC counts): target it.
@@ -201,7 +202,7 @@ export function Table({ s }: { s: ClientState }) {
   return (
     <div className={`table${sheetOpen ? ' sheet-open' : ''}`} ref={rootRef}>
       <TopBar c={c} onHelp={() => setHelp(true)} />
-      <InitiativeStrip c={c} onPick={(id, friendly) => (friendly ? (setSelected(id), isGm && setFocusId(id)) : setTargetId(id))} />
+      <InitiativeStrip c={c} onPick={(id, friendly) => (view.actors[id]?.placeholder ? undefined : friendly ? (setSelected(id), isGm && setFocusId(id)) : setTargetId(id))} />
 
       <main className="mapwrap">
         {view.map ? (

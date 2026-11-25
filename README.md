@@ -77,9 +77,19 @@ player ◀─projected entry── relay ◀─append─┘   (relay redacts per
 | `POST /api/sessions/:id/assets` | GM only (`Authorization: Bearer <gmKey>`). Raw WebP, PNG or JPEG body, 8 MB max, checked against its magic bytes. Content-addressed (same bytes → same URL); 200 MB per session. → `201 { url: '/u/:id/<sha256>.<ext>' }` |
 | `GET /u/:id/<sha256>.<ext>` | Uploaded image, cached immutably, `nosniff`, `default-src 'none'` |
 | `GET /api/sessions/:id/export` | GM only. Download `{ meta, log }` as JSON (no key or token hashes) |
+| `POST /api/sessions/import` | Body = an export. Creates a **new** session (fresh GM key and join code) whose log is the export's; every entry must chain from 1 and replay cleanly. Players rejoin and are reassigned. Rate-limited like session creation; 25 MB max. |
 | `WS /ws` | Protocol in `packages/session/src/protocol.ts`. `signal` messages (ping, cursor, measure) are relayed to the rest of the room, never logged, and rate-limited to about 10 per second per connection (excess is dropped). |
 
-Environment: `PORT` (set by Railway), `DATA_DIR` (volume path; omit = in-memory, including uploads), `ALLOWED_ORIGINS` (comma-separated; default `*`; gates session creation, uploads and WebSocket upgrades), `HOST` (default `::`), `WEB_DIR` (built client; defaults to `apps/web/dist`).
+Environment:
+
+| Variable | Meaning |
+|---|---|
+| `PORT` | Listen port (Railway sets it). |
+| `HOST` | Listen address, default `::` (falls back to `0.0.0.0`). |
+| `DATA_DIR` | Volume path for logs, metadata and uploads. Unset = in memory, lost on restart. |
+| `ALLOWED_ORIGINS` | Browser origins allowed to create or import sessions, upload, and open sockets. **Unset = same-origin only** (the Origin's host must match the Host header). Comma-separated list = exactly those. `*` = any (not recommended). |
+| `TRUST_PROXY_HOPS` | Reverse proxies in front of the relay. Unset or `0` = rate limits and lockouts use the socket address and ignore `X-Forwarded-For` (it's client-controlled). `N` = use the Nth `X-Forwarded-For` entry from the right. **Railway: `1`.** |
+| `WEB_DIR` | Built client to serve; default `apps/web/dist`. |
 
 ## Edge Cases the Engine Enforces
 

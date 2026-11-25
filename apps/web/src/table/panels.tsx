@@ -37,7 +37,12 @@ export function TopBar({ c, onHelp }: { c: TableCtx; onHelp: () => void }) {
       )}
       {isGm && <span className="chip hide-sm">{s.players.filter((p) => p.online).length} Online</span>}
       {!isGm && <span className="chip hide-sm"><span className={`dot ${s.gmOnline ? 'on' : 'off'}`} />GM {s.gmOnline ? 'Online' : 'Offline'}</span>}
-      <span className="chip" title={s.status === 'online' ? 'Synced' : 'Reconnecting'}><span className={`dot ${s.status === 'online' ? 'on' : 'off'}`} /><span className="hide-sm">{s.status === 'online' ? 'Synced' : s.status === 'connecting' ? 'Connecting' : 'Offline'}</span></span>
+      <span className={`chip${s.unsynced > 0 ? ' warn-chip' : ''}`} role="status" title={s.unsynced > 0 ? `${s.unsynced} ${s.unsynced === 1 ? 'action' : 'actions'} will sync when the connection returns` : s.status === 'online' ? 'Synced' : 'Reconnecting'}>
+        <span className={`dot ${s.status === 'online' && !s.unsynced ? 'on' : 'off'}`} />
+        <span className={s.unsynced > 0 ? '' : 'hide-sm'}>{s.unsynced > 0
+          ? `${s.status === 'online' ? 'Syncing' : 'Offline'}: ${s.unsynced} ${s.unsynced === 1 ? 'Action' : 'Actions'} Will Sync`
+          : s.status === 'online' ? 'Synced' : s.status === 'connecting' ? 'Connecting' : 'Offline'}</span>
+      </span>
       <button className="btn ghost icon" onClick={() => { setMuted(!muted); setM(!muted); }} aria-pressed={!muted} aria-label={muted ? 'Sound Off' : 'Sound On'} title={muted ? 'Sound Off' : 'Sound On'}>{muted ? 'Muted' : 'Sound'}</button>
       <button className="btn ghost icon" onClick={onHelp} title="Help, Shortcuts and About (?)" aria-label="Help and About">?</button>
       <button className="btn ghost hide-sm" onClick={() => client.leave()}>Leave</button>
@@ -55,7 +60,7 @@ export function InitiativeStrip({ c, onPick }: { c: TableCtx; onPick: (id: strin
       {order.map((id, i) => {
         if (id === '|') return <div className="round-div" key="div">Round {enc.round + 1}</div>;
         const a = view.actors[id];
-        if (!a) {
+        if (!a || a.placeholder) {
           // Unseen hostiles arrive as opaque placeholders: show them without leaking anything.
           return (
             <div key={`${id}-${i}`} className={`init-card unknown${i === 0 ? ' active' : ''}`} title="Unknown Contact" aria-label="Unknown Contact">

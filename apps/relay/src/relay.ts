@@ -24,7 +24,20 @@ export interface RelayOptions {
   maxLogEntries?: number;
   /** Session creations allowed per IP per hour. */
   createPerHour?: number;
-  allowedOrigins?: string[] | '*';
+  /**
+   * Which browser origins may create sessions and open sockets.
+   * 'same-origin' (default): the Origin's host must equal the Host header.
+   * '*': any. A list: exact origins.
+   */
+  allowedOrigins?: string[] | '*' | 'same-origin';
+  /**
+   * How many reverse proxies sit in front of the relay. 0 (default) = use the
+   * socket address and ignore X-Forwarded-For. N = trust the Nth
+   * X-Forwarded-For entry from the right (1 for a single edge proxy).
+   */
+  trustProxyHops?: number;
+  /** Largest session export accepted by POST /api/sessions/import. Default 25 MB. */
+  maxImportBytes?: number;
   /** Per-session image storage cap. Default 200 MB. */
   assetQuotaBytes?: number;
   /** Built web client to serve from the same origin (SPA fallback to index.html). */
@@ -105,11 +118,21 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     return true;
   }
 
+  const hops = opts.trustProxyHops ?? 0;
+  const ipOf = (req: IncomingMessage) => clientIp(req, hops);
+
   /** Browsers always send Origin cross-site; native clients may omit it. */
   function originOk(req: IncomingMessage) {
-    const allowed = opts.allowedOrigins ?? '*';
+    const allowed = opts.allowedOrigins ?? 'same-origin';
     const origin = req.headers.origin;
-    return allowed === '*' || !origin || allowed.includes(origin);
+    if (allowed === '*' || !origin) return true;
+    if (allowed === 'same-origin') {
+      let host: string;
+      try { host = new URL(origin).host; } catch { return false; }
+      const fwdHost = hops > 0 ? String(req.headers['x-forwarded-host'] ?? '').split(',')[0]?.trim() : '';
+      return host === req.headers.host || (!!fwdHost && host === fwdHost);
+    }
+    return allowed.includes(origin);
   }
 
   const webRoot = opts.webDir && existsSync(join(opts.webDir, 'index.html')) ? resolve(opts.webDir) : null;
@@ -130,7 +153,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     const immutable = rel.startsWith('assets/') && /-[A-Za-z0-9_-]{8}\./.test(rel);
     res.writeHead(200, {
       'Content-Type': MIME[ext] ?? 'application/octet-stream',
-      'Cache-Control': ext === '.html' ? 'no-cache' : immutable ? 'public, max-age=31536000, immutable' : 'public, max-age=3600',
+      'Cache-Control': ext === '.html' || rel === 'sw.js' || ext === '.webmanifest' ? 'no-cache' : immutable ? 'public, max-age=31536000, immutable' : 'public, max-age=3600',
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'no-referrer',
       ...(ext === '.html' ? { 'Content-Security-Policy': CSP } : {}),
@@ -142,9 +165,9 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
 
   function cors(req: IncomingMessage, res: ServerResponse) {
     const origin = req.headers.origin;
-    const allowed = opts.allowedOrigins ?? '*';
+    const allowed = opts.allowedOrigins ?? 'same-origin';
     if (allowed === '*') res.setHeader('Access-Control-Allow-Origin', '*');
-    else if (origin && allowed.includes(origin)) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); }
+    else if (origin && allowed !== 'same-origin' && allowed.includes(origin)) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   }
@@ -225,6 +248,51 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     }));
   }
 
+  function createSession(entries: LogEntry[]) {
+    const sessionId = randomUUID();
+    const gmKey = randomBytes(32).toString('base64url');
+    let joinCode: string;
+    do { joinCode = Array.from({ length: 6 }, () => JOIN_ALPHABET[randomInt(JOIN_ALPHABET.length)]).join(''); } while (byJoinCode.has(joinCode));
+    const meta: SessionMeta = { sessionId, gmKeyHash: sha256(gmKey), joinCode, createdAt: new Date().toISOString(), players: [] };
+    store.saveMeta(meta);
+    if (entries.length) store.appendLog(sessionId, entries);
+    indexRoom({ meta, log: entries, state: replay(sessionId, entries), gm: null, players: new Map() });
+    log(`session ${entries.length ? `imported (${entries.length} entries)` : 'created'} ${sessionId}`);
+    return { sessionId, gmKey, joinCode };
+  }
+
+  /**
+   * GM restore: a session export becomes a NEW session (fresh GM key and join
+   * code; players rejoin and are reassigned). Every entry must chain from 1,
+   * and the result must replay and project, or nothing is created.
+   */
+  async function importSession(req: IncomingMessage, res: ServerResponse) {
+    const body = await readBody(req, opts.maxImportBytes ?? 25 * 1024 * 1024).catch(() => null);
+    if (body === null) return json(res, 400, { error: 'Could not read the upload.' });
+    if (body === 'too_large') return json(res, 413, { error: 'That export is too large.' });
+    let parsed: unknown;
+    try { parsed = JSON.parse(body.toString('utf8')); } catch { return json(res, 400, { error: 'That file isn’t valid JSON.' }); }
+    const p = parsed as { format?: unknown; version?: unknown; log?: unknown };
+    if (!p || p.format !== 'nsc-session-export' || p.version !== 1 || !Array.isArray(p.log)) {
+      return json(res, 400, { error: 'That isn’t a session export from this app.' });
+    }
+    const entries = p.log as LogEntry[];
+    if (entries.length > maxLog) return json(res, 400, { error: `Sessions are capped at ${maxLog} entries.` });
+    try {
+      let s = replay('import-check', []);
+      for (let i = 0; i < entries.length; i++) {
+        const e = entries[i]!;
+        if (!e || typeof e !== 'object' || e.seq !== i + 1 || typeof e.patch !== 'object' || !Array.isArray(e.events)) throw new Error(`Entry ${i + 1} is malformed.`);
+        s = applyEntry(s, e);
+      }
+      // Must be presentable to players too, or a client would choke later.
+      projectState(s, { role: 'player', playerId: 'import-check' });
+    } catch (e) {
+      return json(res, 400, { error: e instanceof Error && /^Entry \d+/.test(e.message) ? e.message : 'The export’s log doesn’t replay cleanly.' });
+    }
+    json(res, 201, createSession(entries));
+  }
+
   const server = createServer((req, res) => {
     cors(req, res);
     const url = new URL(req.url ?? '/', 'http://x');
@@ -235,17 +303,14 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     }
     if (req.method === 'POST' && url.pathname === '/api/sessions') {
       if (!originOk(req)) { json(res, 403, { error: 'Origin not allowed.' }); return; }
-      const ip = clientIp(req);
-      if (!rateOk(ip)) { json(res, 429, { error: 'Too many sessions created. Try again later.' }); return; }
-      const sessionId = randomUUID();
-      const gmKey = randomBytes(32).toString('base64url');
-      let joinCode: string;
-      do { joinCode = Array.from({ length: 6 }, () => JOIN_ALPHABET[randomInt(JOIN_ALPHABET.length)]).join(''); } while (byJoinCode.has(joinCode));
-      const meta: SessionMeta = { sessionId, gmKeyHash: sha256(gmKey), joinCode, createdAt: new Date().toISOString(), players: [] };
-      store.saveMeta(meta);
-      indexRoom({ meta, log: [], state: replay(sessionId, []), gm: null, players: new Map() });
-      log(`session created ${sessionId}`);
-      json(res, 201, { sessionId, gmKey, joinCode });
+      if (!rateOk(ipOf(req))) { json(res, 429, { error: 'Too many sessions created. Try again later.' }); return; }
+      json(res, 201, createSession([]));
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/sessions/import') {
+      if (!originOk(req)) { json(res, 403, { error: 'Origin not allowed.' }); return; }
+      if (!rateOk(ipOf(req))) { json(res, 429, { error: 'Too many sessions created. Try again later.' }); return; }
+      void importSession(req, res);
       return;
     }
     const asset = /^\/u\/([a-f0-9-]{36})\/([^/]+)$/.exec(url.pathname);
@@ -286,10 +351,10 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     return r.meta.players.map((p) => ({ playerId: p.playerId, name: p.name, online: online.has(p.playerId) }));
   }
 
-  function broadcastEntries(r: Room & { state: SessionState }, entries: LogEntry[], statesAfter: SessionState[]) {
+  function broadcastEntries(r: Room & { state: SessionState }, entries: LogEntry[], statesAfter: SessionState[], start: SessionState) {
     for (const [ws, playerId] of r.players) {
       const viewer: Viewer = { role: 'player', playerId };
-      send(ws, { t: 'entries', entries: entries.map((e, i) => projectEntry(e, viewer, statesAfter[i]!)) });
+      send(ws, { t: 'entries', entries: entries.map((e, i) => projectEntry(e, viewer, statesAfter[i]!, undefined, i === 0 ? start : statesAfter[i - 1])) });
     }
   }
   function broadcastSnapshot(r: Room & { state: SessionState }) {
@@ -297,7 +362,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
   }
 
   wss.on('connection', (ws, req) => {
-    const c: Conn = { ws, alive: true, ip: clientIp(req), signalTokens: SIGNAL_BURST, signalAt: Date.now() };
+    const c: Conn = { ws, alive: true, ip: ipOf(req), signalTokens: SIGNAL_BURST, signalAt: Date.now() };
     const helloTimer = setTimeout(() => { if (!c.room) ws.close(4000, 'HELLO_TIMEOUT'); }, 10_000);
     ws.on('pong', () => { c.alive = true; });
     (ws as WebSocket & { conn?: Conn }).conn = c;
@@ -326,7 +391,10 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
         for (const p of r.players.keys()) send(p, { t: 'gmStatus', online: false });
       } else if (c.role === 'player' && c.playerId) {
         r.players.delete(ws);
-        if (![...r.players.values()].includes(c.playerId) && r.gm) send(r.gm, { t: 'playerLeft', playerId: c.playerId });
+        if (![...r.players.values()].includes(c.playerId)) {
+          if (r.gm) send(r.gm, { t: 'playerLeft', playerId: c.playerId });
+          for (const p of r.players.keys()) send(p, { t: 'playerLeft', playerId: c.playerId });
+        }
       }
     });
   });
@@ -368,11 +436,17 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
       r.meta.players.push(rec);
       store.saveMeta(r.meta);
     }
+    // Others in the room learn about the newcomer (names only, never tokens).
+    const joined = { playerId: rec.playerId, name: rec.name, online: true };
+    for (const [p, pid] of r.players) if (pid !== rec.playerId) send(p, { t: 'playerJoined', player: joined });
     r.players.set(c.ws, rec.playerId);
     Object.assign(c, { room: r, role: 'player', playerId: rec.playerId });
-    send(c.ws, { t: 'welcome', role: 'player', sessionId: r.meta.sessionId, playerId: rec.playerId, playerToken: token!, view: projectState(r.state, { role: 'player', playerId: rec.playerId }) });
+    send(c.ws, {
+      t: 'welcome', role: 'player', sessionId: r.meta.sessionId, playerId: rec.playerId, playerToken: token!,
+      view: projectState(r.state, { role: 'player', playerId: rec.playerId }), players: playersOf(r),
+    });
     if (r.gm) {
-      send(r.gm, { t: 'playerJoined', player: { playerId: rec.playerId, name: rec.name, online: true } });
+      send(r.gm, { t: 'playerJoined', player: joined });
       send(c.ws, { t: 'gmStatus', online: true });
     } else send(c.ws, { t: 'gmStatus', online: false });
   }
@@ -392,8 +466,9 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
         }
         store.appendLog(r.meta.sessionId, msg.entries);
         r.log.push(...msg.entries);
+        const start = r.state;
         r.state = s;
-        broadcastEntries(r, msg.entries, after);
+        broadcastEntries(r, msg.entries, after, start);
         return;
       }
       case 'truncate': {
@@ -463,8 +538,15 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
   };
 }
 
-function clientIp(req: IncomingMessage): string {
-  const fwd = req.headers['x-forwarded-for'];
-  const first = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(',')[0]?.trim();
-  return first || req.socket.remoteAddress || 'unknown';
+/**
+ * The client's address for rate limits and lockouts. X-Forwarded-For is
+ * client-controlled, so it's only read when proxies are configured, and then
+ * from the right: each trusted proxy appends the address it saw.
+ */
+export function clientIp(req: IncomingMessage, trustHops = 0): string {
+  const sock = req.socket.remoteAddress || 'unknown';
+  if (trustHops <= 0) return sock;
+  const raw = req.headers['x-forwarded-for'];
+  const list = (Array.isArray(raw) ? raw.join(',') : raw ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  return list[list.length - trustHops] ?? list[0] ?? sock;
 }
