@@ -146,7 +146,46 @@ export interface SessionState {
   // --- Track N ---
   netrun?: NetState;
   // --- end Track N ---
+  // --- Round 3 X ---
+  extras?: ExtrasState;
+  // --- end Round 3 X ---
 }
+
+// --- Round 3 X --- Grapples, Facedowns and per-Round attack history for Special Move triggers.
+export interface Grapple { holderId: string; heldId: string; chokes: number; lastChokeRound: number | null; ironGrip: boolean }
+export interface Facedown { id: string; winnerId: string; loserId: string; status: 'choosing' | 'fighting' }
+export interface RoundHit { round: number; turnIndex: number; attackerId: string; defenderId: string; with: 'ranged' | 'weapon' | 'brawling' | 'martialArts'; hit: boolean }
+export interface ExtrasState {
+  grapples: Grapple[];
+  facedowns: Facedown[];
+  /** This Round's attacks (GM only; pruned each Round). */
+  hits: RoundHit[];
+  /** Triggered Special Moves used this Turn (GM only). */
+  movesUsed: { round: number; turnIndex: number; actorId: string; moveId: string }[];
+}
+export type ExtraOp =
+  | { kind: 'grab'; actorId: string; targetId: string; choice: 'grapple' | 'takeItem'; weaponId?: string }
+  | { kind: 'escape'; actorId: string; heldId: string }
+  | { kind: 'release'; actorId: string }
+  | { kind: 'choke'; actorId: string }
+  | { kind: 'throw'; actorId: string }
+  | { kind: 'getUp'; actorId: string; form?: string }
+  | { kind: 'specialMove'; actorId: string; moveId: string; targetId?: string; aimHead?: boolean; weaponId?: string; force?: boolean; gmDv?: number }
+  | { kind: 'facedown'; actorId: string; targetId: string }
+  | { kind: 'facedownChoice'; facedownId: string; choice: 'backDown' | 'fight' }
+  | { kind: 'endFacedown'; facedownId: string }
+  | { kind: 'setReputation'; actorId: string; value: number }
+  | { kind: 'impact'; actorId: string; audience: 'single' | 'small' | 'huge' }
+  | { kind: 'backup'; actorId: string }
+  | { kind: 'haggle'; actorId: string; sellerTotal?: number }
+  | { kind: 'publish'; actorId: string; dv: number; evidence: number }
+  | { kind: 'rumor'; actorId: string; dv: number }
+  | { kind: 'maker'; actorId: string; specialty: 'upgrade' | 'fabrication' | 'invention'; skill: string; price: 'cheap' | 'costly' | 'premium' | 'expensive' | 'veryExpensive' | 'luxury' | 'superLuxury'; item: string }
+  | { kind: 'juryRig'; actorId: string; item: string }
+  | { kind: 'recruit'; actorId: string; name: string; memberKind: 'bodyguard' | 'covertOperative' | 'driver' | 'netrunner' | 'technician' }
+  | { kind: 'loyalty'; actorId: string; member: number; order?: string }
+  | { kind: 'setRoleExtras'; actorId: string; maker?: { field: number; upgrade: number; fabrication: number; invention: number }; team?: { name: string; kind: 'bodyguard' | 'covertOperative' | 'driver' | 'netrunner' | 'technician'; loyalty: number }[]; moto?: { vehicles: string[]; upgrades: string[] } };
+// --- end Round 3 X ---
 
 // --- Track U ---
 /** Shared text (optional image). audience: everyone, GM only (journal), or listed player ids. */
@@ -167,6 +206,7 @@ export interface StatePatch {
   // --- Track N ---
   netrun?: NetState;
   // --- end Track N ---
+  extras?: ExtrasState; // Round 3 X
 }
 
 export interface LogEntry {
@@ -266,8 +306,9 @@ export type Intent =
   | { type: 'setHandout'; id: string; title: string; body: string; imageUrl?: string; audience: 'all' | 'gm' | string[] }
   | { type: 'removeHandout'; id: string }
   // --- Track N ---
-  | { type: 'net'; op: NetOp };
+  | { type: 'net'; op: NetOp }
   // --- end Track N ---
+  | { type: 'extra'; op: ExtraOp }; // Round 3 X
 
 export type StatKeyName = 'INT' | 'REF' | 'DEX' | 'TECH' | 'COOL' | 'WILL' | 'LUCK' | 'MOVE' | 'BODY' | 'EMP';
 
@@ -314,6 +355,7 @@ export interface ViewState {
   // --- Track N ---
   netrun?: NetView;
   // --- end Track N ---
+  extras?: ExtrasState; // Round 3 X (players: only grapples and Facedowns between known characters)
 }
 
 export interface ProjectedEntry {
@@ -323,5 +365,5 @@ export interface ProjectedEntry {
   by: AuthorId;
   intentType: IntentType;
   events: CombatEvent[];
-  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: ProjectedPending | null; map?: TacticalMap | null; library?: Library; handouts?: Record<string, Handout>; /* Track N */ netrun?: NetView };
+  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: ProjectedPending | null; map?: TacticalMap | null; library?: Library; handouts?: Record<string, Handout>; /* Track N */ netrun?: NetView; /* Round 3 X */ extras?: ExtrasState };
 }

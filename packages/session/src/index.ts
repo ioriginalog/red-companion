@@ -10,3 +10,4 @@ export * from './handouts.js'; // Track U
 export * from './netrun-types.js';
 export { emptyNet, executeNet, parseNetOp, projectNet, validateArchitecture, validateRig } from './netrun.js';
 // --- end Track N ---
+export * from './extras.js'; // Round 3 X
