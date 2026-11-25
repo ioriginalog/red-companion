@@ -1,6 +1,7 @@
 /** GM downtime and bookkeeping: rest and healing, therapy, installing cyberware with a rolled Humanity Loss. */
 import { useState } from 'react';
-import { EXAMPLE_CYBERWARE, THERAPY, type Care } from '@cprc/rules-core';
+import { catalogToItem, THERAPY, type Care } from '@cprc/rules-core';
+import { cyberwareGroups, usePacks } from '../data/catalog.js';
 import type { SystemsCtx } from './SystemsSheet.js';
 import './systems.css';
 
@@ -11,11 +12,14 @@ export function GmSystemsPanel({ c }: { c: SystemsCtx }) {
   const [who, setWho] = useState<string>(actors[0]?.id ?? '');
   const [kind, setKind] = useState<'standard' | 'extreme'>('standard');
   const [base, setBase] = useState(12);
-  const [item, setItem] = useState(EXAMPLE_CYBERWARE[0]!.item.name);
+  const groups = cyberwareGroups(usePacks());
+  const [item, setItem] = useState('0::0');
+  const [lossMode, setLossMode] = useState<'roll' | 'fixed' | 'none'>('roll');
   if (!c.isGm) return null;
   const target = c.view.actors[who]?.combatant;
   const fighting = c.view.encounter.active;
-  const ex = EXAMPLE_CYBERWARE.find((x) => x.item.name === item)!;
+  const [gi, ii] = item.split('::').map(Number);
+  const entry = groups[gi!]?.items[ii!] ?? groups[0]!.items[0]!;
   return (
     <section className="card">
       <div className="ttl">Downtime and Upkeep</div>
@@ -48,14 +52,23 @@ export function GmSystemsPanel({ c }: { c: SystemsCtx }) {
 
         <div className="row" style={{ flexWrap: 'wrap', marginTop: 6 }}>
           <select value={item} onChange={(e) => setItem(e.target.value)} aria-label="Cyberware">
-            {EXAMPLE_CYBERWARE.map((x) => <option key={x.item.name} value={x.item.name}>{x.item.name} ({x.hlDice.count}d6{x.hlDice.bonus ? ` + ${x.hlDice.bonus}` : ''})</option>)}
+            {groups.map((g, a) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.items.map((x, b) => <option key={`${a}-${b}`} value={`${a}::${b}`}>{x.name} ({x.hlDice}{x.hlFixed !== undefined ? `, Fixed ${x.hlFixed}` : ''})</option>)}
+              </optgroup>
+            ))}
+          </select>
+          <select value={lossMode} onChange={(e) => setLossMode(e.target.value as 'roll' | 'fixed' | 'none')} aria-label="Humanity Loss">
+            <option value="roll">Roll Humanity Loss</option>
+            <option value="fixed">Take the Fixed Value</option>
+            <option value="none">No Humanity Loss (GM Option)</option>
           </select>
           <button className="btn" disabled={!who} onClick={() => c.act({
-            type: 'installCyberware', actorId: who, rollLoss: ex.hlDice,
-            item: { ...ex.item, id: `cw-${Math.random().toString(36).slice(2, 10)}`, humanityLoss: 0, effects: ex.item.effects.map((e) => ({ ...e })) },
-          })}>Install and Roll Humanity Loss</button>
+            type: 'installCyberware', actorId: who, lossMode,
+            item: catalogToItem(entry, `cw-${Math.random().toString(36).slice(2, 10)}`),
+          })}>Install</button>
         </div>
-        <div className="note">Example Humanity Loss dice; use the Characters tab for custom items.</div>
+        <div className="note">Installs after character creation roll their Humanity Loss; each item with a loss also lowers maximum Humanity by 2 (borgware 4). Import your book’s catalog under Characters → Rules Packs.</div>
       </div>
     </section>
   );

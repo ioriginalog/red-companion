@@ -16,9 +16,9 @@ export function narrateSystems(e: CombatEvent, name: (id: string) => string): Sy
     case 'humanityChanged':
       return { text: `${name(e.combatantId)}’s Humanity ${e.to < e.from ? 'drops' : 'rises'} to ${e.to}${e.empTo !== e.empFrom ? ` (EMP ${e.empTo})` : ''}.`, tone: e.to < e.from ? 'bad' : 'good' };
     case 'cyberwareInstalled':
-      return { text: `${name(e.combatantId)} has ${e.name} installed (Humanity Loss ${e.humanityLoss}).`, tone: 'info' };
+      return { text: `${name(e.combatantId)} has ${e.name} installed (Humanity Loss ${e.humanityLoss}${e.rolled ? `, rolled ${e.rolled.join(' + ')}` : e.lossMode === 'fixed' ? ', fixed' : e.lossMode === 'none' ? ', waived' : ''}${e.maxTo !== undefined && e.maxFrom !== undefined && e.maxTo !== e.maxFrom ? `; maximum Humanity ${e.maxTo}` : ''}).`, tone: 'info' };
     case 'cyberwareRemoved':
-      return { text: `${name(e.combatantId)} has ${e.name} removed.`, tone: 'info' };
+      return { text: `${name(e.combatantId)} has ${e.name} removed${e.maxTo !== undefined && e.maxFrom !== undefined && e.maxTo !== e.maxFrom ? ` (maximum Humanity back to ${e.maxTo})` : ''}.`, tone: 'info' };
     case 'therapyResolved':
       return { text: e.success ? `Therapy works: ${name(e.combatantId)} recovers ${e.recovered} Humanity.` : `Therapy doesn’t take this week (${e.check.total} vs DV ${e.dv}).`, tone: e.success ? 'good' : 'miss' };
     case 'awarenessSet':
@@ -38,7 +38,7 @@ export function narrateSystems(e: CombatEvent, name: (id: string) => string): Sy
     case 'ammoLoaded':
       return { text: `${name(e.combatantId)} loads ${ammoName(e.ammoType)} ammunition.`, tone: 'info' };
     case 'smartAmmoRetry':
-      return { text: `Smart rounds track: ${e.total} vs DV ${e.dv}. ${e.hit ? 'Hit.' : 'Miss.'}`, tone: e.hit ? 'hit' : 'miss' };
+      return { text: `${e.kind === 'improvedSmart' ? 'Improved Smart' : 'Smart'} rounds track: ${e.total} vs ${e.defense ? 'a fresh dodge of' : 'DV'} ${e.dv}. ${e.hit ? 'Hit.' : 'Miss.'}`, tone: e.hit ? 'hit' : 'miss' };
     case 'damageDeflected':
       return { text: `${name(e.targetId)} deflects ${e.amount} damage.`, tone: 'good' };
     case 'spotWeakness':

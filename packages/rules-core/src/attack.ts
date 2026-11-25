@@ -8,7 +8,7 @@
  * as its own tap, which is how tables actually play.
  */
 import { makeCheck, beats, rollD10 } from './checks.js';
-import { applyAmmo, SMART_MISS_WINDOW, SMART_SECOND_TRY_BASE } from './ammo.js';
+import { applyAmmo, smartAttackMods, smartRetry } from './ammo.js';
 import {
   AIMED_SHOT_PENALTY, AUTOFIRE_AMMO, AUTOFIRE_DV, DODGE_REF_THRESHOLD, RANGE_BANDS, RANGE_BAND_LABELS, RANGE_DV,
   WEAPON_TYPES, unarmedDamageDice,
@@ -147,7 +147,7 @@ export function resolveRangedAttack(input: RangedAttackInput, dice: Dice): Attac
 
   const attack = withFumbleRecovery(attacker, makeCheck(
     [{ label: 'REF', value: effectiveStat(attacker, 'REF') }, { label: skill, value: skillLevel(attacker, skill) }],
-    [...standingModifiers(attacker, 'rangedAttack'), ...aimMods(aimTarget), ...(input.situational ?? [])],
+    [...standingModifiers(attacker, 'rangedAttack'), ...aimMods(aimTarget), ...smartAttackMods(attacker, weapon, aimTarget) /* Round 3 D */, ...(input.situational ?? [])],
     dice,
   ));
 
@@ -168,16 +168,13 @@ export function resolveRangedAttack(input: RangedAttackInput, dice: Dice): Attac
     },
     { type: 'ammoSpent', visibility: 'public', combatantId: attacker.id, weaponId: weapon.id, rounds: ammo },
   ];
-  // --- Track K --- Smart ammo: a single shot missing the range DV by 4 or less tracks for a second try at 10 + 1d10.
-  // @interpretation Only against the range DV (not a dodge), and only with a smartlink/Targeting Scope.
-  // Improved Smart (Edgerunners 2070s option; the session gates it): reroll the whole attack once. @interpretation
-  const smart = weapon.ammoType === 'smart' || weapon.ammoType === 'improvedSmart';
-  if (!hit && smart && mode === 'single' && !defense && attacker.mods?.smartLink && defenseValue - attack.total <= SMART_MISS_WINDOW) {
-    const roll = rollD10(dice);
-    const total = weapon.ammoType === 'improvedSmart' ? attack.total - attack.roll.value + roll.value : SMART_SECOND_TRY_BASE + roll.value;
-    hit = beats(total, defenseValue);
-    events.push({ type: 'smartAmmoRetry', visibility: 'public', attackerId: attacker.id, defenderId: defender.id, roll, total, dv: defenseValue, hit });
-  }
+  // --- Round 3 D --- Smart / Improved Smart ammo second attempt (rules in ammo.ts).
+  const retry = hit ? null : smartRetry({
+    attacker, defender, weapon, mode, attack, defense, defenseValue,
+    redodge: () => evasionCheck(defender, dice),
+  }, dice);
+  if (retry) { hit = retry.hit; events.push(...retry.events); }
+  // --- end Round 3 D ---
 
   let damage: DamageSpec | undefined;
   if (hit) {
@@ -329,7 +326,7 @@ export function previewRangedAttack(input: Omit<RangedAttackInput, 'defenderDodg
     : null;
   return {
     base: effectiveStat(attacker, 'REF') + skillLevel(attacker, skill),
-    modifiers: [...standingModifiers(attacker, 'rangedAttack'), ...aimMods(aimTarget), ...(input.situational ?? [])],
+    modifiers: [...standingModifiers(attacker, 'rangedAttack'), ...aimMods(aimTarget), ...smartAttackMods(attacker, weapon, aimTarget) /* Round 3 D */, ...(input.situational ?? [])],
     dv,
     ammo,
     dodgeBase,

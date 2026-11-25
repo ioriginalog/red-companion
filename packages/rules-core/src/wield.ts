@@ -1,7 +1,9 @@
 /**
  * Hands needed per weapon type, and what arm injuries take away.
- * @interpretation Hand counts follow common table usage (one-handed: pistols,
- * SMGs, Heavy SMGs, light/medium/heavy melee; two-handed: the rest). A Broken
+ * Hands per type (user ruling 2026-11-25, status Secondary): one-handed =
+ * Medium/Heavy/Very Heavy Pistol, SMG, Heavy SMG, Light and Medium Melee, thrown
+ * grenades; two-handed = everything else (Heavy Melee included).
+ * @interpretation A Broken
  * Arm, Dismembered Arm or Dismembered Hand each cost one hand (assumed to be
  * different arms). A Quick-Fixed injury no longer restricts.
  */
@@ -11,7 +13,7 @@ import type { Combatant, Weapon, WeaponType } from './types.js';
 export const HANDS: Record<WeaponType, 1 | 2> = {
   mediumPistol: 1, heavyPistol: 1, veryHeavyPistol: 1, smg: 1, heavySmg: 1,
   shotgun: 2, assaultRifle: 2, sniperRifle: 2, bowsAndCrossbows: 2, grenadeLauncher: 2, rocketLauncher: 2,
-  lightMelee: 1, mediumMelee: 1, heavyMelee: 1, veryHeavyMelee: 2,
+  lightMelee: 1, mediumMelee: 1, heavyMelee: 2, veryHeavyMelee: 2, grenade: 1,
 };
 
 const ARM_INJURIES = new Set(['brokenArm', 'dismemberedArm', 'dismemberedHand']);

@@ -252,7 +252,9 @@ export type Intent =
   | { type: 'extinguish'; actorId: string }
   | { type: 'setAwareness'; actorId: string; allocation: Partial<Record<AwarenessKey, number>> }
   /** GM. `rollLoss` rolls that many d6 (+ bonus) for Humanity Loss instead of item.humanityLoss. */
-  | { type: 'installCyberware'; actorId: string; item: CyberwareItem; rollLoss?: { count: number; bonus: number } }
+  | { type: 'installCyberware'; actorId: string; item: CyberwareItem; rollLoss?: { count: number; bonus: number }
+    // --- Round 3 D --- roll the item's hlDice, take its fixed value, or no loss (GM option).
+    lossMode?: 'roll' | 'fixed' | 'none' }
   | { type: 'removeCyberware'; actorId: string; itemId: string }
   /** GM. The therapist's STAT + skill total; DV and eligibility from the therapy kind. */
   | { type: 'therapy'; actorId: string; kind: 'standard' | 'extreme'; therapistBase: number }
