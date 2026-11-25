@@ -166,6 +166,8 @@ export function executeSystems(state: SessionState, intent: SystemsIntent, by: V
       need(typeof intent.ammoType === 'string', 'Pick an ammunition type.');
       const problem = ammoProblem(w, intent.ammoType);
       need(!problem, problem ?? '');
+      // 2070s ammunition only when the GM has turned on the Edgerunners 2070s options (Track N's toggle).
+      need(!AMMO_TYPES.find((t) => t.id === intent.ammoType)?.era2070s || !!state.netrun?.quickhacks2070s, 'That ammunition needs the 2070s options turned on.');
       // Changing ammunition means reloading: an Action in combat.
       const encounter = checkOtherAction(state, by, a);
       const loaded: Weapon = { ...w, ammoType: intent.ammoType, ...(w.ammo ? { ammo: { ...w.ammo, loaded: w.ammo.capacity } } : {}) };

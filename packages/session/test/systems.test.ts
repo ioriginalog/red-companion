@@ -271,3 +271,19 @@ describe('treatment, rest and arm injuries', () => {
     expect(c.send({ type: 'rest', days: 1, care: 'home' }, GM)).toMatchObject({ code: 'INVALID' });
   });
 });
+
+describe('2070s and Netrunning bridges', () => {
+  it('Improved Smart ammo needs the 2070s options', () => {
+    const t = setup();
+    expect(t.send({ type: 'setAmmoType', actorId: 'solo', weaponId: 'pistol', ammoType: 'improvedSmart' }, GM)).toMatchObject({ code: 'INVALID' });
+    expect(t.send({ type: 'net', op: { op: 'setOptions', quickhacks2070s: true } }, GM).ok).toBe(true);
+    expect(t.send({ type: 'setAmmoType', actorId: 'solo', weaponId: 'pistol', ammoType: 'improvedSmart' }, GM).ok).toBe(true);
+  });
+  it('the Netrunner Role rank is the Interface the NET uses', async () => {
+    const { withRoleInterface } = await import('../src/netrun.js');
+    const rig = { interface: 2, deckName: 'Deck', slots: 7, programs: [] };
+    const runner = actor('kes', 'pc', 'p1', {}, { role: { id: 'netrunner', rank: 6 } });
+    expect(withRoleInterface(runner, rig).interface).toBe(6);
+    expect(withRoleInterface(actor('x', 'pc', 'p1'), rig).interface).toBe(2);
+  });
+});

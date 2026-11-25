@@ -30,6 +30,9 @@ export function applyEntry(state: SessionState, entry: LogEntry): SessionState {
     pending: 'pending' in entry.patch ? (entry.patch.pending ?? null) : state.pending,
     map: 'map' in entry.patch ? (entry.patch.map ?? null) : state.map,
     library: entry.patch.library ?? state.library,
+    // --- Track N ---
+    ...(entry.patch.netrun ? { netrun: entry.patch.netrun } : {}),
+    // --- end Track N ---
   };
 }
 

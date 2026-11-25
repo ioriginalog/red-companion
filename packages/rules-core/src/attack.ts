@@ -170,9 +170,11 @@ export function resolveRangedAttack(input: RangedAttackInput, dice: Dice): Attac
   ];
   // --- Track K --- Smart ammo: a single shot missing the range DV by 4 or less tracks for a second try at 10 + 1d10.
   // @interpretation Only against the range DV (not a dodge), and only with a smartlink/Targeting Scope.
-  if (!hit && mode === 'single' && !defense && weapon.ammoType === 'smart' && attacker.mods?.smartLink && defenseValue - attack.total <= SMART_MISS_WINDOW) {
+  // Improved Smart (Edgerunners 2070s option; the session gates it): reroll the whole attack once. @interpretation
+  const smart = weapon.ammoType === 'smart' || weapon.ammoType === 'improvedSmart';
+  if (!hit && smart && mode === 'single' && !defense && attacker.mods?.smartLink && defenseValue - attack.total <= SMART_MISS_WINDOW) {
     const roll = rollD10(dice);
-    const total = SMART_SECOND_TRY_BASE + roll.value;
+    const total = weapon.ammoType === 'improvedSmart' ? attack.total - attack.roll.value + roll.value : SMART_SECOND_TRY_BASE + roll.value;
     hit = beats(total, defenseValue);
     events.push({ type: 'smartAmmoRetry', visibility: 'public', attackerId: attacker.id, defenderId: defender.id, roll, total, dv: defenseValue, hit });
   }

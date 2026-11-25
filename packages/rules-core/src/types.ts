@@ -143,7 +143,7 @@ export interface CombatMods {
   healingMultiplier?: number;
   ignoreSeriouslyWounded?: boolean;
 }
-export type AmmoTypeId = 'basic' | 'armorPiercing' | 'expansive' | 'incendiary' | 'rubber' | 'smart'
+export type AmmoTypeId = 'basic' | 'armorPiercing' | 'expansive' | 'incendiary' | 'rubber' | 'smart' | 'improvedSmart'
   | 'emp' | 'smoke' | 'teargas' | 'flashbang' | 'biotoxin' | 'poison' | 'sleep';
 // --- end Track K ---
 

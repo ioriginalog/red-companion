@@ -14,6 +14,8 @@ export interface AmmoTypeDef {
   automated: boolean;
   /** Only grenades (launchers / thrown). */
   grenadeOnly?: boolean;
+  /** Edgerunners Mission Kit 2070s option: only when the session's 2070s toggle is on. */
+  era2070s?: boolean;
 }
 
 export const AMMO_TYPES: AmmoTypeDef[] = [
@@ -23,6 +25,7 @@ export const AMMO_TYPES: AmmoTypeDef[] = [
   { id: 'incendiary', name: 'Incendiary', summary: 'If damage gets through armor, the target is On Fire.', automated: true },
   { id: 'rubber', name: 'Rubber', summary: 'Can’t drop a target below 1 HP; no Critical Injuries; no ablation.', automated: true },
   { id: 'smart', name: 'Smart', summary: 'With a Targeting Scope or smartgun link, a single shot that misses by 4 or less gets a second try at 10 + 1d10.', automated: true },
+  { id: 'improvedSmart', name: 'Improved Smart', summary: '2070s option: with a smartlink, a single shot that misses by 4 or less rerolls the whole attack once.', automated: true, era2070s: true },
   { id: 'poison', name: 'Poison', summary: 'Target resists or takes direct HP damage; the GM resolves.', automated: false },
   { id: 'sleep', name: 'Sleep', summary: 'Target resists or falls unconscious; the GM resolves.', automated: false },
   { id: 'emp', name: 'EMP', summary: 'Area: cyberware may shut down for a while; the GM resolves.', automated: false, grenadeOnly: true },
@@ -48,7 +51,7 @@ export function ammoProblem(weapon: Weapon, ammo: AmmoTypeId): string | null {
   if (!def) return 'Unknown ammunition type.';
   if (WEAPON_TYPES[weapon.type].melee) return `${weapon.name} doesn’t take ammunition.`;
   if (def.grenadeOnly && !isLauncher(weapon)) return `${def.name} comes only as grenades.`;
-  if (ammo === 'smart' && isLauncher(weapon)) return 'Smart ammunition is for firearms.';
+  if ((ammo === 'smart' || ammo === 'improvedSmart') && isLauncher(weapon)) return 'Smart ammunition is for firearms.';
   return null;
 }
 

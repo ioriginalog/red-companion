@@ -10,6 +10,9 @@
  * Clients never re-run the rules engine; they apply patches. That keeps replay
  * trivially deterministic and lets the relay redact patches per viewer.
  */
+// --- Track N ---
+import type { NetOp, NetState, NetView } from './netrun-types.js';
+// --- end Track N ---
 import type { AimTarget, AmmoTypeId, AwarenessKey, Care, Cell, CheckResult, CombatEvent, Combatant, CoverMaterialId, CyberwareItem, DamageSpec, GridMap, Modifier, Weapon, WoundState } from '@cprc/rules-core';
 
 export type Viewer = { role: 'gm' } | { role: 'player'; playerId: string };
@@ -135,6 +138,9 @@ export interface SessionState {
   map: TacticalMap | null;
   /** GM prep: saved maps (scenes) and NPC templates. Stripped from player views. */
   library: Library;
+  // --- Track N ---
+  netrun?: NetState;
+  // --- end Track N ---
 }
 
 export interface StatePatch {
@@ -147,6 +153,9 @@ export interface StatePatch {
   map?: TacticalMap | null;
   /** Replace the whole library. GM only; never projected. */
   library?: Library;
+  // --- Track N ---
+  netrun?: NetState;
+  // --- end Track N ---
 }
 
 export interface LogEntry {
@@ -240,8 +249,11 @@ export type Intent =
   | { type: 'therapy'; actorId: string; kind: 'standard' | 'extreme'; therapistBase: number }
   | { type: 'treatInjury'; medicId: string; targetId: string; injuryIndex: number; kind: 'quickFix' | 'treatment'; skill: string }
   /** GM. Advance downtime: natural healing for these actors (default: everyone not dead). */
-  | { type: 'rest'; days: number; care: Care; actorIds?: string[] };
+  | { type: 'rest'; days: number; care: Care; actorIds?: string[] }
   // --- end Track K ---
+  // --- Track N ---
+  | { type: 'net'; op: NetOp };
+  // --- end Track N ---
 
 export type StatKeyName = 'INT' | 'REF' | 'DEX' | 'TECH' | 'COOL' | 'WILL' | 'LUCK' | 'MOVE' | 'BODY' | 'EMP';
 
@@ -283,6 +295,9 @@ export interface ViewState {
   map: TacticalMap | null;
   /** GM view only. */
   library?: Library;
+  // --- Track N ---
+  netrun?: NetView;
+  // --- end Track N ---
 }
 
 export interface ProjectedEntry {
@@ -292,5 +307,5 @@ export interface ProjectedEntry {
   by: AuthorId;
   intentType: IntentType;
   events: CombatEvent[];
-  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: ProjectedPending | null; map?: TacticalMap | null; library?: Library };
+  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: ProjectedPending | null; map?: TacticalMap | null; library?: Library; /* Track N */ netrun?: NetView };
 }
