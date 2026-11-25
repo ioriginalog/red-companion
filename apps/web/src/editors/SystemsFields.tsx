@@ -149,7 +149,7 @@ export function CyberwareField({ value, emp, onChange }: { value: CyberwareItem[
         </select>
         <button className="btn" onClick={add}>Add Cyberware</button>
       </div>
-      <div className="note" style={{ marginTop: 6 }}>Example items use average Humanity Loss; set each item’s loss from your book. To roll the loss at the table, install it from the Systems panel instead.</div>
+      <div className="note" style={{ marginTop: 6 }}>Example items use average Humanity Loss; set each item’s loss from your book. To roll the loss at the table, install it from Downtime and Upkeep in the Table’s Scene tab.</div>
     </section>
   );
 }

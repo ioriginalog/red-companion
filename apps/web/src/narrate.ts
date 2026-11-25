@@ -1,5 +1,6 @@
 /** Combat log lines. Sentence case (Chicago); names come from the viewer's projection. */
 import { getInjury, type CheckResult, type CombatEvent } from '@cprc/rules-core';
+import { narrateSystems } from './systems/narrate.js'; // Track K
 
 export type Tone = 'hit' | 'miss' | 'info' | 'bad' | 'good' | 'chat' | 'roll';
 export interface Line { text: string; tone: Tone }
@@ -16,6 +17,8 @@ export function injuryName(id: string): string {
 
 /** `who` names a viewer id ('gm' or a player id); defaults to 'GM'/'A player'. */
 export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: string) => string = (b) => (b === 'gm' ? 'GM' : 'A player')): Line | null {
+  const k = narrateSystems(e, name); // Track K events
+  if (k !== undefined) return k;
   switch (e.type) {
     case 'initiativeRolled':
       return { text: `Initiative: ${e.entries.map((x) => name(x.combatantId)).join(', ')}.`, tone: 'info' };

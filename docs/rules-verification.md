@@ -48,9 +48,9 @@ Status key: **Easy Mode** = matches the free Easy Mode PDF · **Errata** = match
 | Melee and Stabilize reach | Adjacent square (2 m/yds). | Secondary |
 | Fog of war | The party (PCs and allied NPCs) shares one field of view. Hostile tokens outside it are hidden from players; names stay hidden until first seen. Vision is 360°. | Interpretation |
 | Facing | None. RED has no facing rules; cones in the UI are for targeting and watches only. | Secondary |
-| Explosive blast | 10 × 10 m/yds = 5 × 5 squares centered on the target square. Caught if in the blast with line of sight to the center square; anything opaque in between protects (no cover HP on the map, so cover survives). A miss scatters; the GM places it (Core has no scatter table). | Interpretation |
+| Explosive blast | 10 × 10 m/yds = 5 × 5 squares centered on the target square (which may be a cover square). Walls always shield. Cover between the center and a target protects only if it survives: the toughest intact cover on the line must have more HP than the damage. Every cover square the blast reaches takes the damage. A miss scatters; the GM places it (Core has no scatter table). | Interpretation |
 | Shotgun Shells on the grid | Every token (friend or foe) within 3 squares (6 m/yds) in a 90° cone toward the aimed square, in the shooter's line of sight. | Interpretation |
-| Area dodges | Everyone in the area who can dodge (REF 8+) does, automatically: in the engine a failed dodge costs nothing. | Interpretation |
+| Area dodges | Each target who can dodge (REF 8+) chooses before damage is rolled; the GM can resolve everyone left as dodging. | Secondary |
 | Thrown grenades | DEX + Athletics vs the Grenade Launcher row; 6d6 unless the item sets its own damage dice; one grenade per throw. | Secondary |
 | Suppressive Fire on the grid | Opposing tokens (not neutrals) within 25 m/yds (12 squares) and the weapon's Autofire range, in the shooter's line of sight. Needs 10 rounds; takes the Action. | Secondary |
 | Area attacks and the Turn | Every area attack and Suppressive Fire takes the whole Action. | Secondary |
@@ -87,6 +87,26 @@ Built from community references (not the Core Rulebook). Starter Programs and Bl
 
 Not built for Netrunning: rival netrunners fighting each other, Demon turns (GM runs them), Relentless ICE following the runner, the Edgerunners Mission Kit quickhack tables, and Improved Smart Ammo (a weapon option, not NET).
 
+## Systems (2026-11, Track K)
+
+| Rule | Engine Behavior | Status |
+|---|---|---|
+| Cover HP | Per 2 × 2 m/yd square, by material: Thick Steel 50, Thick Stone 40, Thick Bulletproof Glass 30, Thin Steel 25, Thick Concrete 25, Thin Stone 20, Thick Wood 20, Thin Bulletproof Glass 15, Thick Plaster/Foam/Plastic 15, Thin Concrete 10, Thin Wood 5. Excess damage is lost. | Secondary |
+| Attacking cover | Ranged: REF + skill + 1d10 vs the range DV; damage dice go to the cover's HP. Melee automatically hits an adjacent cover square. Destroyed cover becomes open ground. Unmarked cover squares are Thick Wood. | Interpretation |
+| Ammunition | Armor-Piercing ablates 2. Rubber: no Critical Injuries, no ablation, can't drop a target below 1 HP. Incendiary: On Fire when damage gets through. Smart (needs a smartlink or Targeting Scope): a single shot missing the range DV by 4 or less gets a second try at 10 + 1d10. Expansive, Poison, Sleep and grenade-only types (EMP, Smoke, Teargas, Flashbang, Biotoxin) are GM prompts. Changing ammo is a reload. | Secondary |
+| On Fire | Incendiary: 2 HP at the start of each of the target's Turns, straight to HP, until an Action puts it out. | Interpretation (armor vs fire) |
+| Improved Smart (2070s) | Behind the Edgerunners 2070s toggle. With a smartlink, a near miss (4 or less) rerolls the whole attack once. Built from public summaries; confirm from the kit. | Interpretation |
+| Launchers | Grenade and rocket launchers can't fire directly at a person or take Aimed Shots; they're area attacks. | Secondary |
+| Arm injuries | Broken Arm, Dismembered Arm and Dismembered Hand each cost a hand; two-handed weapons need both. One-handed: pistols, SMGs, Heavy SMGs, light/medium/heavy melee. A Quick Fix restores use. | Interpretation (hand counts, Heavy SMG) |
+| Humanity | Starts at EMP × 10. Cyberware costs its Humanity Loss (rolled or set). EMP = floor(Humanity ÷ 10). At 0 or below: cyberpsychosis, the character goes to the GM. Removing cyberware restores half its loss, rounded down. | Secondary |
+| Therapy | Standard: DV 15, needs Humanity 40+. Extreme: DV 17, below 40. A week each; success restores 2d6, never above the maximum. | Secondary |
+| Solo Combat Awareness | Points ≤ rank among: Damage Deflection (2/4/6/8/10 → reduce the first damage each Round by 1–5), Fumble Recovery (4), Initiative Reaction (1 per +1), Precision Attack (3/6/9 → +1/+2/+3), Spot Weakness (1 per +1 damage before armor, first hit each Round), Threat Detection (1 per +1 Perception). Re-allocating mid-fight costs an Action. | Secondary |
+| Damage Deflection timing | Reduces HP damage after armor; armor stopping everything doesn't use it up. Single-target attacks only. | Interpretation |
+| Medtech Medicine | One point per rank. Surgery: 2 Surgery skill per point (max 10). Pharmaceuticals and Cryosystem: 1 Medical Tech each (max 5 points each). | Secondary |
+| Netrunner Interface | Role rank = Interface rank. The NET engine reads the Role; a rig's own Interface is the fallback for characters without the Netrunner Role. | Secondary |
+| Natural healing | Home: BODY HP per day. Hospital bed or Enhanced Antibodies: BODY × 2 (the best applies, no stacking). Street: none. Mortally Wounded must be Stabilized first. | Secondary (stacking is Interpretation) |
+| Critical Injury treatment | Quick Fix and Treatment use the injury table's skills and DVs (TECH + skill + 1d10, beat the DV). A Quick Fix that the table marks permanent removes the injury. | Easy Mode (body table) |
+
 ## Interpretations the GM Should Confirm
 
 1. **Armor penalties don't stack.** Worst single penalty across all worn pieces.
@@ -106,4 +126,4 @@ Not built for Netrunning: rival netrunners fighting each other, Demon turns (GM 
 
 ## Not Built Yet
 
-Martial Arts special moves, Grab/Choke/Throw, shields, human shields, ammo types (AP, incendiary, etc.), weapon quality, cyberware effects, Solo/Medtech Role Abilities, Facedowns, vehicles, re-bleed automation for Broken Ribs/Foreign Object, Spinal Injury lost-Action tracking.
+Martial Arts special moves, Grab/Choke/Throw, shields, human shields, weapon quality, the other eight Role Abilities' mechanics (rank and notes only), drug effects, Facedowns, vehicles, re-bleed automation for Broken Ribs/Foreign Object, Spinal Injury lost-Action tracking.

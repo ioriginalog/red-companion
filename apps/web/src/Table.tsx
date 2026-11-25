@@ -9,6 +9,7 @@ import type { TableCtx } from './table/ctx.js';
 import { HelpOverlay, InitiativeStrip, Prompts, TopBar } from './table/panels.js';
 import { CombatPanel, fireBlocked } from './table/CombatPanel.js';
 import { SheetPanel } from './table/SheetPanel.js';
+import { AreaDodgePrompt, GmSystemsPanel } from './systems/index.js'; // Track K
 import { ChatPanel } from './table/ChatPanel.js';
 import { Inspector, ScenePanel } from './table/GmPanels.js';
 import { NotesPanel } from './table/NotesPanel.js';
@@ -314,6 +315,7 @@ export function Table({ s }: { s: ClientState }) {
         </div>
         <div className="side-body">
           <Prompts c={c} />
+          <AreaDodgePrompt view={view} isGm={isGm} mine={(id) => c.mine(id)} name={c.name} act={c.act} />
           {tab === 'combat' && (
             <>
               {isGm && focusId && view.actors[focusId] && <Inspector c={c} id={focusId} onClose={() => setFocusId(null)} onTarget={setTargetId} />}
@@ -330,6 +332,7 @@ export function Table({ s }: { s: ClientState }) {
           {tab === 'net' && showNet && <NetPanel view={view} actorId={netActorId} isGm={isGm} canAct={mine(netActorId)} act={(i) => client.act(i)} feed={s.feed} />}
           {tab === 'chat' && <ChatPanel c={c} rollerId={isGm ? (focusId ?? actingId) : (actingId ?? ownIds[0] ?? null)} onUnreadReset={() => setUnread(0)} />}
           {tab === 'scene' && isGm && <ScenePanel c={c} mapMode={mapMode} setMapMode={setMapMode} shareCursor={gmCursor} setShareCursor={(v) => { setGmCursor(v); if (!v) client.signal({ kind: 'cursor', at: null }); }} onFocus={(id) => { setFocusId(id); setTab('combat'); }} />}
+          {tab === 'scene' && isGm && <GmSystemsPanel c={c} />}
         </div>
       </aside>
 

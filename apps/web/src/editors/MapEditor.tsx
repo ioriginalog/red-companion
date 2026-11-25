@@ -222,14 +222,14 @@ export function MapEditor({ s }: { s: ClientState }) {
                 ))}
                 <span className="sep" />
                 {tool === 'brush' && (
-                  <label className="zoom lbl">Size
+                  <label className="ed-ctl lbl">Size
                     <select value={size} onChange={(e) => setSize(Number(e.target.value))} aria-label="Brush size">{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n} × {n}</option>)}</select>
                   </label>
                 )}
-                {tool === 'rect' && <label className="zoom lbl"><input type="checkbox" checked={outline} onChange={(e) => setOutline(e.target.checked)} />Outline Only</label>}
+                {tool === 'rect' && <label className="ed-ctl lbl"><input type="checkbox" checked={outline} onChange={(e) => setOutline(e.target.checked)} />Outline Only</label>}
                 {terrain === 'c' && (
                   <>
-                    <label className="zoom lbl">New Cover
+                    <label className="ed-ctl lbl">New Cover
                       <select value={coverMat} onChange={(e) => setCoverMat(e.target.value as CoverMaterialId)} aria-label="Material for new cover squares">
                         {COVER_MATERIALS.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.hp} HP)</option>)}
                       </select>
@@ -242,7 +242,7 @@ export function MapEditor({ s }: { s: ClientState }) {
                 <button className="btn sm" disabled={!hist.past.length} onClick={() => setHist(undo)} title="Undo (Ctrl+Z)">Undo</button>
                 <button className="btn sm" disabled={!hist.future.length} onClick={() => setHist(redo)} title="Redo (Ctrl+Shift+Z)">Redo</button>
                 <span className="sep" />
-                <label className="zoom lbl">Zoom
+                <label className="ed-ctl lbl">Zoom
                   <input type="range" min={0.2} max={2} step={0.05} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} aria-label="Zoom" />
                   <span className="mono">{Math.round(zoom * 100)}%</span>
                 </label>

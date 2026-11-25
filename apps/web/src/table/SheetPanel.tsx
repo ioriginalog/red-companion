@@ -8,6 +8,7 @@ import { STATS } from './commands.js';
 import { linkedStat } from './skills.js';
 import { ALLEGIANCE, WOUND, type TableCtx } from './ctx.js';
 import { Portrait } from './panels.js';
+import { SystemsSheet } from '../systems/index.js'; // Track K
 
 const STAT_NAMES: Record<StatKeyName, string> = {
   INT: 'Intelligence', REF: 'Reflexes', DEX: 'Dexterity', TECH: 'Technique', COOL: 'Cool', WILL: 'Willpower',
@@ -158,6 +159,7 @@ export function SheetPanel({ c, preferId }: { c: TableCtx; preferId: string | nu
           </div>
         )}
       </section>
+      <SystemsSheet c={c} actorId={a.id} />
     </>
   );
 }

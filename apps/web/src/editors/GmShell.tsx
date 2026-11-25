@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { ClientState } from '../net.js';
+import { client, type ClientState } from '../net.js';
+import { NetArchitectureEditor } from '../netrun/index.js';
 import { MapEditor } from './MapEditor.js';
 import { CharacterEditor } from './CharacterEditor.js';
 import './editors.css';
@@ -8,6 +9,7 @@ const TABS = [
   { id: 'table', label: 'Table' },
   { id: 'maps', label: 'Maps' },
   { id: 'characters', label: 'Characters' },
+  { id: 'net', label: 'NET Prep' },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
 
@@ -20,11 +22,11 @@ export function GmShell({ s, table }: { s: ClientState; table: ReactNode }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   useEffect(() => { try { sessionStorage.setItem('nsc.tab', tab); } catch { /* private mode */ } }, [tab]);
 
-  // Alt+1/2/3 switch tabs from anywhere.
+  // Alt+1–4 switch tabs from anywhere.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.altKey || e.ctrlKey || e.metaKey) return;
-      const i = ['1', '2', '3'].indexOf(e.key);
+      const i = ['1', '2', '3', '4'].indexOf(e.key);
       if (i >= 0) { e.preventDefault(); setTab(TABS[i]!.id); }
     };
     window.addEventListener('keydown', onKey);
@@ -64,6 +66,7 @@ export function GmShell({ s, table }: { s: ClientState; table: ReactNode }) {
       <div className="shell-pane" role="tabpanel" id="pane-table" aria-labelledby="tab-table" hidden={tab !== 'table'}>{table}</div>
       {tab === 'maps' && <div className="shell-pane" role="tabpanel" id="pane-maps" aria-labelledby="tab-maps"><MapEditor s={s} /></div>}
       {tab === 'characters' && <div className="shell-pane" role="tabpanel" id="pane-characters" aria-labelledby="tab-characters"><CharacterEditor s={s} /></div>}
+      {tab === 'net' && s.view && <div className="shell-pane" role="tabpanel" id="pane-net" aria-labelledby="tab-net"><NetArchitectureEditor view={s.view} act={(i) => client.act(i)} /></div>}
     </div>
   );
 }
