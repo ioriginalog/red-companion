@@ -8,6 +8,7 @@
 import { getInjury, woundState, type CheckResult, type CombatEvent } from '@cprc/rules-core';
 import { projectPendingForPlayer } from './systems.js'; // Track K
 import { allegianceOf, factionOf, projectMap } from './tactical.js';
+import { visibleHandouts } from './handouts.js'; // Track U
 // --- Track N ---
 import { projectNet } from './netrun.js';
 // --- end Track N ---
@@ -149,6 +150,7 @@ export function projectState(state: SessionState, viewer: Viewer, opts?: Project
       sessionId: state.sessionId, seq: state.seq,
       actors: Object.fromEntries(Object.values(state.actors).map((a) => [a.id, projectActor(a, viewer, opts, state.map)])),
       encounter: state.encounter, pending: state.pending, map: state.map, library: state.library,
+      handouts: state.handouts ?? {}, // Track U
       // --- Track N ---
       ...(state.netrun ? { netrun: projectNet(state, viewer) } : {}),
       // --- end Track N ---
@@ -162,6 +164,7 @@ export function projectState(state: SessionState, viewer: Viewer, opts?: Project
     encounter: projectEncounter(state.encounter, kn),
     pending: projectPending(state.pending, viewer, state, kn, opts),
     map: viewMap(state, viewer),
+    handouts: visibleHandouts(state.handouts ?? {}, viewer), // Track U
     // --- Track N ---
     ...(state.netrun ? { netrun: projectNet(state, viewer) } : {}),
     // --- end Track N ---
@@ -209,6 +212,7 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
     if (entry.patch.encounter) patch.encounter = entry.patch.encounter;
     if ('pending' in entry.patch) patch.pending = entry.patch.pending ?? null;
     if (entry.patch.library) patch.library = entry.patch.library;
+    if (entry.patch.handouts) patch.handouts = entry.patch.handouts; // Track U
     // --- Track N ---
     if (entry.patch.netrun) patch.netrun = projectNet(after, viewer);
     // --- end Track N ---
@@ -262,6 +266,7 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
   }
   if ('map' in entry.patch || (entry.patch.actors && after.map)) patch.map = viewMap(after, viewer);
   if ('pending' in entry.patch) patch.pending = projectPending(entry.patch.pending ?? null, viewer, after, kn, opts);
+  if (entry.patch.handouts) patch.handouts = visibleHandouts(entry.patch.handouts, viewer); // Track U
   // --- Track N --- (Turn changes move NET Actions left; controller changes move ownership.)
   if (after.netrun && (entry.patch.netrun || entry.patch.actors || entry.patch.encounter)) patch.netrun = projectNet(after, viewer);
   // --- end Track N ---
@@ -309,7 +314,7 @@ export function redactEvent(e: CombatEvent, visible: (id: string | undefined) =>
 }
 
 export function emptyView(sessionId: string): ViewState {
-  return { sessionId, seq: 0, actors: {}, encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null }, pending: null, map: null };
+  return { sessionId, seq: 0, actors: {}, encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null }, pending: null, map: null, handouts: {} /* Track U */ };
 }
 
 /** Client-side reducer for projected entries. */
@@ -328,6 +333,7 @@ export function applyProjectedEntry(view: ViewState, entry: ProjectedEntry): Vie
     pending: 'pending' in entry.patch ? (entry.patch.pending ?? null) : view.pending,
     map: 'map' in entry.patch ? (entry.patch.map ?? null) : view.map,
     ...(entry.patch.library ? { library: entry.patch.library } : {}),
+    ...(entry.patch.handouts ? { handouts: entry.patch.handouts } : {}), // Track U
     // --- Track N ---
     ...(entry.patch.netrun ? { netrun: entry.patch.netrun } : {}),
     // --- end Track N ---

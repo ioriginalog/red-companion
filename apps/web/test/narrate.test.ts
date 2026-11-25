@@ -23,7 +23,7 @@ describe('narrate new events', () => {
       'GM rolls Damage: 3 + 6 + 2 = 11.',
       'GM: Hold.',
       'GM removes 5 HP from Drone (fire).',
-      'Vex is prone.',
+      'Vex is Prone.',
       'Scene: Rooftop.',
       'Vex lands an explosive, catching Drone.',
     ]);
@@ -44,5 +44,13 @@ describe('effectsFor', () => {
   it('skips tokens the viewer can’t see', () => {
     const { effects } = effectsFor([{ type: 'hpAdjusted', visibility: 'gm', targetId: 'ghost', delta: 3, hpAfter: 3 }], {});
     expect(effects).toEqual([]);
+  });
+});
+
+describe('round 2 narration', () => {
+  it('title-cases Critical Injury names and announces handouts', () => {
+    const name = (id: string) => (id === 'vex' ? 'Vex' : id);
+    expect(narrate({ type: 'criticalInjury', visibility: 'public', targetId: 'vex', injuryId: 'collapsedLung' } as never, name)!.text).toBe('Critical Injury on Vex: Collapsed Lung.');
+    expect(narrate({ type: 'handoutShared', visibility: 'public', id: 'h1', title: 'Job Brief' }, name)!.text).toBe('GM shared a handout: Job Brief.');
   });
 });

@@ -4,6 +4,7 @@
  * authority re-checks everything when the intent arrives.
  */
 import {
+  AUTOFIRE_DV, RANGE_DV, rangeBandIndex,
   attacksPerAction, cellKey, effectiveStat, gridDistance, hasLineOfSight, inCone, metersBetween, previewRangedAttack,
   profileOf, reachableCells, RulesError, skillLevel, standingModifiers, visibleCells, AIMED_SHOT_PENALTY,
   type AimTarget, type Cell, type Combatant, type Modifier, type Weapon,
@@ -159,4 +160,48 @@ export function nearestTarget(view: ViewState, actorId: string): string | null {
     if (d < bestD && hasLineOfSight(map, at, c)) { best = id; bestD = d; }
   }
   return best;
+}
+
+
+// ----- Dodge prompt context -------------------------------------------------------
+
+export interface DodgeContext {
+  distanceM: number;
+  /** Exact range DV when the attacker's weapon is visible; otherwise the span across weapon types at this range. */
+  dv: { exact: number } | { min: number; max: number; typical: number } | null;
+  /** Defender's DEX + Evasion (+ standing modifiers), from their own sheet. */
+  dodgeBase: number | null;
+  /** Chance the dodge total is at least the DV (or the lowest/highest DV of the span). */
+  dodgeBeatsDv: { exact: number } | { atTypical: number } | null;
+}
+
+/**
+ * For the defender's prompt: what they face if they take the DV, and how
+ * their dodge compares. Uses only what this viewer can see.
+ */
+export function dodgeContext(view: ViewState, attack: { attackerId: string; defenderId: string; weaponId: string; distance: number; mode?: 'single' | 'autofire' }): DodgeContext {
+  const band = rangeBandIndex(attack.distance);
+  const auto = attack.mode === 'autofire';
+  const weapon = view.actors[attack.attackerId]?.weapons?.find((w) => w.id === attack.weaponId);
+  let dv: DodgeContext['dv'] = null;
+  if (band >= 0) {
+    if (weapon) {
+      const p = profileOf(weapon);
+      const v = auto ? (p.autofire ? AUTOFIRE_DV[p.autofire.row][band] : null) : p.rangeRow ? RANGE_DV[p.rangeRow][band] : null;
+      if (v != null) dv = { exact: v };
+    } else {
+      const rows = auto ? Object.values(AUTOFIRE_DV) : Object.values(RANGE_DV);
+      const vals = rows.map((r) => r[band]).filter((v): v is number => v != null);
+      vals.sort((a, b) => a - b);
+      if (vals.length) dv = { min: vals[0]!, max: vals[vals.length - 1]!, typical: vals[Math.floor((vals.length - 1) / 2)]! };
+    }
+  }
+  const d = view.actors[attack.defenderId]?.combatant;
+  const dodgeBase = d
+    ? effectiveStat(d, 'DEX') + skillLevel(d, 'Evasion') + standingModifiers(d, 'other').reduce((s, m) => s + m.value, 0)
+    : null;
+  // "At least the DV": the dodge total replaces the DV, so matching it is as good as the DV.
+  const atLeast = (v: number) => (dodgeBase === null ? 0 : chanceToBeat(dodgeBase, v - 1));
+  const dodgeBeatsDv = dodgeBase === null || !dv ? null : 'exact' in dv ? { exact: atLeast(dv.exact) } : { atTypical: atLeast(dv.typical) };
+  return { distanceM: attack.distance, dv, dodgeBase, dodgeBeatsDv };
 }

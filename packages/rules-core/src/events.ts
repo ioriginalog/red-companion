@@ -41,6 +41,8 @@ export type CombatEvent = Base & (
   | { type: 'hpAdjusted'; targetId: string; delta: number; hpAfter: number; reason?: string }
   | { type: 'conditionSet'; targetId: string; condition: string; value: boolean }
   | { type: 'sceneChanged'; mapId: string; name: string }
+  // --- Track U ---
+  | { type: 'handoutShared'; id: string; title: string }
   // --- Track N ---
   /** Netrunning: one line per NET Action, with its check(s). `text` is ready to narrate (sentence case). */
   | { type: 'netAction'; combatantId: string; action: string; text: string; check?: CheckResult; vs?: CheckResult; dv?: number; success?: boolean; dice?: number[]; amount?: number }

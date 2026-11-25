@@ -7,6 +7,8 @@ import { PING_MS, type Signals } from './net.js';
 import { blastCells, shellCells, tokensIn, type AreaKind } from './table/area.js';
 import { clampBox, fitBox, panBy, reaspect, zoomAt, type Box } from './table/viewport.js';
 import { EFFECT_MS, type Effect } from './table/effects.js';
+import { labelSpots, tokenLabels } from './table/labels.js';
+import { ALLEGIANCE, WOUND } from './table/ctx.js';
 
 export type MapMode = 'move' | 'watch' | 'place' | 'ruler' | 'area' | 'reveal';
 
@@ -64,6 +66,11 @@ export function MapView(p: Props) {
   const [dragTo, setDragTo] = useState<{ id: string; at: Cell } | null>(null);
   const [ruler, setRuler] = useState<{ from: Cell; to: Cell } | null>(null);
   const [revealDraft, setRevealDraft] = useState<{ add: boolean; cells: Set<string> } | null>(null);
+  /** Keyboard focus square (arrow keys), shown while the map has focus. */
+  const [kbd, setKbd] = useState<Cell | null>(null);
+  const [hasFocus, setHasFocus] = useState(false);
+  /** Show the focus square only after keyboard use (like :focus-visible). */
+  const [kbdMode, setKbdMode] = useState(false);
   const [, setTick] = useState(0);
   const gesture = useRef<Gesture | null>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -158,6 +165,7 @@ export function MapView(p: Props) {
   const clearLong = () => { if (longPress.current) { window.clearTimeout(longPress.current); longPress.current = null; } };
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (kbdMode) setKbdMode(false);
     if (e.button === 2) return;
     svgRef.current?.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -286,6 +294,54 @@ export function MapView(p: Props) {
   const target = p.targetId ? map.tokens[p.targetId] : undefined;
   const now = Date.now();
   const highlight = new Set([...p.highlight, ...(template?.ids ?? [])]);
+  const labels = useMemo(
+    () => tokenLabels(Object.fromEntries(Object.keys(map.tokens).filter((id) => view.actors[id]).map((id) => [id, view.actors[id]!.public.name]))),
+    [map.tokens, view.actors],
+  );
+  const badgeIds = new Set(Object.entries(p.chances).filter(([, v]) => v != null).map(([id]) => id));
+  const spots = labelSpots(map.tokens, mode === 'area' ? new Set() : badgeIds);
+  const hoverToken = tokenAt(hover);
+
+  /** Screen-reader description of a token. */
+  const describe = (id: string) => {
+    const a = view.actors[id];
+    if (!a) return 'Unknown contact';
+    const at = map.tokens[id];
+    const parts = [a.public.name, ALLEGIANCE[a.public.allegiance], a.public.conditions.dead ? 'Dead' : WOUND[a.public.woundState]];
+    if (a.public.conditions.prone) parts.push('Prone');
+    if (actingAt && at && id !== actingId) { const d = gridDistance(actingAt, at); parts.push(`${d} ${d === 1 ? 'square' : 'squares'} away (${d * 2} m)`); }
+    if (p.chances[id] != null) parts.push(`${pct(p.chances[id]!)} to hit`);
+    if (id === actingId) parts.push('acting');
+    if (id === p.targetId) parts.push('targeted');
+    return parts.join(', ');
+  };
+
+  // Keep the keyboard focus square on screen.
+  const ensureVisible = (c: Cell) => setBox((b) => {
+    const x = c.x * S, y = c.y * S;
+    let nx = b.x, ny = b.y;
+    if (x < b.x) nx = x - S; else if (x + S > b.x + b.w) nx = x + 2 * S - b.w;
+    if (y < b.y) ny = y - S; else if (y + S > b.y + b.h) ny = y + 2 * S - b.h;
+    return nx === b.x && ny === b.y ? b : clampBox({ ...b, x: nx, y: ny }, W, H);
+  });
+  const onKeyDown = (e: React.KeyboardEvent<SVGSVGElement>) => {
+    if (!kbdMode) setKbdMode(true);
+    const dirs: Record<string, [number, number]> = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+    const d = dirs[e.key];
+    const start = kbd ?? actingAt ?? { x: Math.floor(map.width / 2), y: Math.floor(map.height / 2) };
+    if (d) {
+      e.preventDefault();
+      const n = { x: Math.min(map.width - 1, Math.max(0, start.x + d[0])), y: Math.min(map.height - 1, Math.max(0, start.y + d[1])) };
+      setKbd(n);
+      setHover(n);
+      ensureVisible(n);
+      return;
+    }
+    if ((e.key === 'Enter' || e.key === ' ') && kbd) {
+      e.preventDefault();
+      click(kbd);
+    }
+  };
 
   const cellRects = (keys: Iterable<string>, fill: string, extra: React.SVGProps<SVGRectElement> = {}) =>
     [...keys].map((k) => { const [x, y] = k.split(',').map(Number); return <rect key={k} x={x! * S} y={y! * S} width={S} height={S} fill={fill} {...extra} />; });
@@ -298,8 +354,13 @@ export function MapView(p: Props) {
         ref={svgRef}
         viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`}
         preserveAspectRatio="xMidYMid meet"
-        role="img"
-        aria-label={`${map.name} tactical map`}
+        role="group"
+        aria-roledescription="tactical map"
+        aria-label={`${map.name}. ${map.width} by ${map.height} squares. Tab through tokens; arrow keys move a focus square; Enter acts.`}
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+        onFocus={() => setHasFocus(true)}
+        onBlur={(e) => { if (!svgRef.current?.contains(e.relatedTarget as Node)) { setHasFocus(false); } }}
         className={`mode-${mode}${gesture.current?.kind === 'pan' && (gesture.current as { moved: boolean }).moved ? ' panning' : ''}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -435,7 +496,16 @@ export function MapView(p: Props) {
           const ws = a.public.woundState;
           const dragging = dragTo?.id === id;
           return (
-            <g key={id} transform={`translate(${c.x},${c.y})`} className={`token${dead ? ' dead' : ''}${p.canDrag(id) ? ' draggable' : ''}`} opacity={dragging ? 0.45 : 1}>
+            <g
+              key={id} transform={`translate(${c.x},${c.y})`} className={`token${dead ? ' dead' : ''}${p.canDrag(id) ? ' draggable' : ''}`} opacity={dragging ? 0.45 : 1}
+              tabIndex={0} role="button" aria-label={describe(id)}
+              onFocus={() => { setKbd(at); ensureVisible(at); }}
+              onKeyUp={(e) => { if (e.key === 'Tab') setKbdMode(true); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); click(at); }
+                else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); p.onTokenContext(id); }
+              }}
+            >
               {active && <circle r={S * 0.5} fill="none" stroke="var(--yellow)" strokeWidth={3} className="pulse" filter="url(#glow)" />}
               {highlight.has(id) && <circle r={S * 0.56} fill="none" stroke="#ff7a00" strokeWidth={4} className="pulse" />}
               {p.focusId === id && <circle r={S * 0.54} fill="none" stroke="#fff" strokeWidth={2} strokeDasharray="6 4" className="march" />}
@@ -446,12 +516,14 @@ export function MapView(p: Props) {
               {dead && <path d={`M${-S * 0.3},${-S * 0.3}L${S * 0.3},${S * 0.3}M${S * 0.3},${-S * 0.3}L${-S * 0.3},${S * 0.3}`} stroke="var(--red)" strokeWidth={5} />}
               {ws !== 'unhurt' && !dead && <circle cx={S * 0.32} cy={-S * 0.32} r={7} fill={ws === 'mortally' ? 'var(--red)' : ws === 'seriously' ? '#ff8a00' : 'var(--yellow)'} stroke="#000" strokeWidth={2} />}
               {a.public.conditions.prone && !dead && <text x={-S * 0.36} y={-S * 0.24} className="svg-tag">Prone</text>}
-              <g transform={`translate(0,${S * 0.58})`}>
-                <rect x={-S * 0.62} y={-9} width={S * 1.24} height={17} rx={2} fill="rgba(3,6,20,0.85)" stroke={col} strokeWidth={1} />
-                <text textAnchor="middle" dy="0.32em" className="svg-name">
-                  {a.public.name.length > 12 ? `${a.public.name.slice(0, 11)}…` : a.public.name}
-                </text>
-              </g>
+              {(spots[id] !== 'hidden' || hoverToken === id || p.focusId === id || id === p.targetId || (hasFocus && kbdMode && kbd?.x === at.x && kbd?.y === at.y)) && (
+                <g transform={`translate(0,${(spots[id] === 'above' ? -1 : 1) * S * 0.58})`}>
+                  <rect x={-S * 0.49} y={-9} width={S * 0.98} height={17} rx={2} fill="rgba(3,6,20,0.88)" stroke={col} strokeWidth={1} />
+                  <text textAnchor="middle" dy="0.32em" className="svg-name" textLength={labels[id]!.length > 8 ? S * 0.9 : undefined} lengthAdjust="spacingAndGlyphs">
+                    {labels[id]}
+                  </text>
+                </g>
+              )}
               {chance != null && mode !== 'area' && (
                 <g transform={`translate(0,${-S * 0.66})`}>
                   <rect x={-24} y={-11} width={48} height={20} rx={3} fill={p.targetId === id ? '#ffd400' : 'rgba(10,16,48,0.92)'} stroke="#ffd400" strokeWidth={1.5} />
@@ -533,6 +605,7 @@ export function MapView(p: Props) {
         </g>
 
         {hover && mode !== 'watch' && mode !== 'area' && <rect x={hover.x * S} y={hover.y * S} width={S} height={S} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={2} pointerEvents="none" />}
+        {hasFocus && kbdMode && kbd && <rect x={kbd.x * S + 1} y={kbd.y * S + 1} width={S - 2} height={S - 2} fill="none" stroke="#ffd400" strokeWidth={4} strokeDasharray="10 5" pointerEvents="none" className="kbd-focus" />}
       </svg>
       <div className="zoom" role="group" aria-label="Map zoom">
         <button className="btn" onClick={() => zoomButton(1.25)} aria-label="Zoom In" title="Zoom In">+</button>

@@ -25,6 +25,9 @@ interface Props {
   setMapMode: (m: MapMode) => void;
   setHighlight: (ids: string[]) => void;
   onFire: () => void;
+  /** This player's characters, for picking one when no Turn is active. */
+  ownIds?: string[];
+  onSelectOwn?: (id: string) => void;
 }
 
 export function fireBlocked(p: Pick<Props, 'attack' | 'usage' | 'weapon'>, pending: boolean): boolean {
@@ -37,8 +40,10 @@ export function fireBlocked(p: Pick<Props, 'attack' | 'usage' | 'weapon'>, pendi
 export function CombatPanel(p: Props) {
   const { c, actingId, canAct, weapon, attack, usage } = p;
   const { view } = c;
-  const acting = actingId ? view.actors[actingId] : undefined;
-  const target = p.targetId ? view.actors[p.targetId] : undefined;
+  const a0 = actingId ? view.actors[actingId] : undefined;
+  const acting = a0 && !a0.placeholder ? a0 : undefined;
+  const t0 = p.targetId ? view.actors[p.targetId] : undefined;
+  const target = t0 && !t0.placeholder ? t0 : undefined;
   const hp = acting?.combatant?.hp;
   const weapons = acting?.weapons ?? [];
   const area = areaKindFor(weapon);
@@ -64,7 +69,9 @@ export function CombatPanel(p: Props) {
           </div>
         </section>
       ) : (
-        <section className="card"><div className="ttl">Your Character</div><p className="dim">{c.isGm ? 'Select a token to act for it.' : 'Waiting for the GM to give you a character, or for your Turn.'}</p></section>
+        p.currentId
+          ? <section className="card"><div className="ttl">Acting Now</div><p className="dim">An unknown contact is acting. Wait for your Turn.</p></section>
+          : <OwnPicker c={c} ownIds={p.ownIds ?? []} onSelect={p.onSelectOwn} />
       )}
 
       {canAct && weapons.length > 0 && (
@@ -147,5 +154,26 @@ export function CombatPanel(p: Props) {
         </section>
       )}
     </>
+  );
+}
+
+/** Shown when nothing is selected: the GM gets a hint; a player picks one of their characters. */
+function OwnPicker({ c, ownIds, onSelect }: { c: TableCtx; ownIds: string[]; onSelect?: (id: string) => void }) {
+  if (c.isGm) return <section className="card"><div className="ttl">Acting As</div><p className="dim">Select a token to act for it.</p></section>;
+  const own = ownIds.map((id) => c.view.actors[id]).filter((a): a is NonNullable<typeof a> => !!a);
+  if (!own.length) return <section className="card"><div className="ttl">Your Character</div><p className="dim">Waiting for the GM to give you a character.</p></section>;
+  return (
+    <section className="card">
+      <div className="ttl">{own.length > 1 ? 'Your Characters' : 'Your Character'}</div>
+      <p className="dim">{own.length > 1 ? 'Choose who you’re playing right now.' : 'Tap to select.'}</p>
+      <div className="own-list">
+        {own.map((a) => (
+          <button key={a.id} className="own-pick" onClick={() => onSelect?.(a.id)} aria-label={`Select ${a.public.name}`}>
+            <Portrait a={a} small />
+            <span><span className="h">{a.public.name}</span><br /><span className="dim sub">{WOUND[a.public.woundState]}</span></span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }

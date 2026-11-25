@@ -138,10 +138,17 @@ export interface SessionState {
   map: TacticalMap | null;
   /** GM prep: saved maps (scenes) and NPC templates. Stripped from player views. */
   library: Library;
+  // --- Track U ---
+  /** Handouts and GM journal pages, filtered by audience in projections. */
+  handouts: Record<string, Handout>;
   // --- Track N ---
   netrun?: NetState;
   // --- end Track N ---
 }
+
+// --- Track U ---
+/** Shared text (optional image). audience: everyone, GM only (journal), or listed player ids. */
+export interface Handout { id: string; title: string; body: string; imageUrl?: string; audience: 'all' | 'gm' | string[]; updatedAt?: string }
 
 export interface StatePatch {
   /** null = remove actor. */
@@ -153,6 +160,8 @@ export interface StatePatch {
   map?: TacticalMap | null;
   /** Replace the whole library. GM only; never projected. */
   library?: Library;
+  /** Track U: replace all handouts. */
+  handouts?: Record<string, Handout>;
   // --- Track N ---
   netrun?: NetState;
   // --- end Track N ---
@@ -251,6 +260,9 @@ export type Intent =
   /** GM. Advance downtime: natural healing for these actors (default: everyone not dead). */
   | { type: 'rest'; days: number; care: Care; actorIds?: string[] }
   // --- end Track K ---
+  // --- Track U ---
+  | { type: 'setHandout'; id: string; title: string; body: string; imageUrl?: string; audience: 'all' | 'gm' | string[] }
+  | { type: 'removeHandout'; id: string }
   // --- Track N ---
   | { type: 'net'; op: NetOp };
   // --- end Track N ---
@@ -295,6 +307,8 @@ export interface ViewState {
   map: TacticalMap | null;
   /** GM view only. */
   library?: Library;
+  /** Track U: handouts this viewer may read. */
+  handouts?: Record<string, Handout>;
   // --- Track N ---
   netrun?: NetView;
   // --- end Track N ---
@@ -307,5 +321,5 @@ export interface ProjectedEntry {
   by: AuthorId;
   intentType: IntentType;
   events: CombatEvent[];
-  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: ProjectedPending | null; map?: TacticalMap | null; library?: Library; /* Track N */ netrun?: NetView };
+  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: ProjectedPending | null; map?: TacticalMap | null; library?: Library; handouts?: Record<string, Handout>; /* Track N */ netrun?: NetView };
 }
