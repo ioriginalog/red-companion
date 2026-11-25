@@ -8,6 +8,7 @@ export function emptySession(sessionId: string): SessionState {
     encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null },
     pending: null,
     map: null,
+    library: { maps: {}, actors: {} },
   };
 }
 
@@ -28,6 +29,7 @@ export function applyEntry(state: SessionState, entry: LogEntry): SessionState {
     encounter: entry.patch.encounter ?? state.encounter,
     pending: 'pending' in entry.patch ? (entry.patch.pending ?? null) : state.pending,
     map: 'map' in entry.patch ? (entry.patch.map ?? null) : state.map,
+    library: entry.patch.library ?? state.library,
   };
 }
 

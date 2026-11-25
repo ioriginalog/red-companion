@@ -6,7 +6,17 @@
  *   Relay → GM:     welcome, intent (from a player), playerJoined/Left, log, error
  *   Relay → Player: welcome (with projected snapshot), entries (projected), snapshot, rejected, error
  */
+import type { Cell } from '@cprc/rules-core';
 import type { Intent, LogEntry, ProjectedEntry, ViewState } from './types.js';
+
+/**
+ * Ephemeral table signals: relayed to everyone in the session, never logged.
+ * The relay rate-limits them (about 10 per second per connection).
+ */
+export type Signal =
+  | { kind: 'ping'; at: Cell }
+  | { kind: 'cursor'; at: Cell | null }
+  | { kind: 'measure'; from: Cell; to: Cell | null };
 
 export const PROTOCOL_VERSION = 1;
 
@@ -19,6 +29,7 @@ export type ClientMessage =
   | { t: 'fetchLog'; fromSeq: number }
   | { t: 'reject'; playerId: string; clientMsgId: string; code: string; message: string }
   | { t: 'intent'; clientMsgId: string; intent: Intent }
+  | { t: 'signal'; signal: Signal }
   | { t: 'ping' };
 
 export interface PlayerInfo { playerId: string; name: string; online: boolean }
@@ -34,6 +45,8 @@ export type ServerMessage =
   | { t: 'playerJoined'; player: PlayerInfo }
   | { t: 'playerLeft'; playerId: string }
   | { t: 'gmStatus'; online: boolean }
+  /** `from` = 'gm' or a playerId. */
+  | { t: 'signal'; from: string; signal: Signal }
   | { t: 'error'; code: string; message: string }
   | { t: 'pong' };
 
@@ -66,6 +79,8 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return isStr(m.playerId, 64) && isStr(m.clientMsgId, 64) && isStr(m.code, 40) && isStr(m.message, 500) ? (m as ClientMessage) : null;
     case 'intent':
       return isStr(m.clientMsgId, 64) && isObj(m.intent) && typeof m.intent.type === 'string' ? (m as ClientMessage) : null;
+    case 'signal':
+      return isObj(m.signal) && typeof m.signal.kind === 'string' && JSON.stringify(m.signal).length < 300 ? (m as ClientMessage) : null;
     case 'ping':
       return { t: 'ping' };
     default:

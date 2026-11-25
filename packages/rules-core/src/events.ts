@@ -8,7 +8,11 @@
 import type { Cell } from './grid.js';
 import type { CheckResult, CritTable, D10Roll, HitLocation, WoundState } from './types.js';
 
-type Base = { visibility: 'public' | 'gm' };
+/**
+ * `audience`: when present, only these viewers (player ids, or 'gm') receive
+ * the event; the GM always does. Used for whispers.
+ */
+type Base = { visibility: 'public' | 'gm'; audience?: string[] };
 
 export type CombatEvent = Base & (
   | { type: 'initiativeRolled'; entries: { combatantId: string; base: number; roll: number; total: number; tiebreaks: number[] }[] }
@@ -31,6 +35,13 @@ export type CombatEvent = Base & (
   | { type: 'tokenMoved'; combatantId: string; path: Cell[]; cost: number; ran: boolean }
   | { type: 'watchSet'; combatantId: string; facing: number; arc: number }
   | { type: 'watchTriggered'; combatantId: string; targetId: string; at: Cell }
+  | { type: 'checkRolled'; by: string; combatantId?: string; label: string; check: CheckResult; dv?: number; success?: boolean }
+  | { type: 'diceRolled'; by: string; label: string; dice: number[]; sides: 6 | 10; bonus: number; total: number }
+  | { type: 'chatMessage'; by: string; asCombatantId?: string; text: string }
+  | { type: 'hpAdjusted'; targetId: string; delta: number; hpAfter: number; reason?: string }
+  | { type: 'conditionSet'; targetId: string; condition: string; value: boolean }
+  | { type: 'sceneChanged'; mapId: string; name: string }
+  | { type: 'areaResolved'; attackerId: string; kind: string; at: Cell; targetIds: string[] }
 );
 
 export type { D10Roll };

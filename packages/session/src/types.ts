@@ -82,7 +82,20 @@ export interface TacticalMap extends GridMap {
   watches: Record<string, Watch>;
   /** NPC actor ids the party has seen at least once (names revealed). */
   spotted: string[];
+  /** GM lighting overrides. `revealed` squares are always visible to players. */
+  lighting?: { revealAll?: boolean; revealed?: string[] };
 }
+
+/** GM-only prep library (never projected to players). */
+export interface Library {
+  maps: Record<string, TacticalMap>;
+  actors: Record<string, Actor>;
+}
+
+/** RED rolls only d6 and d10. `count` dice of `sides`, plus `bonus`. */
+export interface DiceExpr { count: number; sides: 6 | 10; bonus: number }
+
+export type ConditionKey = 'prone' | 'unconscious' | 'dead' | 'stabilized';
 
 export type Pending =
   | { kind: 'awaitingDodge'; id: string; attack: RangedAttackIntent; defenderId: string }
@@ -98,6 +111,8 @@ export interface SessionState {
   encounter: Encounter;
   pending: Pending | null;
   map: TacticalMap | null;
+  /** GM prep: saved maps (scenes) and NPC templates. Stripped from player views. */
+  library: Library;
 }
 
 export interface StatePatch {
@@ -108,6 +123,8 @@ export interface StatePatch {
   pending?: Pending | null;
   /** Present (even as null) = replace. Small enough to send whole. */
   map?: TacticalMap | null;
+  /** Replace the whole library. GM only; never projected. */
+  library?: Library;
 }
 
 export interface LogEntry {
@@ -164,7 +181,29 @@ export type Intent =
   | { type: 'moveToken'; actorId: string; to: Cell; run?: boolean }
   | { type: 'setWatch'; actorId: string; facing: number; arc?: number }
   | { type: 'clearWatch'; actorId: string }
-  | { type: 'declineWatch'; pendingId: string };
+  | { type: 'declineWatch'; pendingId: string }
+  // Table tools
+  /** Skill check: actor's STAT + skill (or a raw base) + 1d10 vs an optional DV. Private = GM eyes only. */
+  | { type: 'rollCheck'; actorId?: string; label: string; stat?: StatKeyName; skill?: string; base?: number; modifiers?: Modifier[]; dv?: number; private?: boolean }
+  /** Free dice (damage, tables). Private = GM eyes only. */
+  | { type: 'rollDice'; label: string; dice: DiceExpr; private?: boolean }
+  /** Chat. `to` = whisper recipients (player ids or 'gm'); omitted = everyone. */
+  | { type: 'chat'; text: string; to?: string[]; asActorId?: string }
+  // GM tools
+  | { type: 'adjustHp'; actorId: string; delta: number; reason?: string }
+  | { type: 'setCondition'; actorId: string; condition: ConditionKey; value: boolean }
+  | { type: 'saveToLibrary'; kind: 'map' | 'actor'; item: TacticalMap | Actor }
+  | { type: 'removeFromLibrary'; kind: 'map' | 'actor'; id: string }
+  /** Activate a saved map (keeps tokens of actors that still exist). */
+  | { type: 'switchScene'; mapId: string }
+  /** Spawn a copy of a library actor with a fresh id, optionally on the map. */
+  | { type: 'spawnFromLibrary'; templateId: string; newId: string; name?: string; at?: Cell }
+  | { type: 'setLighting'; lighting: NonNullable<TacticalMap['lighting']> }
+  // Area attacks on the grid
+  | { type: 'areaAttack'; attackerId: string; weaponId: string; kind: 'shotgunShell' | 'launcher' | 'thrownGrenade'; at: Cell }
+  | { type: 'suppressiveFire'; attackerId: string; weaponId: string };
+
+export type StatKeyName = 'INT' | 'REF' | 'DEX' | 'TECH' | 'COOL' | 'WILL' | 'LUCK' | 'MOVE' | 'BODY' | 'EMP';
 
 export type IntentType = Intent['type'];
 
@@ -199,6 +238,8 @@ export interface ViewState {
   encounter: Encounter;
   pending: Pending | null;
   map: TacticalMap | null;
+  /** GM view only. */
+  library?: Library;
 }
 
 export interface ProjectedEntry {
@@ -208,5 +249,5 @@ export interface ProjectedEntry {
   by: AuthorId;
   intentType: IntentType;
   events: CombatEvent[];
-  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: Pending | null; map?: TacticalMap | null };
+  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: Pending | null; map?: TacticalMap | null; library?: Library };
 }

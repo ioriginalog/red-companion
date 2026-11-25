@@ -348,6 +348,8 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       const { [intent.actorId]: _w, ...watches } = map.watches;
       return { events: [], patch: { map: { ...map, watches } } };
     }
+    default:
+      throw new SessionError('INVALID', `${intent.type} isn’t supported yet.`);
   }
 }
 

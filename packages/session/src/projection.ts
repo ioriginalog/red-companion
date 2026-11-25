@@ -53,6 +53,7 @@ export function projectState(state: SessionState, viewer: Viewer, opts?: Project
     encounter: state.encounter,
     pending: state.pending,
     map: viewMap(state, viewer),
+    ...(viewer.role === 'gm' ? { library: state.library } : {}),
   };
 }
 
@@ -80,7 +81,9 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
     const a = id ? actorsAfter[id] : undefined;
     return a ? canSeeFull(a, viewer, opts) : false;
   };
+  const me = viewer.role === 'gm' ? 'gm' : viewer.playerId;
   const events = entry.events
+    .filter((e) => viewer.role === 'gm' || !e.audience || e.audience.includes(me))
     .filter((e) => e.visibility === 'public' || visible(eventSubject(e)))
     .map((e) => (viewer.role === 'gm' ? e : redactEvent(e, visible)));
   const patch: ProjectedEntry['patch'] = {};
@@ -93,6 +96,7 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
   if ('map' in entry.patch || (entry.patch.actors && after.map)) patch.map = viewMap(after, viewer);
   if (entry.patch.encounter) patch.encounter = entry.patch.encounter;
   if ('pending' in entry.patch) patch.pending = entry.patch.pending ?? null;
+  if (entry.patch.library && viewer.role === 'gm') patch.library = entry.patch.library;
   return { seq: entry.seq, id: entry.id, at: entry.at, by: entry.by, intentType: entry.intent.type, events, patch };
 }
 
@@ -153,5 +157,6 @@ export function applyProjectedEntry(view: ViewState, entry: ProjectedEntry): Vie
     encounter: entry.patch.encounter ?? view.encounter,
     pending: 'pending' in entry.patch ? (entry.patch.pending ?? null) : view.pending,
     map: 'map' in entry.patch ? (entry.patch.map ?? null) : view.map,
+    ...(entry.patch.library ? { library: entry.patch.library } : {}),
   };
 }
