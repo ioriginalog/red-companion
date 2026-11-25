@@ -102,3 +102,71 @@ describe('skills', () => {
     expect(linkedStat('Netrunning Basics')).toBeUndefined();
   });
 });
+
+describe('round 2 parser fixes', () => {
+  const base: CommandContext = {
+    actorId: 'vex', skills: ['Handgun', 'Evasion'],
+    recipients: [{ name: 'GM', id: 'gm' }, { name: 'Bob', id: 'p2' }, { name: 'Kestrel', id: 'p2' }, { name: 'Alice', id: 'p1' }, { name: 'Alicia', id: 'p3' }],
+  };
+  it.each(['vs 15', 'vs. 15', 'VS DV 15', 'dv 15', 'DV15', 'against 15'])('accepts a DV written as "%s"', (dv) => {
+    const p = parseCommand(`/check REF+Handgun ${dv}`, base);
+    expect(p).toMatchObject({ kind: 'intent', intent: { type: 'rollCheck', stat: 'REF', skill: 'Handgun', dv: 15 } });
+  });
+  it('rejects unknown skills with a suggestion instead of rolling 0', () => {
+    const p = parseCommand('/check REF+Handgn vs 15', base);
+    expect(p.kind).toBe('error');
+    expect(p.kind === 'error' && p.message).toContain('Did you mean Handgun');
+  });
+  it('rolls a RED skill the character lacks (level 0) and specializations', () => {
+    expect(parseCommand('/check INT+Perception', base)).toMatchObject({ kind: 'intent', intent: { skill: 'Perception' } });
+    expect(parseCommand('/check INT+Local Expert (Watson)', base)).toMatchObject({ kind: 'intent', intent: { skill: 'Local Expert (Watson)' } });
+    expect(parseCommand('/check REF+shoulder', base)).toMatchObject({ kind: 'intent', intent: { skill: 'Shoulder Arms' } });
+  });
+  it('whispers by player name, character name or unique prefix', () => {
+    expect(parseCommand('/w bob hi', base)).toMatchObject({ intent: { to: ['p2'], text: 'hi' } });
+    expect(parseCommand('/w Kestrel hi', base)).toMatchObject({ intent: { to: ['p2'], text: 'hi' } });
+    expect(parseCommand('/w kes hi', base)).toMatchObject({ intent: { to: ['p2'], text: 'hi' } });
+    const amb = parseCommand('/w ali hi', base);
+    expect(amb.kind === 'error' && amb.message).toContain('Which one');
+    expect(parseCommand('/w alice hi', base)).toMatchObject({ intent: { to: ['p1'] } });
+    expect(parseCommand('/w zed hi', base).kind).toBe('error');
+  });
+});
+
+describe('token labels', async () => {
+  const { tokenLabels, labelSpots } = await import('../src/table/labels.js');
+  it('keeps labels unique and short', () => {
+    const l = tokenLabels({ a: 'Street Ganger', b: 'Street Ganger B', c: 'Vex', d: 'Corporate Security', e: 'Corporate Security' });
+    expect(new Set(Object.values(l)).size).toBe(5);
+    expect(l.c).toBe('Vex');
+    for (const v of Object.values(l)) expect(v.length).toBeLessThanOrEqual(10);
+    expect(l.b!.endsWith('B')).toBe(true);
+  });
+  it('moves labels above when the square below is taken, and hides them when boxed in', () => {
+    const s = labelSpots({ a: { x: 1, y: 1 }, b: { x: 1, y: 2 }, c: { x: 1, y: 3 }, d: { x: 5, y: 5 } });
+    expect(s).toEqual({ a: 'above', b: 'hidden', c: 'below', d: 'below' });
+    expect(labelSpots({ a: { x: 1, y: 1 }, b: { x: 1, y: 2 } }, new Set(['a'])).a).toBe('hidden');
+  });
+});
+
+describe('dodge prompt context', async () => {
+  const { applyEntry, emptySession, handleIntent, projectState } = await import('@cprc/session');
+  const { scriptedDice } = await import('@cprc/rules-core');
+  const { demoIntents } = await import('../src/demo.js');
+  const { dodgeContext } = await import('../src/tactics.js');
+  let s = emptySession('x');
+  for (const i of demoIntents()) { const r = handleIntent(s, i, { role: 'gm' }, { dice: scriptedDice({}) }); if (r.ok) s = applyEntry(s, r.entry); }
+  s = applyEntry(s, (handleIntent(s, { type: 'assignController', actorId: 'vex', controller: 'p1' }, { role: 'gm' }, { dice: scriptedDice({}) }) as { ok: true; entry: never }).entry);
+  const p1 = projectState(s, { role: 'player', playerId: 'p1' });
+  it('shows a DV span when the attacker’s weapon is hidden, and the defender’s dodge odds', () => {
+    const ctx = dodgeContext(p1, { attackerId: 'lt', defenderId: 'vex', weaponId: 'ar', distance: 10 });
+    expect(ctx.dv && 'min' in ctx.dv).toBe(true);
+    expect(ctx.dodgeBase).toBe(7 + 6); // DEX 7 + Evasion 6
+    expect(ctx.dodgeBeatsDv && 'atTypical' in ctx.dodgeBeatsDv).toBe(true);
+  });
+  it('shows the exact DV when the attacker’s weapon is visible', () => {
+    const gm = projectState(s, { role: 'gm' });
+    const ctx = dodgeContext(gm, { attackerId: 'lt', defenderId: 'vex', weaponId: 'ar', distance: 10 });
+    expect(ctx.dv).toEqual({ exact: 16 }); // Assault Rifle, 7–12 m
+  });
+});

@@ -11,11 +11,17 @@ import { CombatPanel, fireBlocked } from './table/CombatPanel.js';
 import { SheetPanel } from './table/SheetPanel.js';
 import { ChatPanel } from './table/ChatPanel.js';
 import { Inspector, ScenePanel } from './table/GmPanels.js';
+import { NotesPanel } from './table/NotesPanel.js';
+import { narrate } from './narrate.js';
 import { areaKindFor } from './table/area.js';
 import { EFFECT_MS, effectsFor, type Effect } from './table/effects.js';
 import { play } from './table/sound.js';
 
-type Tab = 'combat' | 'sheet' | 'chat' | 'scene';
+type Tab = 'combat' | 'sheet' | 'chat' | 'notes' | 'scene';
+
+/** Entries arriving faster than this (log fetch, reconnect) are history, not live play. */
+const BACKFILL_BATCH = 3;
+const SETTLE_MS = 1500;
 
 export function Table({ s }: { s: ClientState }) {
   const view = s.view!;
@@ -38,10 +44,12 @@ export function Table({ s }: { s: ClientState }) {
   const [effects, setEffects] = useState<Effect[]>([]);
   const [unread, setUnread] = useState(0);
   const [gmCursor, setGmCursor] = useState(false);
+  const [announce, setAnnounce] = useState('');
+  const [notesUnread, setNotesUnread] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const mine = useCallback((id: string | null | undefined) => !!id && (isGm || view.actors[id]?.controller === me), [isGm, view.actors, me]);
-  const name = useCallback((id: string) => view.actors[id]?.public.name ?? 'Someone', [view.actors]);
+  const name = useCallback((id: string) => view.actors[id]?.public.name ?? 'Unknown Contact', [view.actors]);
   const c: TableCtx = { s, view, isGm, me, mine, name, who: (by) => client.nameOf(by), act: (i: Intent) => client.act(i) };
 
   // Acting: the current actor in an encounter; otherwise whoever you selected (or your only character).
@@ -56,6 +64,12 @@ export function Table({ s }: { s: ClientState }) {
 
   useEffect(() => { setMapMode((m) => (m === 'ruler' || m === 'reveal' ? m : 'move')); setMode('single'); }, [actingId]);
   useEffect(() => { if (targetId && !view.map?.tokens[targetId]) setTargetId(null); }, [view.map, targetId]);
+  // A new actor keeps the target only if it's on the other side; nobody targets themselves.
+  useEffect(() => {
+    if (!targetId) return;
+    const t = view.actors[targetId];
+    if (targetId === actingId || !t || (acting && isFriendly(t) === isFriendly(acting))) setTargetId(null);
+  }, [actingId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (mapMode === 'area' && !areaKind) setMapMode('move'); }, [areaKind, mapMode]);
 
   const attack = useMemo(
@@ -87,18 +101,34 @@ export function Table({ s }: { s: ClientState }) {
   };
 
   // ----- Effects and sound from new log entries -----
+  // Only entries that arrive live animate. History (initial log load, reconnect
+  // backfill) just advances the cursor: no floaters, no sounds, no unread counts.
   const lastSeq = useRef<number>(s.feed.at(-1)?.seq ?? 0);
+  const liveAfter = useRef(Date.now() + SETTLE_MS);
+  const prevStatus = useRef(s.status);
   useEffect(() => {
+    if (s.status === 'online' && prevStatus.current !== 'online') liveAfter.current = Date.now() + SETTLE_MS;
+    prevStatus.current = s.status;
+  }, [s.status]);
+  useEffect(() => {
+    const last = s.feed.at(-1)?.seq ?? 0;
+    if (last < lastSeq.current) { lastSeq.current = last; return; } // undo or log replaced
     const fresh = s.feed.filter((f) => f.seq > lastSeq.current);
     if (!fresh.length) return;
     lastSeq.current = fresh.at(-1)!.seq;
+    if (fresh.length > BACKFILL_BATCH || Date.now() < liveAfter.current) return;
+    const events = fresh.flatMap((f) => f.events);
     const tokens = view.map?.tokens ?? {};
-    const all = effectsFor(fresh.flatMap((f) => f.events), tokens);
+    const all = effectsFor(events, tokens);
     const now = Date.now();
     if (all.effects.length) setEffects((prev) => [...prev.filter((e) => now - e.t < EFFECT_MS), ...all.effects]);
     [...new Set(all.cues)].slice(0, 3).forEach((cue, i) => window.setTimeout(() => play(cue), i * 90));
-    const talk = fresh.flatMap((f) => f.events).filter((e) => e.type === 'chatMessage' || e.type === 'checkRolled' || e.type === 'diceRolled').length;
+    const talk = events.filter((e) => e.type === 'chatMessage' || e.type === 'checkRolled' || e.type === 'diceRolled').length;
     if (talk && tab !== 'chat') setUnread((u) => u + talk);
+    if (events.some((e) => e.type === 'handoutShared') && tab !== 'notes') setNotesUnread((u) => u + 1);
+    // Screen readers: announce results (not chatter, which the chat log already reads).
+    const lines = events.filter((e) => e.type !== 'chatMessage').map((e) => narrate(e, name, (b) => client.nameOf(b))?.text).filter(Boolean);
+    if (lines.length) setAnnounce(lines.slice(-3).join(' '));
   }, [s.feed]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!effects.length) return;
@@ -113,7 +143,10 @@ export function Table({ s }: { s: ClientState }) {
   }, [s.signals.pings]);
   const prevCurrent = useRef(currentId);
   useEffect(() => {
-    if (currentId && currentId !== prevCurrent.current && !isGm && mine(currentId)) play('turn');
+    if (currentId && currentId !== prevCurrent.current) {
+      if (!isGm && mine(currentId)) play('turn');
+      setAnnounce(mine(currentId) && !isGm ? `Your Turn: ${name(currentId)}.` : `${name(currentId)}’s Turn.`);
+    }
     prevCurrent.current = currentId;
   }, [currentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -139,6 +172,7 @@ export function Table({ s }: { s: ClientState }) {
         case 'e': case 'E': if (k.canEndTurn) client.act({ type: 'endTurn' }); break;
         case 'Escape': setMapMode('move'); setHelp(false); setFocusId(null); setHighlight([]); break;
         case '?': setHelp((h) => !h); break;
+        case 'g': case 'G': (root.querySelector('.mapstage svg') as SVGSVGElement | null)?.focus(); break;
         default: return;
       }
       e.preventDefault();
@@ -147,17 +181,22 @@ export function Table({ s }: { s: ClientState }) {
     return () => window.removeEventListener('keydown', onKey);
   }); // rebinding keeps `fire` fresh
 
-  const openTab = (t: Tab) => { setTab(t); setSheetOpen(true); if (t === 'chat') setUnread(0); };
+  const openTab = (t: Tab) => { setTab(t); setSheetOpen(true); if (t === 'chat') setUnread(0); if (t === 'notes') setNotesUnread(0); };
 
   const pickToken = (id: string) => {
     const a = view.actors[id];
     if (!a) return;
     if (isGm) setFocusId(id);
-    if (isFriendly(a) && id !== actingId && (mine(id) || !enc.active)) { setSelected(id); return; }
-    if (id !== actingId) setTargetId(id);
+    if (id === actingId) return;
+    // Opposing the actor who's acting (a GM's NPC shooting a PC counts): target it.
+    const opposing = acting ? isFriendly(a) !== isFriendly(acting) : !isFriendly(a);
+    if (opposing && !a.public.conditions.dead) { setTargetId(id); return; }
+    if (mine(id) && !enc.active) { setSelected(id); return; }
+    setTargetId(id);
   };
 
-  const tabs: [Tab, string][] = [['combat', 'Combat'], ['sheet', 'Sheet'], ['chat', 'Chat'], ...(isGm ? [['scene', 'Scene'] as [Tab, string]] : [])];
+  const tabs: [Tab, string][] = [['combat', 'Combat'], ['sheet', 'Sheet'], ['chat', 'Chat'], ['notes', 'Notes'], ...(isGm ? [['scene', 'Scene'] as [Tab, string]] : [])];
+  const fireNow = canAct && !!targetId && !!weapon && !fireBlocked({ attack, usage, weapon }, !!view.pending);
 
   return (
     <div className={`table${sheetOpen ? ' sheet-open' : ''}`} ref={rootRef}>
@@ -239,7 +278,16 @@ export function Table({ s }: { s: ClientState }) {
         {isGm && <button className={`btn hide-sm${mapMode === 'place' ? ' on' : ''}`} disabled={!view.map} onClick={() => setMapMode(mapMode === 'place' ? 'move' : 'place')} title="Select a token, then tap a square to put it there.">Place</button>}
         {isGm && <button className={`btn hide-sm${partyFog ? ' on' : ''}`} disabled={!view.map} onClick={() => setPartyFog(!partyFog)}>Party View</button>}
         {isGm && <button className="btn" onClick={() => client.undo()}>Undo</button>}
+        {(() => {
+          // Stabilize a friendly who's Mortally Wounded (or down): Paramedic if trained, else First Aid.
+          const t = targetId ? view.actors[targetId] : undefined;
+          if (!canAct || !actingId || !t || !acting || isFriendly(t) !== isFriendly(acting) || t.public.conditions.dead || t.public.conditions.stabilized) return null;
+          if (t.public.woundState !== 'mortally' && !t.public.conditions.unconscious) return null;
+          const skill = (acting.combatant?.skills.Paramedic ?? 0) > 0 ? 'Paramedic' as const : 'First Aid' as const;
+          return <button className="btn" disabled={!!usage?.actionUsed || !!view.pending} onClick={() => c.act({ type: 'stabilize', medicId: actingId, targetId: t.id, skill })} title={`Stabilize ${t.public.name} with ${skill} (uses your Action; must be adjacent)`}>Stabilize</button>;
+        })()}
         <div className="spacer" />
+        {canAct && targetId && weapon && <button className="btn yellow show-sm" disabled={!fireNow} onClick={fire} title="Fire (F)">{profileOf(weapon).melee ? 'Strike' : 'Fire'}</button>}
         {isGm && !enc.active && view.map && (
           <button className="btn yellow" onClick={() => c.act({ type: 'startEncounter', participants: Object.keys(view.map!.tokens).map((actorId) => ({ actorId })) })}>Start Encounter</button>
         )}
@@ -252,6 +300,7 @@ export function Table({ s }: { s: ClientState }) {
           {tabs.map(([t, label]) => (
             <button key={t} role="tab" aria-selected={tab === t} className={`tab${tab === t ? ' sel' : ''}`} onClick={() => (tab === t && sheetOpen ? setSheetOpen(false) : openTab(t))}>
               {label}{t === 'chat' && unread > 0 && <span className="badge">{unread > 9 ? '9+' : unread}</span>}
+              {t === 'notes' && notesUnread > 0 && <span className="badge">{notesUnread}</span>}
             </button>
           ))}
           <button className="tab grip" aria-label={sheetOpen ? 'Collapse Panel' : 'Expand Panel'} onClick={() => setSheetOpen(!sheetOpen)}>{sheetOpen ? '▾' : '▴'}</button>
@@ -265,15 +314,18 @@ export function Table({ s }: { s: ClientState }) {
                 c={c} actingId={actingId} currentId={currentId} canAct={canAct} weapon={weapon} setWeaponId={setWeaponId} mode={mode} setMode={setMode}
                 targetId={targetId} setTargetId={setTargetId} attack={attack} usage={usage} mapMode={mapMode} setMapMode={setMapMode}
                 setHighlight={setHighlight} onFire={fire}
+                ownIds={ownIds} onSelectOwn={(id) => setSelected(id)}
               />
             </>
           )}
           {tab === 'sheet' && <SheetPanel c={c} preferId={isGm ? (focusId ?? actingId) : actingId} />}
+          {tab === 'notes' && <NotesPanel c={c} />}
           {tab === 'chat' && <ChatPanel c={c} rollerId={isGm ? (focusId ?? actingId) : (actingId ?? ownIds[0] ?? null)} onUnreadReset={() => setUnread(0)} />}
           {tab === 'scene' && isGm && <ScenePanel c={c} mapMode={mapMode} setMapMode={setMapMode} shareCursor={gmCursor} setShareCursor={(v) => { setGmCursor(v); if (!v) client.signal({ kind: 'cursor', at: null }); }} onFocus={(id) => { setFocusId(id); setTab('combat'); }} />}
         </div>
       </aside>
 
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announce}</div>
       {help && <HelpOverlay onClose={() => setHelp(false)} />}
       {s.toast && Date.now() - s.toast.at < 5000 && <div className="toast" role="alert">{s.toast.text}</div>}
     </div>

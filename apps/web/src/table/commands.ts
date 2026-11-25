@@ -2,14 +2,18 @@
  * Chat input parser. Pure, so it is unit-tested.
  *
  *   /r 2d6+3 [label]          roll dice (also /roll)
- *   /check REF+Handgun [vs 15] [: label]   skill check for the selected character
+ *   /check REF+Handgun [vs|dv|against 15] [: label]   skill check for the selected character
  *   /gm /r … · /gm /check …   private roll (GM eyes only)
  *   /gm message               whisper to the GM
- *   /w Name message           whisper to a player or a character's player
+ *   /w Name message           whisper to a player (player or character name; a unique prefix works)
  *   anything else             chat
  */
 import type { Modifier } from '@cprc/rules-core';
 import type { DiceExpr, Intent, StatKeyName } from '@cprc/session';
+import { ALL_SKILLS } from '../data/skills.js';
+
+/** Every RED Core skill name (game terms), for matching and suggestions. */
+const KNOWN_SKILLS = ALL_SKILLS.map((k) => k.name);
 
 export const STATS: StatKeyName[] = ['INT', 'REF', 'DEX', 'TECH', 'COOL', 'WILL', 'LUCK', 'MOVE', 'BODY', 'EMP'];
 
@@ -66,19 +70,65 @@ export function parseCommand(raw: string, ctx: CommandContext): Parsed {
 
   const whisper = /^\/w\s+(.+)$/i.exec(input);
   if (whisper) {
-    const rest = whisper[1]!;
-    // Longest name first, so "Doc Ruiz" wins over "Doc".
-    const sorted = [...ctx.recipients].sort((a, b) => b.name.length - a.name.length);
-    const hit = sorted.find((r) => rest.toLowerCase().startsWith(`${r.name.toLowerCase()} `));
-    if (!hit) return { kind: 'error', message: 'Whisper to whom? Use /w Name message.' };
-    const text = rest.slice(hit.name.length).trim();
-    if (!text) return { kind: 'error', message: 'Add a message after the name.' };
-    return { kind: 'intent', intent: { type: 'chat', text, to: [hit.id] } };
+    const r = matchRecipient(whisper[1]!, ctx.recipients);
+    if ('error' in r) return { kind: 'error', message: r.error };
+    if (!r.text) return { kind: 'error', message: 'Add a message after the name.' };
+    return { kind: 'intent', intent: { type: 'chat', text: r.text, to: [r.id] } };
   }
 
   if (input.startsWith('/')) return { kind: 'error', message: `Unknown command ${input.split(/\s/)[0]}. Type /help.` };
   if (input.length > 500) return { kind: 'error', message: 'Keep messages under 500 characters.' };
   return { kind: 'intent', intent: { type: 'chat', text: input, ...(ctx.asActorId ? { asActorId: ctx.asActorId } : {}) } };
+}
+
+/**
+ * Match the start of `rest` to a recipient: a full name (longest first, case-insensitive),
+ * else a unique prefix of one name or word. Several names may share one id (a player and
+ * their characters); that still counts as unique.
+ */
+export function matchRecipient(rest: string, recipients: Recipient[]): { id: string; name: string; text: string } | { error: string } {
+  const lower = rest.toLowerCase();
+  const sorted = [...recipients].sort((a, b) => b.name.length - a.name.length);
+  const full = sorted.find((r) => lower === r.name.toLowerCase() || lower.startsWith(`${r.name.toLowerCase()} `));
+  if (full) return { id: full.id, name: full.name, text: rest.slice(full.name.length).trim() };
+  const word = rest.split(/\s+/)[0] ?? '';
+  if (!word) return { error: 'Whisper to whom? Use /w Name message.' };
+  const w = word.toLowerCase();
+  const hits = recipients.filter((r) => r.name.toLowerCase().startsWith(w) || r.name.toLowerCase().split(/\s+/).some((part) => part.startsWith(w)));
+  const ids = [...new Set(hits.map((h) => h.id))];
+  if (ids.length === 1) return { id: ids[0]!, name: hits[0]!.name, text: rest.slice(word.length).trim() };
+  if (ids.length > 1) return { error: `Which one: ${[...new Set(hits.map((h) => h.name))].slice(0, 5).join(', ')}?` };
+  return { error: `No one called “${word}” is here. Use /w Name message.` };
+}
+
+/** Edit distance, for "Did you mean …?" suggestions. */
+function distance(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array<number>(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0]![j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    d[i]![j] = Math.min(d[i - 1]![j]! + 1, d[i]![j - 1]! + 1, d[i - 1]![j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+  }
+  return d[a.length]![b.length]!;
+}
+
+/** Resolve a typed skill to its RED name, or suggest the closest ones. */
+export function resolveSkill(term: string, own: string[]): { skill: string } | { error: string } {
+  const t = term.trim().toLowerCase();
+  const pool = [...new Set([...own, ...KNOWN_SKILLS])];
+  const exact = pool.find((k) => k.toLowerCase() === t);
+  if (exact) return { skill: exact };
+  // Specializations like "Language (Streetslang)" or "Local Expert (Watson)".
+  const base = /^(.+?)\s*\((.+)\)$/.exec(term.trim());
+  if (base && pool.some((k) => k.toLowerCase() === base[1]!.toLowerCase())) return { skill: titleCase(term.trim()) };
+  const prefix = pool.filter((k) => k.toLowerCase().startsWith(t));
+  if (prefix.length === 1) return { skill: prefix[0]! };
+  const ranked = (prefix.length ? prefix : pool)
+    .map((k) => ({ k, d: prefix.length ? 0 : distance(t, k.toLowerCase()) }))
+    .sort((a, b) => a.d - b.d || a.k.localeCompare(b.k))
+    .filter((x) => prefix.length || x.d <= Math.max(2, Math.floor(t.length / 3)))
+    .slice(0, 3)
+    .map((x) => x.k);
+  return { error: ranked.length ? `Unknown skill “${term.trim()}”. Did you mean ${ranked.join(' or ')}?` : `Unknown skill “${term.trim()}”. Type /help for the format.` };
 }
 
 function parseCheck(spec: string, ctx: CommandContext, priv: boolean): Parsed {
@@ -87,8 +137,10 @@ function parseCheck(spec: string, ctx: CommandContext, priv: boolean): Parsed {
   const colon = s.indexOf(':');
   if (colon >= 0) { label = s.slice(colon + 1).trim() || undefined; s = s.slice(0, colon).trim(); }
   let dv: number | undefined;
-  const vs = /\s+vs\.?\s+(\d+)\s*$/i.exec(s);
+  // "vs 15", "vs. 15", "vs DV 15", "dv 15", "DV15", "against 15".
+  const vs = /\s+(?:(?:vs\.?|against)(?:\s*dv)?|dv)\s*(\d+)\s*$/i.exec(s);
   if (vs) { dv = Number(vs[1]); s = s.slice(0, vs.index).trim(); }
+  if (dv !== undefined && (dv < 1 || dv > 60)) return { kind: 'error', message: 'DV must be between 1 and 60.' };
 
   let stat: StatKeyName | undefined;
   let skill: string | undefined;
@@ -107,7 +159,9 @@ function parseCheck(spec: string, ctx: CommandContext, priv: boolean): Parsed {
       stat = term.toUpperCase() as StatKeyName;
     } else if (sign > 0) {
       if (skill) return { kind: 'error', message: 'Use one skill per check.' };
-      skill = ctx.skills.find((k) => k.toLowerCase() === term.toLowerCase()) ?? titleCase(term.toLowerCase());
+      const r = resolveSkill(term, ctx.skills);
+      if ('error' in r) return { kind: 'error', message: r.error };
+      skill = r.skill;
     } else {
       return { kind: 'error', message: `Can’t subtract “${term}”.` };
     }

@@ -115,7 +115,14 @@ export interface SessionState {
   map: TacticalMap | null;
   /** GM prep: saved maps (scenes) and NPC templates. Stripped from player views. */
   library: Library;
+  // --- Track U ---
+  /** Handouts and GM journal pages, filtered by audience in projections. */
+  handouts: Record<string, Handout>;
 }
+
+// --- Track U ---
+/** Shared text (optional image). audience: everyone, GM only (journal), or listed player ids. */
+export interface Handout { id: string; title: string; body: string; imageUrl?: string; audience: 'all' | 'gm' | string[]; updatedAt?: string }
 
 export interface StatePatch {
   /** null = remove actor. */
@@ -127,6 +134,8 @@ export interface StatePatch {
   map?: TacticalMap | null;
   /** Replace the whole library. GM only; never projected. */
   library?: Library;
+  /** Track U: replace all handouts. */
+  handouts?: Record<string, Handout>;
 }
 
 export interface LogEntry {
@@ -203,7 +212,10 @@ export type Intent =
   | { type: 'setLighting'; lighting: NonNullable<TacticalMap['lighting']> }
   // Area attacks on the grid
   | { type: 'areaAttack'; attackerId: string; weaponId: string; kind: 'shotgunShell' | 'launcher' | 'thrownGrenade'; at: Cell }
-  | { type: 'suppressiveFire'; attackerId: string; weaponId: string };
+  | { type: 'suppressiveFire'; attackerId: string; weaponId: string }
+  // --- Track U ---
+  | { type: 'setHandout'; id: string; title: string; body: string; imageUrl?: string; audience: 'all' | 'gm' | string[] }
+  | { type: 'removeHandout'; id: string };
 
 export type StatKeyName = 'INT' | 'REF' | 'DEX' | 'TECH' | 'COOL' | 'WILL' | 'LUCK' | 'MOVE' | 'BODY' | 'EMP';
 
@@ -243,6 +255,8 @@ export interface ViewState {
   map: TacticalMap | null;
   /** GM view only. */
   library?: Library;
+  /** Track U: handouts this viewer may read. */
+  handouts?: Record<string, Handout>;
 }
 
 export interface ProjectedEntry {
@@ -252,5 +266,5 @@ export interface ProjectedEntry {
   by: AuthorId;
   intentType: IntentType;
   events: CombatEvent[];
-  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: Pending | null; map?: TacticalMap | null; library?: Library };
+  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: Pending | null; map?: TacticalMap | null; library?: Library; handouts?: Record<string, Handout> };
 }

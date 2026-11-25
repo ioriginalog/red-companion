@@ -9,6 +9,7 @@ export function emptySession(sessionId: string): SessionState {
     pending: null,
     map: null,
     library: { maps: {}, actors: {} },
+    handouts: {}, // Track U
   };
 }
 
@@ -30,6 +31,7 @@ export function applyEntry(state: SessionState, entry: LogEntry): SessionState {
     pending: 'pending' in entry.patch ? (entry.patch.pending ?? null) : state.pending,
     map: 'map' in entry.patch ? (entry.patch.map ?? null) : state.map,
     library: entry.patch.library ?? state.library,
+    handouts: entry.patch.handouts ?? state.handouts ?? {}, // Track U
   };
 }
 

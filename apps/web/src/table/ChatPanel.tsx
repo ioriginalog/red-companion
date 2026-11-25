@@ -34,9 +34,10 @@ export function ChatPanel({ c, rollerId, onUnreadReset }: { c: TableCtx; rollerI
   const listRef = useRef<HTMLDivElement>(null);
   const n = useRef(0);
 
+  // Whisper targets: the GM, players by name (the directory reaches players too), and characters by name.
   const recipients: Recipient[] = useMemo(() => {
     const out: Recipient[] = isGm ? [] : [{ name: 'GM', id: 'gm' }];
-    if (isGm) for (const p of s.players) out.push({ name: p.name, id: p.playerId });
+    for (const p of s.players ?? []) if (p.playerId !== c.me && p.name) out.push({ name: p.name, id: p.playerId });
     for (const a of Object.values(view.actors)) {
       if (a.controller !== 'gm' && a.controller !== c.me && !out.some((r) => r.id === a.controller && r.name === a.public.name)) out.push({ name: a.public.name, id: a.controller });
     }

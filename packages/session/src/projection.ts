@@ -7,6 +7,7 @@
  */
 import { getInjury, woundState, type CheckResult, type CombatEvent } from '@cprc/rules-core';
 import { allegianceOf, factionOf, projectMap } from './tactical.js';
+import { visibleHandouts } from './handouts.js'; // Track U
 import type { Actor, LogEntry, ProjectedActor, ProjectedEntry, SessionState, TacticalMap, Viewer, ViewState } from './types.js';
 
 export interface ProjectionOptions {
@@ -54,6 +55,7 @@ export function projectState(state: SessionState, viewer: Viewer, opts?: Project
     pending: state.pending,
     map: viewMap(state, viewer),
     ...(viewer.role === 'gm' ? { library: state.library } : {}),
+    handouts: visibleHandouts(state.handouts ?? {}, viewer), // Track U
   };
 }
 
@@ -108,6 +110,7 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
   if (entry.patch.encounter) patch.encounter = entry.patch.encounter;
   if ('pending' in entry.patch) patch.pending = entry.patch.pending ?? null;
   if (entry.patch.library && viewer.role === 'gm') patch.library = entry.patch.library;
+  if (entry.patch.handouts) patch.handouts = visibleHandouts(entry.patch.handouts, viewer); // Track U
   return { seq: entry.seq, id: entry.id, at: entry.at, by: entry.by, intentType: entry.intent.type, events, patch };
 }
 
@@ -152,7 +155,7 @@ export function redactEvent(e: CombatEvent, visible: (id: string | undefined) =>
 }
 
 export function emptyView(sessionId: string): ViewState {
-  return { sessionId, seq: 0, actors: {}, encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null }, pending: null, map: null };
+  return { sessionId, seq: 0, actors: {}, encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null }, pending: null, map: null, handouts: {} /* Track U */ };
 }
 
 /** Client-side reducer for projected entries. */
@@ -171,5 +174,6 @@ export function applyProjectedEntry(view: ViewState, entry: ProjectedEntry): Vie
     pending: 'pending' in entry.patch ? (entry.patch.pending ?? null) : view.pending,
     map: 'map' in entry.patch ? (entry.patch.map ?? null) : view.map,
     ...(entry.patch.library ? { library: entry.patch.library } : {}),
+    ...(entry.patch.handouts ? { handouts: entry.patch.handouts } : {}), // Track U
   };
 }

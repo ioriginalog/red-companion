@@ -1,11 +1,18 @@
 /** Combat log lines. Sentence case (Chicago); names come from the viewer's projection. */
-import type { CheckResult, CombatEvent } from '@cprc/rules-core';
+import { getInjury, type CheckResult, type CombatEvent } from '@cprc/rules-core';
 
 export type Tone = 'hit' | 'miss' | 'info' | 'bad' | 'good' | 'chat' | 'roll';
 export interface Line { text: string; tone: Tone }
 
 const LOC: Record<string, string> = { head: 'head', body: 'body' };
 const roll = (c: CheckResult) => (c.redacted ? `${c.total}` : `${c.total} (${c.roll.natural}${c.roll.kind === 'critSuccess' ? ' crit' : c.roll.kind === 'critFailure' ? ' fumble' : ''})`);
+
+const CONDITION: Record<string, string> = { prone: 'Prone', unconscious: 'Unconscious', dead: 'Dead', stabilized: 'Stabilized' };
+
+/** Critical Injuries are game terms: title case from the rules data, else from the id. */
+export function injuryName(id: string): string {
+  try { return getInjury(id).name; } catch { return id.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()).trim(); }
+}
 
 /** `who` names a viewer id ('gm' or a player id); defaults to 'GM'/'A player'. */
 export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: string) => string = (b) => (b === 'gm' ? 'GM' : 'A player')): Line | null {
@@ -18,13 +25,13 @@ export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: 
         tone: e.hit ? 'hit' : 'miss',
       };
     case 'damageRolled':
-      return { text: `Damage ${e.dice.join(' + ')}${e.multiplier > 1 ? ` × ${e.multiplier}` : ''} = ${e.total}${e.critTriggered ? ', critical injury!' : '.'}`, tone: 'hit' };
+      return { text: `Damage ${e.dice.join(' + ')}${e.multiplier > 1 ? ` × ${e.multiplier}` : ''} = ${e.total}${e.critTriggered ? '. Critical Injury!' : '.'}`, tone: 'hit' };
     case 'damageApplied':
       return e.through > 0
         ? { text: `${name(e.targetId)} takes ${e.hpBefore - e.hpAfter} to the ${LOC[e.location] ?? e.location} (SP ${e.spCounted} stopped ${Math.min(e.rawDamage, e.spCounted)}).`, tone: 'bad' }
         : { text: `${name(e.targetId)}’s armor stops it.`, tone: 'info' };
     case 'criticalInjury':
-      return { text: `Critical injury on ${name(e.targetId)}: ${e.injuryId.replace(/([A-Z])/g, ' $1').toLowerCase()}.`, tone: 'bad' };
+      return { text: `Critical Injury on ${name(e.targetId)}: ${injuryName(e.injuryId)}.`, tone: 'bad' };
     case 'woundStateChanged':
       return { text: `${name(e.targetId)} is now ${e.to === 'mortally' ? 'Mortally Wounded' : e.to === 'seriously' ? 'Seriously Wounded' : e.to === 'lightly' ? 'Lightly Wounded' : e.to}.`, tone: e.to === 'mortally' ? 'bad' : 'info' };
     case 'deathSaveRolled':
@@ -57,7 +64,9 @@ export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: 
     case 'hpAdjusted':
       return { text: `GM ${e.delta >= 0 ? 'restores' : 'removes'} ${Math.abs(e.delta)} HP ${e.delta >= 0 ? 'to' : 'from'} ${name(e.targetId)}${e.reason ? ` (${e.reason})` : ''}.`, tone: e.delta >= 0 ? 'good' : 'bad' };
     case 'conditionSet':
-      return { text: `${name(e.targetId)} is ${e.value ? '' : 'no longer '}${e.condition}.`, tone: 'info' };
+      return { text: `${name(e.targetId)} is ${e.value ? '' : 'no longer '}${CONDITION[e.condition] ?? e.condition}.`, tone: 'info' };
+    case 'handoutShared':
+      return { text: `GM shared a handout: ${e.title}.`, tone: 'info' };
     case 'sceneChanged':
       return { text: `Scene: ${e.name}.`, tone: 'info' };
     case 'areaResolved':

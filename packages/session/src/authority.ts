@@ -20,6 +20,7 @@ import {
   checkAttackAction, checkOtherAction, controls, currentActorId, freshUsage, getActor, getWeapon, requireMap, SessionError, usageFor, visibilityFor,
 } from './helpers.js';
 import { executeTool, TOOL_GM_ONLY, TOOL_WHILE_PENDING } from './tools.js';
+import { executeHandout } from './handouts.js'; // Track U
 import { doAreaAttack, doSuppressiveFire } from './grid-area.js';
 
 export { SessionError, currentActorId };
@@ -37,8 +38,9 @@ export interface AuthorityContext {
 const GM_ONLY: ReadonlySet<IntentType> = new Set([
   'addActor', 'replaceActor', 'removeActor', 'assignController', 'startEncounter', 'endEncounter', 'cancelPending', 'setMap', 'placeToken',
   ...TOOL_GM_ONLY,
+  'setHandout', 'removeHandout', // Track U
 ]);
-const ALLOWED_WHILE_PENDING: ReadonlySet<IntentType> = new Set(['respondDodge', 'rollDamage', 'cancelPending', 'declineWatch', ...TOOL_WHILE_PENDING]);
+const ALLOWED_WHILE_PENDING: ReadonlySet<IntentType> = new Set(['respondDodge', 'rollDamage', 'cancelPending', 'declineWatch', ...TOOL_WHILE_PENDING, 'setHandout', 'removeHandout']);
 
 export function authorId(v: Viewer): AuthorId {
   return v.role === 'gm' ? 'gm' : `player:${v.playerId}`;
@@ -339,6 +341,8 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       return doAreaAttack(state, intent, by, dice);
     case 'suppressiveFire':
       return doSuppressiveFire(state, intent, by, dice);
+    case 'setHandout': case 'removeHandout': // Track U
+      return executeHandout(state, intent, by);
     default:
       return executeTool(state, intent, by, dice);
   }

@@ -41,6 +41,8 @@ export type CombatEvent = Base & (
   | { type: 'hpAdjusted'; targetId: string; delta: number; hpAfter: number; reason?: string }
   | { type: 'conditionSet'; targetId: string; condition: string; value: boolean }
   | { type: 'sceneChanged'; mapId: string; name: string }
+  // --- Track U ---
+  | { type: 'handoutShared'; id: string; title: string }
   | { type: 'areaResolved'; attackerId: string; kind: string; at: Cell; targetIds: string[] }
 );
 
