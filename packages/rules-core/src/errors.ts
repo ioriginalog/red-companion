@@ -4,7 +4,8 @@ export type RulesErrorCode =
   | 'ILLEGAL_MODE'
   | 'CANNOT_DODGE'
   | 'GM_RULING_REQUIRED'
-  | 'INVALID_STATE';
+  | 'INVALID_STATE'
+  | 'INVALID_INPUT';
 
 /** Thrown when an intent breaks a rule. The UI should show `message` and block the action. */
 export class RulesError extends Error {

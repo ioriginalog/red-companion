@@ -6,5 +6,7 @@ import '@fontsource/barlow/400.css';
 import '@fontsource/barlow/600.css';
 import './styles.css';
 import { App } from './App.js';
+import { registerServiceWorker } from './pwa.js';
 
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
+registerServiceWorker();
