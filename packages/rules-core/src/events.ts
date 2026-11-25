@@ -47,6 +47,8 @@ export type CombatEvent = Base & (
   /** Netrunning: one line per NET Action, with its check(s). `text` is ready to narrate (sentence case). */
   | { type: 'netAction'; combatantId: string; action: string; text: string; check?: CheckResult; vs?: CheckResult; dv?: number; success?: boolean; dice?: number[]; amount?: number }
   // --- end Track N ---
+  // --- Round 3 X --- Grapples, Martial Arts moves, Facedowns, Role Abilities. `text` is a ready narration line.
+  | { type: 'extraResolved'; combatantId: string; targetId?: string; move: string; text: string; success?: boolean; rolls?: { label: string; total: number; natural?: number }[] }
   | { type: 'areaResolved'; attackerId: string; kind: string; at: Cell; targetIds: string[] }
   // --- Track K ---
   | { type: 'injuryTreated'; medicId: string; targetId: string; injuryId: string; kind: 'quickFix' | 'treatment'; skill: string; check: CheckResult; dv: number; outcome: 'quickFixed' | 'removed' | 'failed' }

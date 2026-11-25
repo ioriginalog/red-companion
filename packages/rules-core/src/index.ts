@@ -23,3 +23,9 @@ export * from './cover.js';
 // --- Track N ---
 export * from './net/index.js';
 // --- end Track N ---
+// --- Round 3 X ---
+export * from './grapple.js';
+export * from './martial.js';
+export * from './facedown.js';
+export * from './roles-extra.js';
+// --- end Round 3 X ---

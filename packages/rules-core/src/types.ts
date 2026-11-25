@@ -94,6 +94,10 @@ export interface Combatant {
   /** On Fire: HP lost at the start of each of this character's Turns until put out. */
   onFire?: number;
   // --- end Track K ---
+  // --- Round 3 X ---
+  /** Reputation level 0–10 (Facedowns). */
+  reputation?: number;
+  // --- end Round 3 X ---
 }
 
 // --- Track K ---
@@ -107,8 +111,20 @@ export interface RoleState {
   awareness?: Partial<Record<AwarenessKey, number>>;
   /** Medtech: Medicine specialty points (total ≤ rank). */
   medicine?: { surgery: number; pharmaceuticals: number; cryosystem: number };
+  // --- Round 3 X ---
+  /** Tech: Maker specialty ranks (2 points per Role rank, each specialty ≤ rank). */
+  maker?: { field: number; upgrade: number; fabrication: number; invention: number };
+  /** Exec: Teamwork members (gained at ranks 3, 5 and 9). */
+  team?: TeamMember[];
+  /** Nomad: Family vehicles and upgrades chosen with Moto (names only). */
+  moto?: { vehicles: string[]; upgrades: string[] };
+  // --- end Round 3 X ---
   notes?: string;
 }
+// --- Round 3 X ---
+export type TeamMemberKind = 'bodyguard' | 'covertOperative' | 'driver' | 'netrunner' | 'technician';
+export interface TeamMember { name: string; kind: TeamMemberKind; loyalty: number }
+// --- end Round 3 X ---
 export type CyberwareEffect =
   | { kind: 'stat'; stat: StatKey; value: number }
   | { kind: 'skill'; skill: string; value: number }
