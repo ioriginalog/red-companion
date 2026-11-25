@@ -4,8 +4,10 @@
  *   GM:     hello(gm) → append(entries) / truncate / replaceLog / fetchLog / reject(to player)
  *   Player: hello(player) → intent
  *   Relay → GM:     welcome, intent (from a player), playerJoined/Left, log, error
- *   Relay → Player: welcome (with projected snapshot and the player directory), entries (projected),
- *                   snapshot, rejected, playerJoined/Left, error
+ *   Relay → Player: welcome (with projected snapshot, the player directory and recent history),
+ *                   entries (projected), snapshot, rejected, queued, playerJoined/Left, gmStatus, error
+ *   While the GM is offline the relay holds player intents (bounded) and hands
+ *   them over, in order, once the GM is back and has fetched the log.
  */
 import type { Cell } from '@cprc/rules-core';
 import type { Intent, LogEntry, ProjectedEntry, ViewState } from './types.js';
@@ -35,20 +37,26 @@ export type ClientMessage =
 
 export interface PlayerInfo { playerId: string; name: string; online: boolean }
 
+/** One past log entry as a player saw it (events only), for the welcome history. */
+export interface HistoryItem { seq: number; by: string; intentType: string; events: ProjectedEntry['events'] }
+
 export type ServerMessage =
   | { t: 'welcome'; role: 'gm'; sessionId: string; headSeq: number; players: PlayerInfo[] }
-  | { t: 'welcome'; role: 'player'; sessionId: string; playerId: string; playerToken: string; view: ViewState; players: PlayerInfo[] }
+  | { t: 'welcome'; role: 'player'; sessionId: string; playerId: string; playerToken: string; view: ViewState; players: PlayerInfo[]; history?: HistoryItem[] }
   | { t: 'entries'; entries: ProjectedEntry[] }
   | { t: 'snapshot'; view: ViewState }
   | { t: 'log'; entries: LogEntry[] }
   | { t: 'intent'; from: string; clientMsgId: string; intent: Intent }
   | { t: 'rejected'; clientMsgId: string; code: string; message: string }
+  /** A player intent is being held at the relay until the GM is back. */
+  | { t: 'queued'; clientMsgId: string }
   | { t: 'playerJoined'; player: PlayerInfo }
   | { t: 'playerLeft'; playerId: string }
   | { t: 'gmStatus'; online: boolean }
   /** `from` = 'gm' or a playerId. */
   | { t: 'signal'; from: string; signal: Signal }
-  | { t: 'error'; code: string; message: string }
+  /** `retryAfter` (seconds) accompanies LOCKED. */
+  | { t: 'error'; code: string; message: string; retryAfter?: number }
   | { t: 'pong' };
 
 const isCell = (x: unknown): x is Cell =>

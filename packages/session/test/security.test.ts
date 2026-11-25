@@ -115,7 +115,26 @@ describe('fog leaks (round 1 critic #4)', () => {
     const json = JSON.stringify(projectState(t.state, P1));
     expect(json).not.toContain('ganger');
     expect(json).not.toContain('Secret Boss');
-    expect(projectState(t.state, P1).encounter.order).toEqual(['solo', 'hidden:1']);
+    expect(projectState(t.state, P1).encounter.order).toEqual(['solo']);
+  });
+  it('hides how many unseen hostiles there are and where they sit in the order (round 2 #14)', () => {
+    const t = setup();
+    t.send({ type: 'endTurn' }, P1);
+    const v = projectState(t.state, P1);
+    // One opaque slot while the unseen actor acts, never a count.
+    expect(v.encounter.order).toEqual(['solo', 'hidden']);
+    expect(v.encounter.turnIndex).toBe(1);
+    expect(v.encounter.hiddenActing).toBe(true);
+    expect(v.encounter.usage).toBeUndefined();
+    expect(v.actors.hidden!.placeholder).toBe(true);
+    expect(v.encounter.round).toBe(t.state.encounter.round);
+    // Back to the PC: the slot disappears and the round counter is unchanged.
+    t.send({ type: 'endTurn' }, GM);
+    const w = projectState(t.state, P1);
+    expect(w.encounter.order).toEqual(['solo']);
+    expect(w.encounter.turnIndex).toBe(0);
+    expect(w.encounter.round).toBe(t.state.encounter.round);
+    expect(w.actors.hidden).toBeUndefined();
   });
   it('aliases a hidden attacker in events and pending steps, and withholds its damage dice and ammo', () => {
     const t = setup();
@@ -124,11 +143,11 @@ describe('fog leaks (round 1 critic #4)', () => {
     // GM rules the hidden ganger can shoot (e.g. through a gap the map doesn't show).
     expect(t.send({ type: 'rangedAttack', attackerId: 'ganger', defenderId: 'solo', weaponId: 'pistol', distance: 10, ignoreLineOfSight: true }, GM).ok).toBe(true);
     const dodge = t.lastFor(P1);
-    expect(dodge.patch.pending).toMatchObject({ kind: 'awaitingDodge', attack: { attackerId: 'hidden:1', weaponId: 'unknown' } });
+    expect(dodge.patch.pending).toMatchObject({ kind: 'awaitingDodge', attack: { attackerId: 'hidden', weaponId: 'unknown' } });
     expect(JSON.stringify(dodge)).not.toContain('ganger');
     expect(t.send({ type: 'respondDodge', pendingId: (t.state.pending as { id: string }).id, dodge: false }, P1, scriptedDice({ d10: [9] })).ok).toBe(true);
     const hit = t.lastFor(P1);
-    expect(hit.patch.pending).toMatchObject({ kind: 'awaitingDamage', attackerId: 'hidden:1' });
+    expect(hit.patch.pending).toMatchObject({ kind: 'awaitingDamage', attackerId: 'hidden' });
     expect(hit.patch.pending).not.toHaveProperty('spec');
     expect(hit.events.map((e) => e.type)).not.toContain('ammoSpent');
     expect(JSON.stringify(hit)).not.toContain('ganger');
@@ -140,7 +159,7 @@ describe('fog leaks (round 1 critic #4)', () => {
     t.send({ type: 'moveToken', actorId: 'solo', to: { x: 2, y: 0 } }, P1);
     const e = t.lastFor(P1);
     expect(e.patch.actors!.ganger!.public.name).toBe('Secret Boss');
-    expect(e.patch.actors!['hidden:1']).toBeNull();
+    expect(e.patch.actors!.hidden).toBeUndefined();
     expect(e.patch.encounter!.order).toEqual(['solo', 'ganger']);
   });
   it('a player never gets a removal for an actor they never knew about', () => {
@@ -148,7 +167,7 @@ describe('fog leaks (round 1 critic #4)', () => {
     t.send({ type: 'removeActor', actorId: 'ganger' }, GM);
     const e = t.lastFor(P1);
     expect(JSON.stringify(e)).not.toContain('ganger');
-    expect(e.patch.actors!['hidden:1']).toBeNull();
+    expect(e.patch.actors?.hidden).toBeUndefined();
   });
   it('without a map, hostiles are known only while in an active encounter', () => {
     const t = table();

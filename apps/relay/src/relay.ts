@@ -13,7 +13,7 @@ import { extname, join, normalize, resolve, sep } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
   applyEntry, LogGapError, parseClientMessage, projectEntry, projectState, PROTOCOL_VERSION, replay,
-  type ClientMessage, type LogEntry, type PlayerInfo, type ServerMessage, type SessionState, type Viewer,
+  type ClientMessage, type HistoryItem, type Intent, type LogEntry, type PlayerInfo, type ServerMessage, type SessionState, type Viewer,
 } from '@cprc/session';
 import { ASSET_NAME, type SessionMeta, type Store } from './store.js';
 
@@ -42,8 +42,18 @@ export interface RelayOptions {
   assetQuotaBytes?: number;
   /** Built web client to serve from the same origin (SPA fallback to index.html). */
   webDir?: string;
+  /** Player intents held while the GM is offline. Defaults: 50 per session, 10 per player, 10 minutes. */
+  offlineQueue?: { perSession?: number; perPlayer?: number; maxAgeMs?: number };
+  /** Projected entries in a player's welcome history. Default 300. */
+  historyEntries?: number;
+  /** Clock for tests. */
+  now?: () => number;
   log?: (msg: string) => void;
 }
+
+/** Failed-hello limiter: a token bucket per IP (burst 10, one more every 30 s). */
+const HELLO_BURST = 10;
+const HELLO_REFILL_MS = 30_000;
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -61,7 +71,13 @@ interface Room {
   state: SessionState | null;
   gm: WebSocket | null;
   players: Map<WebSocket, string>; // socket → playerId
+  /** Player intents waiting for the GM (in arrival order). */
+  queue: QueuedIntent[];
+  /** Deliver the queue after the reconnecting GM has fetched the log. */
+  flushOnFetch: boolean;
 }
+
+interface QueuedIntent { playerId: string; clientMsgId: string; intent: Intent; at: number }
 
 type Conn = {
   ws: WebSocket; room?: Room; role?: 'gm' | 'player'; playerId?: string; alive: boolean; ip: string;
@@ -91,10 +107,15 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
   const createPerHour = opts.createPerHour ?? 20;
   const log = opts.log ?? (() => {});
   const VERSION = '0.1.0';
+  const now = opts.now ?? Date.now;
+  const qPerSession = opts.offlineQueue?.perSession ?? 50;
+  const qPerPlayer = opts.offlineQueue?.perPlayer ?? 10;
+  const qMaxAge = opts.offlineQueue?.maxAgeMs ?? 600_000;
+  const historyN = opts.historyEntries ?? 300;
 
   const rooms = new Map<string, Room>();
   const byJoinCode = new Map<string, Room>();
-  for (const meta of store.listMeta()) indexRoom({ meta, log: null, state: null, gm: null, players: new Map() });
+  for (const meta of store.listMeta()) indexRoom({ meta, log: null, state: null, gm: null, players: new Map(), queue: [], flushOnFetch: false });
 
   function indexRoom(r: Room) {
     rooms.set(r.meta.sessionId, r);
@@ -256,7 +277,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     const meta: SessionMeta = { sessionId, gmKeyHash: sha256(gmKey), joinCode, createdAt: new Date().toISOString(), players: [] };
     store.saveMeta(meta);
     if (entries.length) store.appendLog(sessionId, entries);
-    indexRoom({ meta, log: entries, state: replay(sessionId, entries), gm: null, players: new Map() });
+    indexRoom({ meta, log: entries, state: replay(sessionId, entries), gm: null, players: new Map(), queue: [], flushOnFetch: false });
     log(`session ${entries.length ? `imported (${entries.length} entries)` : 'created'} ${sessionId}`);
     return { sessionId, gmKey, joinCode };
   }
@@ -338,7 +359,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
   });
   // ws re-emits the HTTP server's errors; the server's own listener handles them.
   wss.on('error', (e) => log(`wss error: ${e.message}`));
-  const failedHellos = new Map<string, { n: number; since: number }>();
+  const helloBuckets = new Map<string, { tokens: number; at: number }>();
 
   const send = (ws: WebSocket, m: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); };
   const fail = (c: Conn, code: string, message: string, close = false) => {
@@ -405,20 +426,35 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     });
   });
 
-  function helloFailed(c: Conn, message: string) {
-    const f = failedHellos.get(c.ip);
-    const now = Date.now();
-    const rec = f && now - f.since < 300_000 ? { n: f.n + 1, since: f.since } : { n: 1, since: now };
-    failedHellos.set(c.ip, rec);
-    fail(c, 'AUTH_FAILED', message, true);
+  // ----- Hello limiter ------------------------------------------------------------
+  //
+  // Only failures cost anything, and secrets always get through: a correct GM
+  // key or player token can't be guessed, so it's never refused, even from an
+  // address that is out of attempts. What a locked address can't do is test
+  // more join codes or keys (or join as a brand-new player) until the bucket
+  // refills, one attempt every 30 seconds.
+  function bucket(ip: string) {
+    const t = now();
+    const b = helloBuckets.get(ip) ?? { tokens: HELLO_BURST, at: t };
+    b.tokens = Math.min(HELLO_BURST, b.tokens + (t - b.at) / HELLO_REFILL_MS);
+    b.at = t;
+    helloBuckets.set(ip, b);
+    return b;
   }
-  function locked(c: Conn) {
-    const f = failedHellos.get(c.ip);
-    return !!f && Date.now() - f.since < 300_000 && f.n >= 10;
+  const retryAfter = (ip: string) => Math.max(1, Math.ceil((1 - bucket(ip).tokens) * HELLO_REFILL_MS / 1000));
+  function locked(c: Conn) { return bucket(c.ip).tokens < 1; }
+  function refuseLocked(c: Conn) {
+    const secs = retryAfter(c.ip);
+    send(c.ws, { t: 'error', code: 'LOCKED', message: `Too many failed attempts from this network. Try again in ${secs} seconds.`, retryAfter: secs });
+    c.ws.close(4000, 'LOCKED');
+  }
+  function helloFailed(c: Conn, message: string) {
+    if (locked(c)) return refuseLocked(c);
+    bucket(c.ip).tokens -= 1;
+    fail(c, 'AUTH_FAILED', message, true);
   }
 
   function onHello(c: Conn, msg: Extract<ClientMessage, { t: 'hello' }>) {
-    if (locked(c)) return fail(c, 'LOCKED', 'Too many failed attempts. Wait a few minutes.', true);
     if (msg.role === 'gm') {
       const r = rooms.get(msg.sessionId);
       if (!r || !sameHash(sha256(msg.gmKey), r.meta.gmKeyHash)) return helloFailed(c, 'Unknown session or wrong GM key.');
@@ -428,12 +464,16 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
       Object.assign(c, { room: r, role: 'gm' });
       send(c.ws, { t: 'welcome', role: 'gm', sessionId: r.meta.sessionId, headSeq: r.state.seq, players: playersOf(r) });
       for (const p of r.players.keys()) send(p, { t: 'gmStatus', online: true });
+      // Queued player intents go out once the GM has the log (it fetches one
+      // whenever the relay holds entries); an empty session can take them now.
+      if (r.state.seq === 0) flushQueue(r); else r.flushOnFetch = true;
       return;
     }
     const r = byJoinCode.get(msg.joinCode.toUpperCase());
+    let rec = r && msg.playerToken ? r.meta.players.find((p) => sameHash(p.tokenHash, sha256(msg.playerToken!))) : undefined;
+    if (!rec && locked(c)) return refuseLocked(c);
     if (!r) return helloFailed(c, 'Unknown join code.');
     ensureLoaded(r);
-    let rec = msg.playerToken ? r.meta.players.find((p) => sameHash(p.tokenHash, sha256(msg.playerToken!))) : undefined;
     let token = msg.playerToken;
     if (!rec) {
       if (r.meta.players.length >= maxPlayers) return fail(c, 'SESSION_FULL', 'This session is full.', true);
@@ -447,14 +487,53 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     for (const [p, pid] of r.players) if (pid !== rec.playerId) send(p, { t: 'playerJoined', player: joined });
     r.players.set(c.ws, rec.playerId);
     Object.assign(c, { room: r, role: 'player', playerId: rec.playerId });
+    const viewer: Viewer = { role: 'player', playerId: rec.playerId };
     send(c.ws, {
       t: 'welcome', role: 'player', sessionId: r.meta.sessionId, playerId: rec.playerId, playerToken: token!,
-      view: projectState(r.state, { role: 'player', playerId: rec.playerId }), players: playersOf(r),
+      view: projectState(r.state, viewer), players: playersOf(r), history: historyFor(r, viewer),
     });
     if (r.gm) {
       send(r.gm, { t: 'playerJoined', player: joined });
       send(c.ws, { t: 'gmStatus', online: true });
     } else send(c.ws, { t: 'gmStatus', online: false });
+  }
+
+  /**
+   * The player's recent log, projected exactly as it was sent live (each entry
+   * against its own before/after state), events only. Replays from the start,
+   * so it costs one pass over the log per join.
+   */
+  function historyFor(r: Room & { log: LogEntry[] }, viewer: Viewer): HistoryItem[] {
+    if (historyN <= 0 || r.log.length === 0) return [];
+    const from = Math.max(0, r.log.length - historyN);
+    let s = replay(r.meta.sessionId, r.log.slice(0, from));
+    const out: HistoryItem[] = [];
+    for (const e of r.log.slice(from)) {
+      const before = s;
+      s = applyEntry(s, e);
+      const p = projectEntry(e, viewer, s, undefined, before);
+      if (p.events.length) out.push({ seq: p.seq, by: p.by, intentType: p.intentType, events: p.events });
+    }
+    return out;
+  }
+
+  /** Hand queued player intents to the GM in arrival order; expired ones are refused. */
+  function flushQueue(r: Room) {
+    r.flushOnFetch = false;
+    const q = r.queue;
+    r.queue = [];
+    if (!r.gm) { r.queue = q; return; }
+    const t = now();
+    for (const i of q) {
+      if (t - i.at > qMaxAge) {
+        rejectTo(r, i.playerId, i.clientMsgId, 'EXPIRED', 'The GM was away too long, so that action was dropped. Try it again.');
+        continue;
+      }
+      send(r.gm, { t: 'intent', from: i.playerId, clientMsgId: i.clientMsgId, intent: i.intent });
+    }
+  }
+  function rejectTo(r: Room, playerId: string, clientMsgId: string, code: string, message: string) {
+    for (const [ws, pid] of r.players) if (pid === playerId) send(ws, { t: 'rejected', clientMsgId, code, message });
   }
 
   function onGm(c: Conn, r: Room, msg: ClientMessage) {
@@ -496,10 +575,11 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
         return;
       }
       case 'fetchLog':
-        return send(c.ws, { t: 'log', entries: r.log.slice(msg.fromSeq - 1) });
-      case 'reject':
-        for (const [ws, pid] of r.players) if (pid === msg.playerId) send(ws, { t: 'rejected', clientMsgId: msg.clientMsgId, code: msg.code, message: msg.message });
+        send(c.ws, { t: 'log', entries: r.log.slice(msg.fromSeq - 1) });
+        if (r.flushOnFetch) flushQueue(r);
         return;
+      case 'reject':
+        return rejectTo(r, msg.playerId, msg.clientMsgId, msg.code, msg.message);
       default:
         return fail(c, 'NOT_ALLOWED', `GM can't send ${msg.t}.`);
     }
@@ -519,12 +599,23 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
 
   function onPlayer(c: Conn, r: Room, msg: ClientMessage) {
     if (msg.t !== 'intent') return fail(c, 'NOT_ALLOWED', `Players can't send ${msg.t}.`);
-    if (!r.gm) return send(c.ws, { t: 'rejected', clientMsgId: msg.clientMsgId, code: 'GM_OFFLINE', message: 'The GM is offline.' });
+    const t = now();
+    // While the GM is away (or still catching up), hold the intent; bounded and short-lived.
+    if (!r.gm || r.flushOnFetch) {
+      r.queue = r.queue.filter((i) => t - i.at <= qMaxAge);
+      const mine = r.queue.filter((i) => i.playerId === c.playerId).length;
+      if (r.queue.length >= qPerSession || mine >= qPerPlayer) {
+        return send(c.ws, { t: 'rejected', clientMsgId: msg.clientMsgId, code: 'QUEUE_FULL', message: 'Too many actions are waiting for the GM. Try again when the GM is back.' });
+      }
+      r.queue.push({ playerId: c.playerId!, clientMsgId: msg.clientMsgId, intent: msg.intent, at: t });
+      return send(c.ws, { t: 'queued', clientMsgId: msg.clientMsgId });
+    }
     send(r.gm, { t: 'intent', from: c.playerId!, clientMsgId: msg.clientMsgId, intent: msg.intent });
   }
 
   // Heartbeat: drop dead connections every 30 s.
   const beat = setInterval(() => {
+    for (const [ip, b] of helloBuckets) if (b.tokens + (now() - b.at) / HELLO_REFILL_MS >= HELLO_BURST) helloBuckets.delete(ip);
     for (const ws of wss.clients) {
       const c = (ws as WebSocket & { conn?: Conn }).conn;
       if (!c) continue;
