@@ -277,6 +277,12 @@ describe('2070s and Netrunning bridges', () => {
     const t = setup();
     expect(t.send({ type: 'setAmmoType', actorId: 'solo', weaponId: 'pistol', ammoType: 'improvedSmart' }, GM)).toMatchObject({ code: 'INVALID' });
     expect(t.send({ type: 'net', op: { op: 'setOptions', quickhacks2070s: true } }, GM).ok).toBe(true);
+    // Round 3 D: it also needs a Smart Weapon.
+    const r = t.send({ type: 'setAmmoType', actorId: 'solo', weaponId: 'pistol', ammoType: 'improvedSmart' }, GM);
+    expect(r).toMatchObject({ code: 'INVALID' });
+    expect(!r.ok && r.message).toMatch(/Smart Weapon/);
+    const solo = t.state.actors.solo!;
+    t.send({ type: 'replaceActor', actor: { ...solo, weapons: solo.weapons.map((w) => (w.id === 'pistol' ? { ...w, smart: 'built' as const } : w)) } }, GM);
     expect(t.send({ type: 'setAmmoType', actorId: 'solo', weaponId: 'pistol', ammoType: 'improvedSmart' }, GM).ok).toBe(true);
   });
   it('the Netrunner Role rank is the Interface the NET uses', async () => {
@@ -285,5 +291,25 @@ describe('2070s and Netrunning bridges', () => {
     const runner = actor('kes', 'pc', 'p1', {}, { role: { id: 'netrunner', rank: 6 } });
     expect(withRoleInterface(runner, rig).interface).toBe(6);
     expect(withRoleInterface(actor('x', 'pc', 'p1'), rig).interface).toBe(2);
+  });
+});
+
+describe('thrown grenades (Round 3 D)', () => {
+  it('a Thrown Grenade weapon is thrown with DEX + Athletics and spends one', () => {
+    const t = setup();
+    const solo = t.state.actors.solo!;
+    t.send({ type: 'replaceActor', actor: { ...solo, combatant: { ...solo.combatant, skills: { ...solo.combatant.skills, Athletics: 5 } }, weapons: [...solo.weapons, { id: 'frag', name: 'Frag Grenade', type: 'grenade', ammo: { loaded: 2, capacity: 3 } }] } }, GM);
+    expect(t.send({ type: 'areaAttack', attackerId: 'solo', weaponId: 'frag', kind: 'launcher', at: { x: 6, y: 1 } }, P1, scriptedDice({ d10: [9], d6: TWOS() })).ok).toBe(true);
+    const roll = ev(t, 'checkRolled')[0]!;
+    expect(roll).toMatchObject({ label: 'Frag Grenade' });
+    expect(roll.type === 'checkRolled' && roll.check.baseBreakdown.map((b) => b.label)).toEqual(['DEX', 'Athletics']);
+    expect(t.state.actors.solo!.weapons.find((w) => w.id === 'frag')!.ammo!.loaded).toBe(1);
+  });
+  it('can’t be fired directly or as a shotgun shell', () => {
+    const t = setup();
+    const solo = t.state.actors.solo!;
+    t.send({ type: 'replaceActor', actor: { ...solo, weapons: [...solo.weapons, { id: 'frag', name: 'Frag Grenade', type: 'grenade', ammo: { loaded: 2, capacity: 3 } }] } }, GM);
+    expect(t.send({ type: 'areaAttack', attackerId: 'solo', weaponId: 'frag', kind: 'shotgunShell', at: { x: 3, y: 3 } }, P1)).toMatchObject({ ok: false });
+    expect(t.send({ type: 'rangedAttack', attackerId: 'solo', defenderId: 'ganger', weaponId: 'frag', distance: 8 }, P1)).toMatchObject({ ok: false });
   });
 });

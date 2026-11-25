@@ -55,11 +55,12 @@ export function projectActor(actor: Actor, viewer: Viewer, opts?: ProjectionOpti
 // Players only ever receive actors they know about: the party and allies
 // always; hostile and neutral NPCs once the party has spotted them on the map
 // (or, with no map, while they are in an active encounter). Unknown actors
-// are omitted entirely; their slots in the Turn order become opaque
-// placeholders (`hidden:1`, `hidden:2`, …) numbered by position, and any
-// event or pending step that mentions them is rewritten to the placeholder.
+// are omitted entirely, including from the Turn order, so players can't count
+// unseen hostiles or tell where they sit. When an unknown actor is acting,
+// the order shows a single opaque `hidden` slot (and `hiddenActing: true`);
+// any event or pending step that mentions an unknown actor uses `hidden` too.
 
-const HIDDEN = 'hidden';
+export const HIDDEN = 'hidden';
 
 /** Actor ids players may know about in this state. */
 export function playerKnown(state: SessionState): Set<string> {
@@ -72,14 +73,11 @@ export function playerKnown(state: SessionState): Set<string> {
   return out;
 }
 
-interface Knowledge { known: Set<string>; aliases: Map<string, string>; aliasOf: (id: string) => string }
+interface Knowledge { known: Set<string>; aliasOf: (id: string) => string }
 
 function knowledge(state: SessionState): Knowledge {
   const known = playerKnown(state);
-  const aliases = new Map<string, string>();
-  let k = 0;
-  for (const id of state.encounter.order) if (!known.has(id) && !aliases.has(id)) aliases.set(id, `${HIDDEN}:${++k}`);
-  return { known, aliases, aliasOf: (id) => (known.has(id) ? id : aliases.get(id) ?? HIDDEN) };
+  return { known, aliasOf: (id) => (known.has(id) ? id : HIDDEN) };
 }
 
 function placeholder(id: string): ProjectedActor {
@@ -92,12 +90,37 @@ function placeholder(id: string): ProjectedActor {
   };
 }
 
+/** True when an actor the players don't know about holds the current Turn. */
+function hiddenActing(enc: Encounter, kn: Knowledge): boolean {
+  const cur = enc.active ? enc.order[enc.turnIndex] : undefined;
+  return !!cur && !kn.known.has(cur);
+}
+
+/**
+ * The Turn order as players see it: known actors only, with one `hidden`
+ * slot standing in for the current Turn when an unknown actor holds it.
+ * Consecutive unknown Turns look identical, so the slot reveals no count.
+ */
 function projectEncounter(enc: Encounter, kn: Knowledge): Encounter {
+  const hidden = hiddenActing(enc, kn);
+  const order: string[] = [];
+  let turnIndex = 0;
+  enc.order.forEach((id, i) => {
+    const current = enc.active && i === enc.turnIndex;
+    if (current && hidden) { turnIndex = order.length; order.push(HIDDEN); return; }
+    if (!kn.known.has(id)) return;
+    if (current) turnIndex = order.length;
+    order.push(id);
+  });
+  // Round 3 P: initiative totals name every combatant; players don't get them.
+  const { usage, hiddenActing: _h, initiative: _totals, ...rest } = enc;
   return {
-    ...enc,
-    order: enc.order.map(kn.aliasOf),
-    deathSaveRequiredFor: enc.deathSaveRequiredFor ? kn.aliasOf(enc.deathSaveRequiredFor) : null,
-    ...(enc.usage ? { usage: { ...enc.usage, actorId: kn.aliasOf(enc.usage.actorId) } } : {}),
+    ...rest,
+    order,
+    turnIndex,
+    deathSaveRequiredFor: enc.deathSaveRequiredFor && kn.known.has(enc.deathSaveRequiredFor) ? enc.deathSaveRequiredFor : null,
+    ...(usage && kn.known.has(usage.actorId) ? { usage } : {}),
+    ...(hidden ? { hiddenActing: true } : {}),
   };
 }
 
@@ -133,14 +156,18 @@ function projectPending(p: Pending | null, viewer: Viewer, state: SessionState, 
       };
     }
     // --- end Track K ---
+    // --- Round 3 P --- (NPC damage dice are stats)
+    case 'awaitingScatter':
+      return { ...p, attackerId: kn.aliasOf(p.attackerId), damageDice: full(p.attackerId) ? p.damageDice : 0 };
+    // --- end Round 3 P ---
   }
 }
 
-/** Every actor a player may see (known actors plus Turn-order placeholders). */
+/** Every actor a player may see (known actors, plus the `hidden` stand-in while an unknown actor acts). */
 function playerActors(state: SessionState, viewer: Viewer, kn: Knowledge, opts?: ProjectionOptions): Record<string, ProjectedActor> {
   const out: Record<string, ProjectedActor> = {};
   for (const a of Object.values(state.actors)) if (kn.known.has(a.id)) out[a.id] = projectActor(a, viewer, opts, state.map);
-  for (const alias of kn.aliases.values()) out[alias] = placeholder(alias);
+  if (hiddenActing(state.encounter, kn)) out[HIDDEN] = placeholder(HIDDEN);
   return out;
 }
 

@@ -3,8 +3,8 @@
  * from a session Actor. Pure; tested in apps/web/test/editors.test.ts.
  */
 import {
-  ammoProblem, applySystems, ARMOR_TYPES, cyberwareProblem, maxHP, roleProblem, seriouslyWoundedThreshold, WEAPON_TYPES,
-  type AmmoTypeId, type ArmorPiece, type Combatant, type CyberwareItem, type HitLocation, type RoleState, type Stats, type Weapon, type WeaponType,
+  ammoProblem, applySystems, ARMOR_TYPES, creationHumanity, cyberwareProblem, humanityMax, maxHP, roleProblem, seriouslyWoundedThreshold, smartWeaponProblem, WEAPON_TYPES,
+  type AmmoTypeId, type ArmorPiece, type Combatant, type CyberwareItem, type GearItem, type HitLocation, type RoleState, type Stats, type Weapon, type WeaponType,
 } from '@cprc/rules-core';
 import type { Actor, Allegiance } from '@cprc/session';
 
@@ -19,6 +19,9 @@ export interface WeaponDraft {
   rofOverride: 1 | 2 | null;
   damageDiceOverride: number | null;
   ammoType?: AmmoTypeId;
+  smartgunLink?: boolean;
+  smart?: 'built' | 'rebuild';
+  tech2070s?: 'power' | 'tech';
 }
 
 export interface ActorDraft {
@@ -35,6 +38,7 @@ export interface ActorDraft {
   /** Role and rank (Combat Awareness / Medicine allocations live here). */
   role: RoleState | null;
   cyberware: CyberwareItem[];
+  gear: GearItem[];
 }
 
 /** Actor plus GM notes. `notes` rides along in the JSON; the engine ignores it. */
@@ -81,7 +85,7 @@ export function emptyDraft(): ActorDraft {
   return {
     id: '', name: '', allegiance: 'hostile', controller: 'gm', portrait: null, stats: { ...DEFAULT_STATS },
     skills: { Evasion: 2, Perception: 2 }, weapons: [], armor: { head: { kind: 'none' }, body: { kind: 'none' } }, notes: '',
-    role: null, cyberware: [],
+    role: null, cyberware: [], gear: [],
   };
 }
 
@@ -111,6 +115,7 @@ export function defaultCapacity(type: WeaponType): number | null {
     case 'bowsAndCrossbows': return 1;
     case 'grenadeLauncher': return 2;
     case 'rocketLauncher': return 1;
+    case 'grenade': return 3;
     default: return null;
   }
 }
@@ -152,12 +157,15 @@ export function draftFromActor(a: ActorWithNotes): ActorDraft {
     controller: a.controller,
     portrait: a.portrait ?? null,
     // Starting EMP: Humanity's maximum is EMP × 10 at creation.
-    stats: { ...c.stats, ...(c.humanity ? { EMP: Math.round(c.humanity.max / 10) } : {}) },
+    stats: { ...c.stats, ...(c.humanity ? { EMP: Math.round(humanityBaseOf(c) / 10) } : {}) },
     skills: { ...c.skills },
     weapons: a.weapons.map((w) => ({
       id: w.id, name: w.name, type: w.type, capacity: w.ammo?.capacity ?? null,
       rofOverride: w.rofOverride ?? null, damageDiceOverride: w.damageDiceOverride ?? null,
       ...(w.ammoType && w.ammoType !== 'basic' ? { ammoType: w.ammoType } : {}),
+      ...(w.smartgunLink ? { smartgunLink: true } : {}),
+      ...(w.smart ? { smart: w.smart } : {}),
+      ...(w.tech2070s ? { tech2070s: w.tech2070s } : {}),
     })),
     armor: {
       head: armorChoice(c.armor.find((p) => p.location === 'head' && !p.id.startsWith('cw:'))),
@@ -166,6 +174,7 @@ export function draftFromActor(a: ActorWithNotes): ActorDraft {
     notes: a.notes ?? '',
     role: c.role ? { ...c.role } : null,
     cyberware: (c.cyberware ?? []).map((i) => ({ ...i, effects: i.effects.map((e) => ({ ...e })) })),
+    gear: (c.gear ?? []).map((g) => ({ ...g })),
   };
 }
 
@@ -194,6 +203,9 @@ export function actorFromDraft(d: ActorDraft, opts: BuildOptions = {}): ActorWit
       ...(w.rofOverride ? { rofOverride: w.rofOverride } : {}),
       ...(w.damageDiceOverride ? { damageDiceOverride: clamp(w.damageDiceOverride, 1, 10) } : {}),
       ...(w.ammoType && w.ammoType !== 'basic' && capacity !== null ? { ammoType: w.ammoType } : {}),
+      ...(w.smartgunLink ? { smartgunLink: true } : {}),
+      ...(w.smart ? { smart: w.smart } : {}),
+      ...(w.tech2070s ? { tech2070s: w.tech2070s } : {}),
     };
   });
   const armor = (['body', 'head'] as const)
@@ -224,6 +236,7 @@ export function actorFromDraft(d: ActorDraft, opts: BuildOptions = {}): ActorWit
       ...(d.role ? { role: { ...d.role } } : {}),
       ...(d.cyberware.length ? { cyberware: d.cyberware.map((i) => ({ ...i })) } : {}),
       humanity: humanityFor(stats.EMP, d.cyberware, pc),
+      ...(d.gear.length ? { gear: d.gear.map((g) => ({ ...g })) } : {}),
       ...(pc?.onFire ? { onFire: pc.onFire } : {}),
     },
   };
@@ -231,16 +244,24 @@ export function actorFromDraft(d: ActorDraft, opts: BuildOptions = {}): ActorWit
   return actor;
 }
 
+/** Creation Humanity (EMP × 10) of an existing combatant; older saves derive it from max. */
+export function humanityBaseOf(c: Combatant): number {
+  if (!c.humanity) return c.stats.EMP * 10;
+  return c.humanity.base ?? c.humanity.max - humanityMax(0, c.cyberware);
+}
+
 /**
- * Humanity: maximum EMP × 10; current = maximum − Humanity Loss. Editing an
- * existing character keeps whatever else moved it (therapy, GM changes).
+ * Humanity at creation: base EMP × 10, maximum lowered 2 per item with
+ * Humanity Loss (4 borgware), current = base − losses (never above max).
+ * Editing an existing character keeps whatever else moved it (therapy, GM
+ * changes) by applying only the difference the edit makes.
  */
-export function humanityFor(emp: number, cyberware: CyberwareItem[], prev?: Combatant): { current: number; max: number } {
-  const max = emp * 10;
-  const loss = cyberware.reduce((s, i) => s + i.humanityLoss, 0);
-  if (!prev?.humanity) return { current: max - loss, max };
-  const prevLoss = (prev.cyberware ?? []).reduce((s, i) => s + i.humanityLoss, 0);
-  return { current: prev.humanity.current + (max - prev.humanity.max) - (loss - prevLoss), max };
+export function humanityFor(emp: number, cyberware: CyberwareItem[], prev?: Combatant): { current: number; max: number; base: number } {
+  const next = creationHumanity(emp, cyberware);
+  if (!prev?.humanity) return next;
+  const before = creationHumanity(Math.round(humanityBaseOf(prev) / 10), prev.cyberware ?? []);
+  const current = Math.min(next.max, prev.humanity.current + (next.current - before.current));
+  return { ...next, current };
 }
 
 /** Problems that should stop a save. Sentence case for display. */
@@ -248,6 +269,10 @@ export function validateDraft(d: ActorDraft): string[] {
   const out: string[] = [];
   if (!d.name.trim()) out.push('Give the character a name.');
   if (d.weapons.some((w) => !(w.type in WEAPON_TYPES))) out.push('A weapon has an unknown type.');
+  for (const w of d.weapons) {
+    const p = w.type in WEAPON_TYPES ? smartWeaponProblem({ id: w.id, name: w.name, type: w.type, ...(w.smartgunLink ? { smartgunLink: true } : {}), ...(w.smart ? { smart: w.smart } : {}), ...(w.tech2070s ? { tech2070s: w.tech2070s } : {}) }) : null;
+    if (p) out.push(`${w.name || 'A weapon'}: ${p}`);
+  }
   const ids = d.weapons.map((w) => w.id);
   if (new Set(ids).size !== ids.length) out.push('Two weapons share an id.');
   if (d.role) { const p = roleProblem(d.role); if (p) out.push(p); }

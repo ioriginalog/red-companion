@@ -53,6 +53,10 @@ interface Props {
   onToggleMini?: () => void;
   /** Pixels at the bottom covered by overlays (target chips); framing keeps the action above them. */
   bottomInset?: number;
+  /** Blast template without line-of-sight coloring (GM placing where a missed explosive lands). */
+  neutralTemplate?: boolean;
+  /** Round 3 P: a short label for the hovered square (e.g. cover HP for the GM). */
+  hoverInfo?: (c: Cell) => string | null;
 }
 
 /** Smallest on-screen square in compact (phone) layout, in CSS px. */
@@ -380,14 +384,18 @@ export function MapView(p: Props) {
   const previewCells = useMemo(() => (watchPreview && actingAt ? watchCells(map, actingAt, watchPreview) : null), [watchPreview?.facing, actingAt, map]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const template = useMemo(() => {
-    if (mode !== 'area' || !hover || !p.areaKind || !actingAt) return null;
+    if (mode !== 'area' || !hover || !p.areaKind) return null;
     if (p.areaKind === 'blast') {
       const b = blastCells(map, hover);
-      return { kind: 'blast' as const, all: b.all, hit: b.hit, ids: tokensIn(map.tokens, b.hit), clear: hasLineOfSight(map, actingAt, hover) };
+      // Picking where a missed explosive lands: the shooter's line of sight is meaningless, so show it neutral.
+      const los: 'clear' | 'blocked' | 'neutral' = p.neutralTemplate || !actingAt ? 'neutral' : hasLineOfSight(map, actingAt, hover) ? 'clear' : 'blocked';
+      return { kind: 'blast' as const, all: b.all, hit: b.hit, ids: tokensIn(map.tokens, b.hit), los };
     }
+    if (!actingAt) return null;
     const hit = shellCells(map, actingAt, hover);
-    return { kind: 'shell' as const, all: [] as Cell[], hit, ids: tokensIn(map.tokens, hit, actingId ?? undefined), clear: true };
-  }, [mode, hover, p.areaKind, actingAt, map, actingId]);
+    return { kind: 'shell' as const, all: [] as Cell[], hit, ids: tokensIn(map.tokens, hit, actingId ?? undefined), los: 'clear' as const };
+  }, [mode, hover, p.areaKind, actingAt, map, actingId, p.neutralTemplate]);
+  const tplColor = template?.los === 'blocked' ? '#ff2bd6' : template?.los === 'neutral' ? '#dce6ff' : '#ffd400';
 
   // Watch cones are LOS-heavy; recompute only when the map or watches change.
   const watchSets = useMemo(() => {
@@ -546,8 +554,8 @@ export function MapView(p: Props) {
             {template.kind === 'blast' && hover && (
               <>
                 {template.all.map((c) => <rect key={cellKey(c)} x={c.x * S} y={c.y * S} width={S} height={S} fill={template.hit.has(cellKey(c)) ? 'rgba(255,120,0,0.32)' : 'url(#hatch)'} />)}
-                <rect x={(hover.x - 2) * S} y={(hover.y - 2) * S} width={S * 5} height={S * 5} fill="none" stroke={template.clear ? '#ffd400' : '#ff2bd6'} strokeWidth={3} strokeDasharray="12 6" className="march" />
-                <circle cx={center(hover).x} cy={center(hover).y} r={S * 0.2} fill={template.clear ? '#ffd400' : '#ff2bd6'} />
+                <rect x={(hover.x - 2) * S} y={(hover.y - 2) * S} width={S * 5} height={S * 5} fill="none" stroke={tplColor} strokeWidth={3} strokeDasharray="12 6" className="march" />
+                <circle cx={center(hover).x} cy={center(hover).y} r={S * 0.2} fill={tplColor} />
               </>
             )}
             {template.kind === 'shell' && cellRects(template.hit, 'rgba(255,120,0,0.32)', { stroke: 'rgba(255,212,0,0.6)', strokeWidth: 1 })}
@@ -716,6 +724,20 @@ export function MapView(p: Props) {
         </g>
 
         {hover && mode !== 'watch' && mode !== 'area' && <rect x={hover.x * S} y={hover.y * S} width={S} height={S} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={2} pointerEvents="none" />}
+        {/* Round 3 P: hover readout (cover state) */}
+        {hover && p.hoverInfo && (() => {
+          const label = p.hoverInfo!(hover);
+          if (!label) return null;
+          const w = Math.max(S * 1.6, label.length * 8 + 16);
+          const x = Math.min(Math.max(0, hover.x * S + S / 2 - w / 2), W - w);
+          const y = hover.y * S > 30 ? hover.y * S - 28 : hover.y * S + S + 4;
+          return (
+            <g pointerEvents="none">
+              <rect x={x} y={y} width={w} height={24} rx={3} fill="rgba(5,8,22,0.92)" stroke="#22e3ff" strokeWidth={1} />
+              <text x={x + w / 2} y={y + 16} textAnchor="middle" className="svg-label" fill="#dce6ff">{label}</text>
+            </g>
+          );
+        })()}
         {hasFocus && kbdMode && kbd && <rect x={kbd.x * S + 1} y={kbd.y * S + 1} width={S - 2} height={S - 2} fill="none" stroke="#ffd400" strokeWidth={4} strokeDasharray="10 5" pointerEvents="none" className="kbd-focus" />}
       </svg>
       <div className="zoom" role="group" aria-label="Map Zoom">

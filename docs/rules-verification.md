@@ -29,7 +29,7 @@ Status key: **Easy Mode** = matches the free Easy Mode PDF · **Errata** = match
 | Stabilization | TECH + First Aid/Paramedic vs 10/13/15. Mortally → 1 HP and Unconscious. Resets accumulated penalty. | Easy Mode |
 | Body Critical Injuries | All 11 rows. | Easy Mode |
 | Head Critical Injuries | All 11 rows from one community chart; a second pass found the rows consistent across sources **except Concussion's Quick Fix and Treatment DVs**, which differ between references. ⚠ Confirm Concussion in the book. | Secondary |
-| Armor table | Leathers 4, Kevlar 7, Light AJ 11, Bodyweight 11, Medium AJ 12 (−2), Heavy AJ 13 (−2), Flak 15 (−4), Metalgear 18 (−4). | Secondary |
+| Armor table | Leathers 4, Kevlar® 7 (a DuPont trademark; game term only), Light AJ 11, Bodyweight 11, Medium AJ 12 (−2), Heavy AJ 13 (−2), Flak 15 (−4), Metalgear 18 (−4). | Secondary |
 | Shotgun Shells | DV13, 3d6 to every target within 6 m/yds in front, rolled once; no Aimed Shot. | Secondary |
 | Explosives | 10 × 10 m/yds; damage rolled once; miss = GM scatters within area; cover protects only if the blast can't destroy it. | Secondary |
 | Suppressive Fire | 10 rounds; WILL + Concentration vs REF + Autofire; losers move to cover. | Secondary |
@@ -57,11 +57,16 @@ Status key: **Easy Mode** = matches the free Easy Mode PDF · **Errata** = match
 | Free checks | STAT + skill + 1d10 + standing modifiers (wound penalties) vs an optional DV; ties fail. Not tied to the Turn or the Action: the GM rules what a check costs. | Easy Mode |
 | GM HP edits | Healing caps at max HP; damage has no floor; HP edits never kill on their own (only Death Saves do). | Interpretation |
 | Scene switches | Allowed mid-encounter; the encounter, Turn order and actors carry over; watches end. | Interpretation |
+| Late arrivals (Round 3) | The GM rolls a newcomer in with REF + 1d10 (the engine's initiative roll) and slots them by total; a tie with an existing slot goes to a d10 roll-off between those two only, so nobody else moves. Slotting before the current Turn means they act next Round. | Interpretation |
+| Delay (Round 3) | **House rule, not RED Core** (we found no Delay or Hold Action in Core). On by default; the GM can switch it off. The acting character, before moving or acting, takes their Turn later this Round (after a chosen character, or last). The new position sticks for later Rounds. | House Rule |
+| Missed explosives (Round 3) | A miss waits for the GM, who taps where it lands or rolls it: a random square in the 5 × 5 blast area around the aim point (never the aim square, never a wall). It then goes off there like a hit, dodges included, against the original attack total. Core leaves the landing spot to the GM. | Interpretation |
+| Netrunner movement (Round 3) | A runner can go down to the next floor without Pathfinder; the floor reveals itself on arrival (a Password must be Backdoored first). Pathfinder still reveals floors ahead. Costs 1 NET Action. | Secondary |
+| Armor stopped it (Round 3) | Players see "no effect" when a hit on an NPC does no HP damage; SP values stay hidden. | Interpretation |
 | Watch | **House rule, not RED Core.** Spend the Action to watch a 90° cone (30°–180°) until your next Turn. The first opposing token to step into a visible watched square stops there and the watcher may attack out of Turn, or hold fire. | House Rule |
 
 ## Netrunning (2026-11)
 
-Built from community references (not the Core Rulebook). Starter Programs and Black ICE are original placeholders with this tool's own numbers; no RTG ICE or Program stat blocks or text are reproduced. The GM edits everything in NET Prep.
+Built from community references (not the Core Rulebook). Starter Programs (Lockpick, Cartographer, Ghostwalk, Quickstep, Static Padding, Decoy Shell, Cleaver, Needle) and Black ICE are original designs with this tool's own names and numbers; no RTG ICE or Program names, stat blocks or text are shipped. GMs who own the book can import its Programs as a rules pack. The GM edits everything in NET Prep.
 
 | Rule | Engine Behavior | Status |
 |---|---|---|
@@ -85,7 +90,7 @@ Built from community references (not the Core Rulebook). Starter Programs and Bl
 | ICE state | Each runner's ICE state is their own and resets when they jack out safely. | Interpretation |
 | 2070s Quickhacks (option) | Jack In to a visible target's neuroport within 50 m/yds (25 squares), 1 NET Action; the quickhack's effect is a GM prompt (the kit's tables aren't in the tool). Off by default. | Secondary (public summaries) |
 
-Not built for Netrunning: rival netrunners fighting each other, Demon turns (GM runs them), Relentless ICE following the runner, the Edgerunners Mission Kit quickhack tables, and Improved Smart Ammo (a weapon option, not NET).
+Not built for Netrunning: rival netrunners fighting each other, Demon turns (GM runs them), Relentless ICE following the runner, and the Edgerunners Mission Kit quickhack tables. (Improved Smart Ammo is now built as a weapon option; see Systems.)
 
 ## Systems (2026-11, Track K)
 
@@ -93,15 +98,20 @@ Not built for Netrunning: rival netrunners fighting each other, Demon turns (GM 
 |---|---|---|
 | Cover HP | Per 2 × 2 m/yd square, by material: Thick Steel 50, Thick Stone 40, Thick Bulletproof Glass 30, Thin Steel 25, Thick Concrete 25, Thin Stone 20, Thick Wood 20, Thin Bulletproof Glass 15, Thick Plaster/Foam/Plastic 15, Thin Concrete 10, Thin Wood 5. Excess damage is lost. | Secondary |
 | Attacking cover | Ranged: REF + skill + 1d10 vs the range DV; damage dice go to the cover's HP. Melee automatically hits an adjacent cover square. Destroyed cover becomes open ground. Unmarked cover squares are Thick Wood. | Interpretation |
-| Ammunition | Armor-Piercing ablates 2. Rubber: no Critical Injuries, no ablation, can't drop a target below 1 HP. Incendiary: On Fire when damage gets through. Smart (needs a smartlink or Targeting Scope): a single shot missing the range DV by 4 or less gets a second try at 10 + 1d10. Expansive, Poison, Sleep and grenade-only types (EMP, Smoke, Teargas, Flashbang, Biotoxin) are GM prompts. Changing ammo is a reload. | Secondary |
-| On Fire | Incendiary: 2 HP at the start of each of the target's Turns, straight to HP, until an Action puts it out. | Interpretation (armor vs fire) |
-| Improved Smart (2070s) | Behind the Edgerunners 2070s toggle. With a smartlink, a near miss (4 or less) rerolls the whole attack once. Built from public summaries; confirm from the kit. | Interpretation |
+| Ammunition | Armor-Piercing ablates 2. Rubber: no Critical Injuries, no ablation, can't drop a target below 1 HP. Incendiary: On Fire when damage gets through. Expansive, Poison, Sleep and grenade-only types (EMP, Smoke, Teargas, Flashbang, Biotoxin) are GM prompts. Changing ammo is a reload. | Secondary |
+| Smart ammo (Core) | Needs a **Targeting Scope** (not a Smartgun Link). A single shot that misses by 4 or less gets a second attack at 10 + 1d10 against the same DV; if they dodged, they roll a fresh dodge. The second attack is flat (no other modifiers); the GM may add Luck. | Secondary (flat second attack, fresh dodge: Interpretation) |
+| Smartgun Link | Weapon attachment: +1 to ranged attacks with that weapon, only when wired in (Neural Link plus Interface Plugs or a Subdermal Grip). | Secondary |
+| Targeting Scope | Cybereye option: lets Smart ammo track; +1 to ranged Aimed Shots. | Secondary (Aimed Shot bonus from memory and one critic; confirm) |
+| On Fire | Incendiary: 2 HP at the start of each of the target's Turns, straight to HP (armor doesn't stop fire), until an Action puts it out. | User Ruling (fire ignores armor); burn amount Interpretation |
+| Improved Smart (2070s) | Behind the Edgerunners 2070s toggle; only in a **Smart Weapon** (built smart, or a Smart Rebuild of a non-Power, non-Tech gun: 1000eb, 2 of 3 attachment slots). A ranged attack that misses by 5 or less gets an immediate second attempt at 14 + 1d10 plus the first shot's penalties (Luck allowed). Smart Weapons get +1 to hit and ignore obscurement penalties (the engine has none; the GM just doesn't add them). Autofire interaction and ammo price unknown: Autofire raises a GM ruling. | Secondary (two independent reviews); Smart Weapon +1 stacking with a Smartgun Link: Interpretation |
 | Launchers | Grenade and rocket launchers can't fire directly at a person or take Aimed Shots; they're area attacks. | Secondary |
-| Arm injuries | Broken Arm, Dismembered Arm and Dismembered Hand each cost a hand; two-handed weapons need both. One-handed: pistols, SMGs, Heavy SMGs, light/medium/heavy melee. A Quick Fix restores use. | Interpretation (hand counts, Heavy SMG) |
-| Humanity | Starts at EMP × 10. Cyberware costs its Humanity Loss (rolled or set). EMP = floor(Humanity ÷ 10). At 0 or below: cyberpsychosis, the character goes to the GM. Removing cyberware restores half its loss, rounded down. | Secondary |
-| Therapy | Standard: DV 15, needs Humanity 40+. Extreme: DV 17, below 40. A week each; success restores 2d6, never above the maximum. | Secondary |
+| Arm injuries | Broken Arm, Dismembered Arm and Dismembered Hand each cost a hand; two-handed weapons need both. A Quick Fix restores use. | Interpretation (each injury is a different arm) |
+| Hands per weapon | One-handed: Medium, Heavy and Very Heavy Pistol, SMG, Heavy SMG, Light and Medium Melee, thrown grenades. Two-handed: Shotgun, Assault Rifle, Sniper Rifle, Bows and Crossbows, Grenade and Rocket Launchers, Heavy and Very Heavy Melee. | User Ruling (Secondary until checked against the book) |
+| Thrown grenades | A Thrown Grenade weapon (count = magazine) is always an area attack: DEX + Athletics vs the Grenade Launcher row, 6d6 unless overridden, one per throw. | Interpretation (range row, default dice) |
+| Humanity | Starts at EMP × 10 (the base). Each installed item with Humanity Loss lowers **maximum** Humanity by 2 (borgware 4); only removing it restores that. Cyberware taken at character creation uses its fixed Humanity Loss; later installs are rolled (GM option: fixed or none). "1d6/2" halves rounding up (its fixed value is 2). EMP = floor(Humanity ÷ 10). At 0 or below: cyberpsychosis, the character goes to the GM. Removing cyberware restores half its loss, rounded down, never above the maximum. | Secondary (max Humanity, fixed at creation, EMP rounding); half-restore on removal and 1d6/2 rounding: Interpretation |
+| Therapy | Standard: DV 15, 500eb, needs Humanity 40+. Extreme: DV 17, 1000eb, below 40. A week each, retry weekly; success restores 2d6, never above the maximum. | Secondary (medium confidence) |
 | Solo Combat Awareness | Points ≤ rank among: Damage Deflection (2/4/6/8/10 → reduce the first damage each Round by 1–5), Fumble Recovery (4), Initiative Reaction (1 per +1), Precision Attack (3/6/9 → +1/+2/+3), Spot Weakness (1 per +1 damage before armor, first hit each Round), Threat Detection (1 per +1 Perception). Re-allocating mid-fight costs an Action. | Secondary |
-| Damage Deflection timing | Reduces HP damage after armor; armor stopping everything doesn't use it up. Single-target attacks only. | Interpretation |
+| Damage Deflection timing | Reduces HP damage after armor; armor stopping everything doesn't use it up. Single-target attacks only. | User Ruling (after armor); single-target only: Interpretation |
 | Medtech Medicine | One point per rank. Surgery: 2 Surgery skill per point (max 10). Pharmaceuticals and Cryosystem: 1 Medical Tech each (max 5 points each). | Secondary |
 | Netrunner Interface | Role rank = Interface rank. The NET engine reads the Role; a rig's own Interface is the fallback for characters without the Netrunner Role. | Secondary |
 | Natural healing | Home: BODY HP per day. Hospital bed or Enhanced Antibodies: BODY × 2 (the best applies, no stacking). Street: none. Mortally Wounded must be Stabilized first. | Secondary (stacking is Interpretation) |
@@ -127,3 +137,7 @@ Not built for Netrunning: rival netrunners fighting each other, Demon turns (GM 
 ## Not Built Yet
 
 Martial Arts special moves, Grab/Choke/Throw, shields, human shields, weapon quality, the other eight Role Abilities' mechanics (rank and notes only), drug effects, Facedowns, vehicles, re-bleed automation for Broken Ribs/Foreign Object, Spinal Injury lost-Action tracking.
+
+## Rules Packs and Book Values (Round 3)
+
+The repository ships only original example cyberware, Programs and gear. The book's cyberware catalog (names, Humanity Loss dice and fixed values, install location, cost) is a **rules pack** the GM imports on their own device (Characters → Cyberware and Humanity → Import Rules Pack). Packs are validated, stored in the GM's browser only, and never written to the session log or this repository. Format: `{ "format": "nsc-rules-pack", "version": 1, "name": "...", "cyberware": [{ "name", "slot", "hlDice": "2d6", "hlFixed": 7, "install": "clinic", "costEb": 500, "borgware"?, "effects"?: [...], "notes"? }], "programs"?: [...] }`.

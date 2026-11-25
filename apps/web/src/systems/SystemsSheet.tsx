@@ -36,6 +36,7 @@ export function SystemsSheet({ c, actorId }: { c: SystemsCtx; actorId: string })
       ) : null}
       <RoleSection c={c} a={a} cb={cb} can={can} />
       <HumanitySection cb={cb} />
+      <GearSection cb={cb} a={a} />
       <AmmoSection c={c} a={a} cb={cb} can={can} />
       <InjurySection c={c} a={a} cb={cb} />
     </>
@@ -97,7 +98,7 @@ function HumanitySection({ cb }: { cb: Combatant }) {
       <div className="ttl">Cyberware</div>
       {h && (
         <div className={`sys-hum sys-hum-${status}`}>
-          <div className="row" style={{ justifyContent: 'space-between', fontSize: 13 }}><span>Humanity</span><span className="mono">{h.current} / {h.max} · EMP {cb.stats.EMP}</span></div>
+          <div className="row" style={{ justifyContent: 'space-between', fontSize: 13 }}><span>Humanity</span><span className="mono">{h.current} / {h.max}{h.base !== undefined && h.base !== h.max ? ` (of ${h.base})` : ''} · EMP {cb.stats.EMP}</span></div>
           <div className="bar"><i style={{ width: `${Math.max(0, Math.min(100, (h.current / Math.max(1, h.max)) * 100))}%` }} /></div>
           {status !== 'stable' && <div className="note">{status === 'cyberpsycho' ? 'Cyberpsychosis.' : status === 'critical' ? 'On the edge of cyberpsychosis.' : 'Humanity is running low.'}</div>}
         </div>
@@ -112,6 +113,24 @@ function HumanitySection({ cb }: { cb: Combatant }) {
   );
 }
 
+function GearSection({ cb, a }: { cb: Combatant; a: ProjectedActor }) {
+  const smart = (a.weapons ?? []).filter((w) => w.smartgunLink || w.smart);
+  if (!cb.gear?.length && !smart.length) return null;
+  return (
+    <section className="card">
+      <div className="ttl">Gear</div>
+      <ul className="sys-list">
+        {smart.map((w) => (
+          <li key={w.id}><b>{w.name}</b><span className="dim"> · {[w.smartgunLink ? 'Smartgun Link' : '', w.smart === 'built' ? 'Smart Weapon' : w.smart === 'rebuild' ? 'Smart Rebuild' : ''].filter(Boolean).join(' · ')}</span></li>
+        ))}
+        {(cb.gear ?? []).map((g, i) => (
+          <li key={`g${i}`}><b>{g.name}</b>{g.qty > 1 ? <span className="mono"> × {g.qty}</span> : null}{g.notes ? <div className="dim" style={{ fontSize: 12 }}>{g.notes}</div> : null}</li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function AmmoSection({ c, a, cb, can }: { c: SystemsCtx; a: ProjectedActor; cb: Combatant; can: boolean }) {
   const guns = (a.weapons ?? []).filter((w) => !profileOf(w).melee);
   if (!guns.length) return null;
@@ -119,7 +138,9 @@ function AmmoSection({ c, a, cb, can }: { c: SystemsCtx; a: ProjectedActor; cb: 
     <section className="card">
       <div className="ttl">Ammunition</div>
       {guns.map((w) => {
-        const options = AMMO_TYPES.filter((t) => !ammoProblem(w, t.id));
+        // Round 3 P (#11): 2070s ammo only when the GM has the 2070s options on.
+        const era = !!c.view.netrun?.quickhacks2070s;
+        const options = AMMO_TYPES.filter((t) => !ammoProblem(w, t.id) && (era || !t.era2070s || t.id === w.ammoType));
         const cur = w.ammoType ?? 'basic';
         const def = AMMO_TYPES.find((t) => t.id === cur)!;
         const hands = wieldProblem(cb, w);

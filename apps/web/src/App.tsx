@@ -9,11 +9,23 @@ export function App() {
   useEffect(() => { client.autoResume(new URLSearchParams(location.search).get('join')); }, []);
   if (s.role === 'gm' && s.view) return <GmShell s={s} table={<Table s={s} />} />;
   if (s.role && s.view) return <Table s={s} />;
-  return <Home busy={s.status === 'connecting'} toast={s.toast?.text ?? null} />;
+  return <Home busy={s.status === 'connecting'} toast={s.toast?.text ?? null} lockedUntil={s.lockedUntil} />;
 }
 
-function Home({ busy, toast }: { busy: boolean; toast: string | null }) {
+/** Seconds left on a hello lockout, ticking once a second. */
+function useCountdown(until: number | null): number {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!until) return;
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [until]);
+  return until ? Math.max(0, Math.ceil((until - Date.now()) / 1000)) : 0;
+}
+
+function Home({ busy, toast, lockedUntil }: { busy: boolean; toast: string | null; lockedUntil: number | null }) {
   const saved = client.savedGm();
+  const lockLeft = useCountdown(lockedUntil);
   const importRef = useRef<HTMLInputElement>(null);
   const [code, setCode] = useState(() => new URLSearchParams(location.search).get('join') ?? '');
   const [name, setName] = useState('');
@@ -32,7 +44,7 @@ function Home({ busy, toast }: { busy: boolean; toast: string | null }) {
 
         <h2>Run a Session</h2>
         <div className="stack">
-          {saved && <button className="btn yellow" disabled={busy} onClick={() => client.resumeGm(saved)}>Resume Session {saved.joinCode}</button>}
+          {saved && <button className="btn yellow" disabled={busy} onClick={() => void client.resumeGm(saved)}>Resume Session {saved.joinCode}</button>}
           <button className="btn" disabled={busy} onClick={() => void client.createSession()}>Create a New Session</button>
           <button className="btn ghost" disabled={busy} onClick={() => importRef.current?.click()} title="Restore a session export as a new session">Import Session</button>
           <input
@@ -40,7 +52,9 @@ function Home({ busy, toast }: { busy: boolean; toast: string | null }) {
             onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void client.importSession(f); }}
           />
         </div>
-        {toast && <div className="warn" style={{ marginTop: 14 }}>{toast}</div>}
+        {lockLeft > 0
+          ? <div className="warn" role="status" aria-live="polite" style={{ marginTop: 14 }}>Too many failed attempts from this network. Retrying in {lockLeft} {lockLeft === 1 ? 'second' : 'seconds'}.</div>
+          : toast && <div className="warn" style={{ marginTop: 14 }}>{toast}</div>}
 
         <p className="fine">
           Unofficial content provided under the Homebrew Content Policy of R. Talsorian Games and is not approved or endorsed by RTG.

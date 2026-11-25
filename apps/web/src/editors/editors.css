@@ -126,3 +126,6 @@ details.skg[open] > summary > span:first-child::before { content: '▾'; }
 .chips .chip .x { background: none; border: 0; color: var(--dim); padding: 0 0 0 4px; }
 .eff-add { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .eff-add select, .eff-add input { padding: 4px 6px; }
+.ed-err { color: #ff8a96; font-size: 13px; margin-top: 4px; }
+.wopts { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; margin: 2px 0 6px; }
+.wopts label { display: inline-flex; gap: 4px; align-items: center; }

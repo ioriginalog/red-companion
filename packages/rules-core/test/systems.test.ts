@@ -206,12 +206,11 @@ describe('melee keeps working', () => {
 });
 
 describe('Improved Smart ammo', () => {
-  it('rerolls the whole attack once on a near miss (with a smartlink)', () => {
-    const shooter = withK(combatant({ id: 's', stats: { REF: 6 }, skills: { Handgun: 4 } }), { cyberware: [{ id: 'ts', name: 'Targeting Scope', humanityLoss: 2, effects: [{ kind: 'smartLink' }] }] });
-    const w = weapon('heavyPistol', { ammoType: 'improvedSmart' });
-    // 10 + 2 = 12 vs DV 13: miss by 1; reroll 10 + 6 = 16 hits.
+  it('needs a Smart Weapon; a near miss gets 14 + 1d10 plus the first shot’s penalties', () => {
+    const shooter = combatant({ id: 's', stats: { REF: 6 }, skills: { Handgun: 4 } });
+    const w = weapon('heavyPistol', { ammoType: 'improvedSmart', smart: 'built' });
+    // 10 + 1 (Smart Weapon) + 2 = 13 vs DV 13: a tie misses by 0; retry 14 + 6 = 20 hits.
     const out = resolveRangedAttack({ attacker: shooter, defender: combatant({ id: 'd' }), weapon: w, distance: 4, defenderDodges: false }, scriptedDice({ d10: [2, 6] }));
-    expect(out.hit).toBe(true);
-    expect(out.events.find((e) => e.type === 'smartAmmoRetry')).toMatchObject({ total: 16 });
+    expect(out.events.find((e) => e.type === 'smartAmmoRetry')).toMatchObject({ total: 20, hit: true, kind: 'improvedSmart' });
   });
 });

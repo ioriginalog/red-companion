@@ -10,3 +10,4 @@ export * from './handouts.js'; // Track U
 export * from './netrun-types.js';
 export { emptyNet, executeNet, parseNetOp, projectNet, validateArchitecture, validateRig } from './netrun.js';
 // --- end Track N ---
+export { rollScatter, PLAYLOOP_INTENTS } from './playloop.js'; // Round 3 P

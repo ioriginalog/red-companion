@@ -8,7 +8,7 @@
  * Players are held to it; the GM is recorded but never refused.
  */
 import {
-  architectureProblem, brainDamage, depthOf, floorTitle, freshRun, gridDistance, hasLineOfSight, isEngaged,
+  architectureProblem, brainDamage, childrenOf, depthOf, floorTitle, freshRun, gridDistance, hasLineOfSight, isEngaged,
   isLowestFloor, JACK_IN_RANGE_SQUARES, liveIce, neighborsOf, netActionsFor, netCheck, parentOf,
   pathfinderReveal, programHitBy, QUICKHACK_RANGE_SQUARES, RESTART_COST, rollNetDice, statCheck, woundState, interfaceRank,
   type CheckResult, type CombatEvent, type Dice, type IceStats, type NetArchitecture, type NetDifficulty, type NetFloor,
@@ -158,6 +158,7 @@ export function parseNetOp(v: unknown): NetOp {
     case 'jackIn': return { op: 'jackIn', actorId: actorId(), archId: id(v.archId, 'Architecture') };
     case 'jackOut': return { op: 'jackOut', actorId: actorId() };
     case 'move': return { op: 'move', actorId: actorId(), toFloorId: id(v.toFloorId, 'Floor') };
+    case 'descend': return { op: 'descend', actorId: actorId(), branch: int(v.branch, 0, 9, 'Branch') }; // Round 3 P
     case 'ability': {
       const ability = oneOf(v.ability, ABILITIES, 'Ability');
       return {
@@ -484,6 +485,18 @@ export function executeNet(state: SessionState, rawOp: unknown, by: Viewer, dice
       arrive(c, a, arch, run, op.toFloorId);
       break;
     }
+    // Round 3 P: RED doesn't need Pathfinder to go down; the next floor reveals itself on arrival.
+    case 'descend': {
+      const { a, rig } = requireRunner(c, op.actorId);
+      const { run, arch } = getRun(c, a);
+      if (isEngaged(run)) throw new SessionError('INVALID', `${a.combatant.name} is engaged. Slide away, derez it, or jack out.`);
+      const to = childrenOf(arch, run.floorId)[op.branch];
+      if (!to) throw new SessionError('INVALID', 'There’s no way down there. This is the bottom of the branch.');
+      canStepTo(c, arch, run, to, a);
+      spendNet(c, a, rig, 1);
+      arrive(c, a, arch, run, to);
+      break;
+    }
     case 'ability': {
       const { a, rig } = requireRunner(c, op.actorId);
       const { run, arch } = getRun(c, a);
@@ -687,6 +700,7 @@ function runView(state: SessionState, net: NetState, actorId: string, run: NetRu
       passed, identified, controlled,
       ...(f.ice ? { ice: f.ice.map((i, n) => ({ name: i.name, kind: i.kind, rez: run.ice[fid]?.[n] ?? 0, maxRez: i.rez })) } : {}),
       ...(f.demon ? { demon: { name: f.demon.name, rez: run.demonRez[fid] ?? 0, maxRez: f.demon.rez } } : {}),
+      ...(fid === run.floorId ? { exitsDown: (arch.children[fid] ?? []).length } : {}), // Round 3 P
     };
   }
   const rig = net.rigs[actorId];

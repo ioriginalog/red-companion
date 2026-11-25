@@ -61,11 +61,12 @@ export function InitiativeStrip({ c, onPick }: { c: TableCtx; onPick: (id: strin
         if (id === '|') return <div className="round-div" key="div">Round {enc.round + 1}</div>;
         const a = view.actors[id];
         if (!a || a.placeholder) {
-          // Unseen hostiles arrive as opaque placeholders: show them without leaking anything.
+          // Round 3 Track R: unseen hostiles never appear in the order; one opaque
+          // slot stands in only while one of them holds the Turn.
           return (
-            <div key={`${id}-${i}`} className={`init-card unknown${i === 0 ? ' active' : ''}`} title="Unknown Contact" aria-label="Unknown Contact">
+            <div key={`${id}-${i}`} className={`init-card unknown${i === 0 ? ' active' : ''}`} title="Unknown Contact Acting" aria-label="Unknown Contact Acting">
               <div className={`pf${i === 0 ? ' active' : ''}`} data-al="hostile"><div className="ini">?</div></div>
-              <div className="nm">Unknown</div>
+              <div className="nm">{i === 0 ? 'Acting' : 'Unknown'}</div>
             </div>
           );
         }
@@ -81,11 +82,46 @@ export function InitiativeStrip({ c, onPick }: { c: TableCtx; onPick: (id: strin
   );
 }
 
-export function Prompts({ c }: { c: TableCtx }) {
+export function Prompts({ c, onPickScatter, scatterPicking }: { c: TableCtx; onPickScatter?: (on: boolean) => void; scatterPicking?: boolean }) {
   const { view, isGm, mine, name, act } = c;
   const pending = view.pending;
   const enc = view.encounter;
   const out: React.ReactNode[] = [];
+  // --- Round 3 P ---
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  if (pending?.kind === 'awaitingScatter' && isGm) {
+    out.push(
+      <div className="card prompt" key="scatter">
+        <div className="ttl">Explosive Missed</div>
+        <p>{name(pending.attackerId)}’s {pending.areaKind === 'launcher' ? 'shot' : 'grenade'} missed. Where does it land?</p>
+        <div className="row">
+          <button className={`btn yellow${scatterPicking ? ' on' : ''}`} aria-pressed={!!scatterPicking} onClick={() => onPickScatter?.(!scatterPicking)}>{scatterPicking ? 'Tap the Map…' : 'Pick on Map'}</button>
+          <button className="btn" onClick={() => act({ type: 'placeScatter', pendingId: pending.id })} title="A random square within the blast area around the aim point">Roll It</button>
+        </div>
+      </div>,
+    );
+  } else if (pending?.kind === 'awaitingScatter') {
+    out.push(<div className="card prompt" key="scatter-wait"><div className="ttl">Explosive Missed</div><p className="dim">The GM is placing where it lands.</p></div>);
+  }
+  if (isGm && enc.active && !pending) {
+    const late = Object.keys(view.map?.tokens ?? {}).filter((id) => {
+      const a = view.actors[id];
+      return a && !a.placeholder && !a.public.conditions.dead && !enc.order.includes(id) && !dismissed.includes(id);
+    });
+    if (late.length) {
+      out.push(
+        <div className="card prompt" key="late">
+          <div className="ttl">Not in Initiative</div>
+          <p>{late.map(name).join(', ')} {late.length > 1 ? 'are' : 'is'} on the map but not in the Turn order.</p>
+          <div className="row">
+            <button className="btn yellow" onClick={() => { for (const id of late) if (!act({ type: 'addToInitiative', actorId: id })) break; }}>{late.length > 1 ? 'Roll Them All In' : 'Roll Them In'}</button>
+            <button className="btn" onClick={() => setDismissed([...dismissed, ...late])}>Not Now</button>
+          </div>
+        </div>,
+      );
+    }
+  }
+  // --- end Round 3 P ---
   if (pending?.kind === 'awaitingDodge' && mine(pending.defenderId)) {
     out.push(<DodgePrompt key="dodge" c={c} pending={pending} />);
   }
@@ -127,7 +163,7 @@ export function Prompts({ c }: { c: TableCtx }) {
     out.push(
       <div className="card prompt" key="gm-pending">
         <div className="ttl">Waiting on a Player</div>
-        <p className="dim">{pending.kind === 'awaitingDodge' ? 'Dodge decision' : pending.kind === 'awaitingDamage' ? 'Damage roll' : 'Watch decision'} pending.</p>
+        <p className="dim">{pending.kind === 'awaitingDodge' ? 'Dodge decision' : pending.kind === 'awaitingDamage' ? 'Damage roll' : pending.kind === 'awaitingAreaDodge' ? 'Dodge decisions' : 'Watch decision'} pending.</p>
         <button className="btn" onClick={() => act({ type: 'cancelPending' })}>Cancel It</button>
       </div>,
     );

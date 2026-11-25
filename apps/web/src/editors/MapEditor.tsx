@@ -176,7 +176,7 @@ export function MapEditor({ s }: { s: ClientState }) {
     <div className="ed">
       <aside className="ed-col ed-list" aria-label="Maps">
         <div className="btnrow">
-          <button className="btn yellow" onClick={() => void startFromImage()}>New From Image</button>
+          <button className="btn yellow" onClick={() => void startFromImage()}>New from Image</button>
           <button className="btn" onClick={() => { setBlank({ name: 'Blank Map', w: 20, h: 14 }); setPending(null); }}>New Blank Map</button>
           <button className="btn" onClick={() => void importJson()}>Import JSON</button>
         </div>
@@ -262,7 +262,7 @@ export function MapEditor({ s }: { s: ClientState }) {
             <div className="card" style={{ maxWidth: 520 }}>
               <div className="ttl">Map Editor</div>
               <p style={{ marginTop: 0 }}>Upload a top-down battle map, set the grid, then paint walls and cover so line of sight and movement work. Start from the warehouse to see how it’s set up.</p>
-              <div className="btnrow"><button className="btn yellow" onClick={() => void startFromImage()}>New From Image</button></div>
+              <div className="btnrow"><button className="btn yellow" onClick={() => void startFromImage()}>New from Image</button></div>
             </div>
           )}
       </main>

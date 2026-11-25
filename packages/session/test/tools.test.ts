@@ -266,8 +266,9 @@ describe('areaAttack', () => {
     const t = setup();
     t.send({ type: 'areaAttack', attackerId: 'solo', weaponId: 'gl', kind: 'launcher', at: { x: 6, y: 3 } }, P1, scriptedDice({ d10: [1, 5] }));
     const types = t.last().events.map((e) => e.type);
-    expect(types).toContain('gmRulingRequired');
+    expect(types).toContain('explosiveMissed'); // Round 3 P: the GM places it (placeScatter)
     expect(types).not.toContain('damageRolled');
+    expect(t.state.pending).toMatchObject({ kind: 'awaitingScatter' });
   });
 
   it('Shotgun Shells hit tokens within 3 squares in the cone only', () => {

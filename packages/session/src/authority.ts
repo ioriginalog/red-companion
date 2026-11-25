@@ -15,7 +15,7 @@ import {
   RulesError, spendAmmo, stabilize, turnStartChecklist, woundState,
   type Cell, type CombatEvent, type Dice, type Weapon,
 } from '@cprc/rules-core';
-import { planMove, watchTrigger, withSpotted } from './tactical.js';
+import { factionOf, planMove, watchTrigger, withSpotted } from './tactical.js';
 import {
   checkAttackAction, checkOtherAction, controls, currentActorId, freshUsage, getActor, getWeapon, requireMap, SessionError, usageFor, visibilityFor,
 } from './helpers.js';
@@ -29,6 +29,9 @@ import { validateIntent } from './validate.js';
 // --- Track K ---
 import { authorizeSystems, beforeDamage, executeSystems, isSystemsIntent, onTurnStart, SYSTEMS_GM_ONLY, SYSTEMS_WHILE_PENDING, wieldCheck } from './systems.js';
 // --- end Track K ---
+// --- Round 3 P ---
+import { authorizePlayLoop, executePlayLoop, isPlayLoopIntent, PLAYLOOP_WHILE_PENDING } from './playloop.js';
+// --- end Round 3 P ---
 
 export { SessionError, currentActorId };
 import type {
@@ -47,7 +50,7 @@ const GM_ONLY: ReadonlySet<IntentType> = new Set([
   ...TOOL_GM_ONLY,
   'setHandout', 'removeHandout', // Track U
 ]);
-const ALLOWED_WHILE_PENDING: ReadonlySet<IntentType> = new Set(['respondDodge', 'rollDamage', 'cancelPending', 'declineWatch', ...TOOL_WHILE_PENDING, 'setHandout', 'removeHandout', ...SYSTEMS_WHILE_PENDING /* Track K */]);
+const ALLOWED_WHILE_PENDING: ReadonlySet<IntentType> = new Set(['respondDodge', 'rollDamage', 'cancelPending', 'declineWatch', ...TOOL_WHILE_PENDING, 'setHandout', 'removeHandout', ...SYSTEMS_WHILE_PENDING /* Track K */, ...(PLAYLOOP_WHILE_PENDING as ReadonlySet<IntentType>) /* Round 3 P */]);
 
 export function authorId(v: Viewer): AuthorId {
   return v.role === 'gm' ? 'gm' : `player:${v.playerId}`;
@@ -155,6 +158,7 @@ function authorize(state: SessionState, intent: Intent, by: Viewer) {
       break;
     }
     default:
+      if (isPlayLoopIntent(intent)) { authorizePlayLoop(state, intent, by); break; } // Round 3 P
       authorizeSystems(state, intent, by); // Track K
       break;
   }
@@ -206,13 +210,18 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       if (intent.participants.length === 0) throw new SessionError('INVALID', 'Add at least one participant.');
       const parts = intent.participants.map((p) => ({ combatant: getActor(state, p.actorId).combatant, bonus: p.bonus }));
       const { order, events } = rollInitiative(parts, dice);
-      const encounter = settleTurn({ active: true, round: 1, order: order.map((e) => e.combatantId), turnIndex: 0, deathSaveRequiredFor: null }, state.actors);
+      const encounter = settleTurn({
+        active: true, round: 1, order: order.map((e) => e.combatantId), turnIndex: 0, deathSaveRequiredFor: null,
+        // Round 3 P: keep totals for late arrivals; the Delay house rule setting carries over.
+        initiative: Object.fromEntries(order.map((e) => [e.combatantId, e.total])),
+        ...(state.encounter.delayAllowed !== undefined ? { delayAllowed: state.encounter.delayAllowed } : {}),
+      }, state.actors);
       const patch: StatePatch = { encounter, pending: null };
       if (state.map && Object.keys(state.map.watches).length) patch.map = { ...state.map, watches: {} };
       return { events, patch };
     }
     case 'endEncounter':
-      return { events: [], patch: { encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null }, pending: null } };
+      return { events: [], patch: { encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null, ...(state.encounter.delayAllowed !== undefined ? { delayAllowed: state.encounter.delayAllowed } : {}) /* Round 3 P */ }, pending: null } };
     case 'cancelPending':
       if (!state.pending) throw new SessionError('NO_PENDING', 'Nothing to cancel.');
       return { events: [], patch: { pending: null } };
@@ -279,6 +288,8 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
         { type: 'damageRolled', visibility: 'public', dice: roll.dice, multiplier: roll.multiplier, total: roll.total, critTriggered: roll.critTriggered },
         ...r.events,
       ];
+      // Round 3 P: players see "no effect" when armor stopped it (no SP numbers).
+      if (r.hpLost === 0 && factionOf(target) !== 'friendly') events.push({ type: 'noEffect', visibility: 'public', targetId: target.id });
       return { events, patch: { actors: { ...k.actors, [target.id]: { ...target, combatant: r.target } }, pending: null } };
     }
     case 'deathSave': {
@@ -358,6 +369,10 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       return doSuppressiveFire(state, intent, by, dice);
     case 'setHandout': case 'removeHandout': // Track U
       return executeHandout(state, intent, by);
+    // --- Round 3 P ---
+    case 'addToInitiative': case 'removeFromInitiative': case 'delayTurn': case 'setDelayRule': case 'placeScatter':
+      return executePlayLoop(state, intent, by, dice, newId, { settleTurn, onTurnStart });
+    // --- end Round 3 P ---
     // --- Track N ---
     case 'net':
       return executeNet(state, (intent as { op: unknown }).op, by, dice);
