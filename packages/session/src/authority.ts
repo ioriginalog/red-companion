@@ -24,6 +24,7 @@ import { executeTool, TOOL_GM_ONLY, TOOL_WHILE_PENDING } from './tools.js';
 import { executeNet } from './netrun.js';
 // --- end Track N ---
 import { doAreaAttack, doSuppressiveFire } from './grid-area.js';
+import { validateIntent } from './validate.js';
 
 export { SessionError, currentActorId };
 import type {
@@ -50,6 +51,7 @@ export function authorId(v: Viewer): AuthorId {
 export function handleIntent(state: SessionState, intent: Intent, by: Viewer, ctx: AuthorityContext): Accepted | Rejection {
   const newId = ctx.newId ?? (() => globalThis.crypto.randomUUID());
   try {
+    validateIntent(state, intent, by);
     authorize(state, intent, by);
     const { events, patch } = execute(state, intent, by, ctx.dice, newId);
     const entry: LogEntry = {

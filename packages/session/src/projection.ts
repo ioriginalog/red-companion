@@ -10,7 +10,7 @@ import { allegianceOf, factionOf, projectMap } from './tactical.js';
 // --- Track N ---
 import { projectNet } from './netrun.js';
 // --- end Track N ---
-import type { Actor, LogEntry, ProjectedActor, ProjectedEntry, SessionState, TacticalMap, Viewer, ViewState } from './types.js';
+import type { Actor, Encounter, LogEntry, Pending, ProjectedActor, ProjectedEntry, ProjectedPending, SessionState, TacticalMap, Viewer, ViewState } from './types.js';
 
 export interface ProjectionOptions {
   /** Players can see other PCs' sheets. Default true. */
@@ -48,15 +48,109 @@ export function projectActor(actor: Actor, viewer: Viewer, opts?: ProjectionOpti
   return canSeeFull(actor, viewer, opts) ? { ...base, combatant: c, weapons: actor.weapons, ...(actor.notes ? { notes: actor.notes } : {}) } : base;
 }
 
+// ----- Player knowledge (fog of war) ----------------------------------------------
+//
+// Players only ever receive actors they know about: the party and allies
+// always; hostile and neutral NPCs once the party has spotted them on the map
+// (or, with no map, while they are in an active encounter). Unknown actors
+// are omitted entirely; their slots in the Turn order become opaque
+// placeholders (`hidden:1`, `hidden:2`, …) numbered by position, and any
+// event or pending step that mentions them is rewritten to the placeholder.
+
+const HIDDEN = 'hidden';
+
+/** Actor ids players may know about in this state. */
+export function playerKnown(state: SessionState): Set<string> {
+  const out = new Set<string>();
+  const order = new Set(state.encounter.active ? state.encounter.order : []);
+  for (const a of Object.values(state.actors)) {
+    if (factionOf(a) === 'friendly') out.add(a.id);
+    else if (state.map ? state.map.spotted.includes(a.id) : order.has(a.id)) out.add(a.id);
+  }
+  return out;
+}
+
+interface Knowledge { known: Set<string>; aliases: Map<string, string>; aliasOf: (id: string) => string }
+
+function knowledge(state: SessionState): Knowledge {
+  const known = playerKnown(state);
+  const aliases = new Map<string, string>();
+  let k = 0;
+  for (const id of state.encounter.order) if (!known.has(id) && !aliases.has(id)) aliases.set(id, `${HIDDEN}:${++k}`);
+  return { known, aliases, aliasOf: (id) => (known.has(id) ? id : aliases.get(id) ?? HIDDEN) };
+}
+
+function placeholder(id: string): ProjectedActor {
+  return {
+    id, controller: 'gm', placeholder: true,
+    public: {
+      name: 'Unknown Contact', side: 'npc', allegiance: 'neutral', woundState: 'unhurt',
+      conditions: { prone: false, unconscious: false, dead: false, stabilized: false }, injuries: [],
+    },
+  };
+}
+
+function projectEncounter(enc: Encounter, kn: Knowledge): Encounter {
+  return {
+    ...enc,
+    order: enc.order.map(kn.aliasOf),
+    deathSaveRequiredFor: enc.deathSaveRequiredFor ? kn.aliasOf(enc.deathSaveRequiredFor) : null,
+    ...(enc.usage ? { usage: { ...enc.usage, actorId: kn.aliasOf(enc.usage.actorId) } } : {}),
+  };
+}
+
+function projectPending(p: Pending | null, viewer: Viewer, state: SessionState, kn: Knowledge, opts?: ProjectionOptions): ProjectedPending | null {
+  if (!p || viewer.role === 'gm') return p;
+  const full = (id: string) => { const a = state.actors[id]; return !!a && canSeeFull(a, viewer, opts); };
+  switch (p.kind) {
+    case 'awaitingDodge': {
+      const a = p.attack;
+      return {
+        kind: p.kind, id: p.id, defenderId: kn.aliasOf(p.defenderId),
+        attack: {
+          type: 'rangedAttack', attackerId: kn.aliasOf(a.attackerId), defenderId: kn.aliasOf(a.defenderId),
+          weaponId: full(a.attackerId) ? a.weaponId : 'unknown', distance: a.distance,
+          ...(a.mode ? { mode: a.mode } : {}), ...(a.aimTarget ? { aimTarget: a.aimTarget } : {}),
+        },
+      };
+    }
+    case 'awaitingDamage':
+      return {
+        kind: p.kind, id: p.id, attackerId: kn.aliasOf(p.attackerId), targetId: kn.aliasOf(p.targetId),
+        ...(full(p.attackerId) ? { spec: p.spec } : {}),
+      };
+    case 'awaitingWatch':
+      return { kind: p.kind, id: p.id, watcherId: kn.aliasOf(p.watcherId), targetId: kn.aliasOf(p.targetId) };
+  }
+}
+
+/** Every actor a player may see (known actors plus Turn-order placeholders). */
+function playerActors(state: SessionState, viewer: Viewer, kn: Knowledge, opts?: ProjectionOptions): Record<string, ProjectedActor> {
+  const out: Record<string, ProjectedActor> = {};
+  for (const a of Object.values(state.actors)) if (kn.known.has(a.id)) out[a.id] = projectActor(a, viewer, opts, state.map);
+  for (const alias of kn.aliases.values()) out[alias] = placeholder(alias);
+  return out;
+}
+
 export function projectState(state: SessionState, viewer: Viewer, opts?: ProjectionOptions): ViewState {
+  if (viewer.role === 'gm') {
+    return {
+      sessionId: state.sessionId, seq: state.seq,
+      actors: Object.fromEntries(Object.values(state.actors).map((a) => [a.id, projectActor(a, viewer, opts, state.map)])),
+      encounter: state.encounter, pending: state.pending, map: state.map, library: state.library,
+      // --- Track N ---
+      ...(state.netrun ? { netrun: projectNet(state, viewer) } : {}),
+      // --- end Track N ---
+    };
+  }
+  const kn = knowledge(state);
   return {
     sessionId: state.sessionId,
     seq: state.seq,
-    actors: Object.fromEntries(Object.values(state.actors).map((a) => [a.id, projectActor(a, viewer, opts, state.map)])),
-    encounter: state.encounter,
-    pending: state.pending,
+    actors: playerActors(state, viewer, kn, opts),
+    encounter: projectEncounter(state.encounter, kn),
+    pending: projectPending(state.pending, viewer, state, kn, opts),
     map: viewMap(state, viewer),
-    ...(viewer.role === 'gm' ? { library: state.library } : {}),
     // --- Track N ---
     ...(state.netrun ? { netrun: projectNet(state, viewer) } : {}),
     // --- end Track N ---
@@ -72,52 +166,95 @@ function eventSubject(e: CombatEvent): string | undefined {
   return 'targetId' in e ? e.targetId : 'combatantId' in e ? e.combatantId : undefined;
 }
 
+const ID_KEYS = new Set(['attackerId', 'defenderId', 'targetId', 'combatantId', 'medicId', 'watcherId', 'asCombatantId']);
+
+/** Rewrite every actor id in an event that the player doesn't know. */
+function aliasIds<T>(v: T, f: (id: string) => string, key?: string): T {
+  if (typeof v === 'string') return (key && ID_KEYS.has(key) ? f(v) : v) as T;
+  if (Array.isArray(v)) return v.map((x) => aliasIds(x, f, key === 'targetIds' ? 'targetId' : undefined)) as T;
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, aliasIds(x, f, k)])) as T;
+  }
+  return v;
+}
+
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
 /**
- * Project one entry. `after` = state after applying the entry (used to decide
- * what the viewer may see).
- *
- * Fog of war: any change to the map or to actors can change what the party
- * sees, so those entries carry the whole re-projected map, and a map change
- * re-sends every actor (a newly spotted NPC gets its name back).
+ * Project one entry. `after` = state after the entry; `before` = state
+ * before it (the relay always passes it, so players get exact actor diffs:
+ * newly spotted NPCs appear, forgotten ones are removed, unknown ids never
+ * leak). Without `before`, entries that touch the map or the encounter
+ * re-send every actor the player knows.
  */
-export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionState, opts?: ProjectionOptions): ProjectedEntry {
+export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionState, opts?: ProjectionOptions, before?: SessionState): ProjectedEntry {
+  const base = { seq: entry.seq, id: entry.id, at: entry.at, by: entry.by, intentType: entry.intent.type };
+  if (viewer.role === 'gm') {
+    const patch: ProjectedEntry['patch'] = {};
+    if (entry.patch.actors) {
+      patch.actors = Object.fromEntries(Object.entries(entry.patch.actors).map(([id, a]) => [id, a ? projectActor(a, viewer, opts, after.map) : null]));
+    }
+    if ('map' in entry.patch) patch.map = after.map;
+    if (entry.patch.encounter) patch.encounter = entry.patch.encounter;
+    if ('pending' in entry.patch) patch.pending = entry.patch.pending ?? null;
+    if (entry.patch.library) patch.library = entry.patch.library;
+    // --- Track N ---
+    if (entry.patch.netrun) patch.netrun = projectNet(after, viewer);
+    // --- end Track N ---
+    return { ...base, events: entry.events, patch };
+  }
+
   const actorsAfter = after.actors;
+  const kn = knowledge(after);
   const visible = (id: string | undefined) => {
-    if (viewer.role === 'gm') return true;
     const a = id ? actorsAfter[id] : undefined;
     return a ? canSeeFull(a, viewer, opts) : false;
   };
-  const me = viewer.role === 'gm' ? 'gm' : viewer.playerId;
-  const events = entry.events
-    .filter((e) => viewer.role === 'gm' || !e.audience || e.audience.includes(me))
+  const me = viewer.playerId;
+  let events = entry.events
+    .filter((e) => !e.audience || e.audience.includes(me))
     .filter((e) => e.visibility === 'public' || visible(eventSubject(e)))
-    .map((e) => (viewer.role === 'gm' ? e : redactEvent(e, visible)));
+    // NPC ammo counts are stats.
+    .filter((e) => e.type !== 'ammoSpent' || visible(e.combatantId))
+    .map((e) => redactEvent(e, visible));
   // Don't reveal hidden tokens: drop their checks, trim them from area results.
-  if (viewer.role !== 'gm' && after.map && events.some((e) => e.type === 'areaResolved' || e.type === 'checkRolled')) {
+  if (after.map && events.some((e) => e.type === 'areaResolved' || e.type === 'checkRolled')) {
     const map = after.map;
     const seen = projectMap(map, actorsAfter).tokens;
     const hidden = (id: string) => !!map.tokens[id] && !seen[id];
-    for (let i = events.length - 1; i >= 0; i--) {
-      const e = events[i]!;
-      if (e.type === 'areaResolved') events[i] = { ...e, targetIds: e.targetIds.filter((id) => !hidden(id)) };
-      else if (e.type === 'checkRolled' && e.combatantId && hidden(e.combatantId)) events.splice(i, 1);
-    }
+    events = events
+      .filter((e) => !(e.type === 'checkRolled' && e.combatantId && hidden(e.combatantId)))
+      .map((e) => (e.type === 'areaResolved' ? { ...e, targetIds: e.targetIds.filter((id) => !hidden(id)) } : e));
   }
+  events = events.map((e) => aliasIds(e, kn.aliasOf));
+
   const patch: ProjectedEntry['patch'] = {};
-  if (entry.patch.actors) {
-    patch.actors = Object.fromEntries(Object.entries(entry.patch.actors).map(([id, a]) => [id, a ? projectActor(a, viewer, opts, after.map) : null]));
-  }
-  if ('map' in entry.patch && viewer.role !== 'gm') {
-    patch.actors = { ...patch.actors, ...Object.fromEntries(Object.values(actorsAfter).map((a) => [a.id, projectActor(a, viewer, opts, after.map)])) };
+  const nowActors = playerActors(after, viewer, kn, opts);
+  if (before) {
+    const prevActors = playerActors(before, viewer, knowledge(before), opts);
+    const diff: Record<string, ProjectedActor | null> = {};
+    for (const [id, a] of Object.entries(nowActors)) if (!same(prevActors[id], a)) diff[id] = a;
+    for (const id of Object.keys(prevActors)) if (!nowActors[id]) diff[id] = null;
+    if (Object.keys(diff).length) patch.actors = diff;
+    const encNow = projectEncounter(after.encounter, kn);
+    if (entry.patch.encounter || !same(projectEncounter(before.encounter, knowledge(before)), encNow)) patch.encounter = encNow;
+  } else {
+    const touchesKnowledge = 'map' in entry.patch || !!entry.patch.encounter;
+    const ids = touchesKnowledge ? Object.keys(nowActors) : Object.keys(entry.patch.actors ?? {});
+    const diff: Record<string, ProjectedActor | null> = {};
+    for (const id of ids) {
+      if (nowActors[id]) diff[id] = nowActors[id]!;
+      else if (entry.patch.actors?.[id] === null && !touchesKnowledge) diff[id] = null;
+    }
+    if (Object.keys(diff).length) patch.actors = diff;
+    if (touchesKnowledge) patch.encounter = projectEncounter(after.encounter, kn);
   }
   if ('map' in entry.patch || (entry.patch.actors && after.map)) patch.map = viewMap(after, viewer);
-  if (entry.patch.encounter) patch.encounter = entry.patch.encounter;
-  if ('pending' in entry.patch) patch.pending = entry.patch.pending ?? null;
-  if (entry.patch.library && viewer.role === 'gm') patch.library = entry.patch.library;
+  if ('pending' in entry.patch) patch.pending = projectPending(entry.patch.pending ?? null, viewer, after, kn, opts);
   // --- Track N --- (Turn changes move NET Actions left; controller changes move ownership.)
   if (after.netrun && (entry.patch.netrun || entry.patch.actors || entry.patch.encounter)) patch.netrun = projectNet(after, viewer);
   // --- end Track N ---
-  return { seq: entry.seq, id: entry.id, at: entry.at, by: entry.by, intentType: entry.intent.type, events, patch };
+  return { ...base, events, patch };
 }
 
 /** Keep results a table would announce; drop numbers that reveal hidden stats or HP. */

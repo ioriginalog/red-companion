@@ -108,6 +108,11 @@ export type Pending =
   /** A watch (house rule) triggered: the watcher may attack the mover now, out of Turn. */
   | { kind: 'awaitingWatch'; id: string; watcherId: string; targetId: string };
 
+/** What a player sees of a pending step: NPC damage dice are withheld. */
+export type ProjectedPending =
+  | Exclude<Pending, { kind: 'awaitingDamage' }>
+  | (Omit<Extract<Pending, { kind: 'awaitingDamage' }>, 'spec'> & { spec?: DamageSpec });
+
 export interface SessionState {
   sessionId: string;
   /** seq of the last applied entry; 0 = empty log. */
@@ -240,6 +245,8 @@ export interface ProjectedActor {
   id: string;
   controller: string;
   public: PublicCombatantView;
+  /** Stand-in for a combatant players haven't seen (id like `hidden:2`). */
+  placeholder?: true;
   /** Only when the viewer may see full stats (own actor, PCs, or GM). */
   combatant?: Combatant;
   weapons?: Weapon[];
@@ -251,7 +258,7 @@ export interface ViewState {
   seq: number;
   actors: Record<string, ProjectedActor>;
   encounter: Encounter;
-  pending: Pending | null;
+  pending: ProjectedPending | null;
   map: TacticalMap | null;
   /** GM view only. */
   library?: Library;
@@ -267,5 +274,5 @@ export interface ProjectedEntry {
   by: AuthorId;
   intentType: IntentType;
   events: CombatEvent[];
-  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: Pending | null; map?: TacticalMap | null; library?: Library; /* Track N */ netrun?: NetView };
+  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: ProjectedPending | null; map?: TacticalMap | null; library?: Library; /* Track N */ netrun?: NetView };
 }
