@@ -3,8 +3,8 @@
  * from a session Actor. Pure; tested in apps/web/test/editors.test.ts.
  */
 import {
-  ARMOR_TYPES, maxHP, seriouslyWoundedThreshold, WEAPON_TYPES,
-  type ArmorPiece, type HitLocation, type Stats, type Weapon, type WeaponType,
+  ammoProblem, applySystems, ARMOR_TYPES, cyberwareProblem, maxHP, roleProblem, seriouslyWoundedThreshold, WEAPON_TYPES,
+  type AmmoTypeId, type ArmorPiece, type Combatant, type CyberwareItem, type HitLocation, type RoleState, type Stats, type Weapon, type WeaponType,
 } from '@cprc/rules-core';
 import type { Actor, Allegiance } from '@cprc/session';
 
@@ -18,6 +18,7 @@ export interface WeaponDraft {
   capacity: number | null;
   rofOverride: 1 | 2 | null;
   damageDiceOverride: number | null;
+  ammoType?: AmmoTypeId;
 }
 
 export interface ActorDraft {
@@ -31,6 +32,9 @@ export interface ActorDraft {
   weapons: WeaponDraft[];
   armor: { head: ArmorChoice; body: ArmorChoice };
   notes: string;
+  /** Role and rank (Combat Awareness / Medicine allocations live here). */
+  role: RoleState | null;
+  cyberware: CyberwareItem[];
 }
 
 /** Actor plus GM notes. `notes` rides along in the JSON; the engine ignores it. */
@@ -47,12 +51,19 @@ export function slugify(name: string): string {
   return s.slice(0, 32) || 'actor';
 }
 
-/** A fresh id not in `taken`: `slug`, then `slug-2`, `slug-3`, … */
-export function uniqueId(base: string, taken: Iterable<string>): string {
+/**
+ * A fresh, opaque id not in `taken` (`a-` + 10 random base-36 characters).
+ * Ids reach players for visible characters, so they must not reveal a name,
+ * a template or a count. `_base` is kept for call-site readability.
+ */
+export function uniqueId(_base: string, taken: Iterable<string>): string {
   const set = new Set(taken);
-  const slug = slugify(base);
-  if (!set.has(slug)) return slug;
-  for (let n = 2; ; n++) if (!set.has(`${slug}-${n}`)) return `${slug}-${n}`;
+  for (;;) {
+    const bytes = new Uint8Array(10);
+    globalThis.crypto.getRandomValues(bytes);
+    const id = `a-${Array.from(bytes, (b) => (b % 36).toString(36)).join('')}`;
+    if (!set.has(id)) return id;
+  }
 }
 
 /** Numbered names for bulk spawns: "Thug 1", "Thug 2", … skipping names already used. */
@@ -70,6 +81,7 @@ export function emptyDraft(): ActorDraft {
   return {
     id: '', name: '', allegiance: 'hostile', controller: 'gm', portrait: null, stats: { ...DEFAULT_STATS },
     skills: { Evasion: 2, Perception: 2 }, weapons: [], armor: { head: { kind: 'none' }, body: { kind: 'none' } }, notes: '',
+    role: null, cyberware: [],
   };
 }
 
@@ -139,14 +151,21 @@ export function draftFromActor(a: ActorWithNotes): ActorDraft {
     allegiance: a.allegiance ?? (c.side === 'pc' ? 'party' : 'hostile'),
     controller: a.controller,
     portrait: a.portrait ?? null,
-    stats: { ...c.stats },
+    // Starting EMP: Humanity's maximum is EMP × 10 at creation.
+    stats: { ...c.stats, ...(c.humanity ? { EMP: Math.round(c.humanity.max / 10) } : {}) },
     skills: { ...c.skills },
     weapons: a.weapons.map((w) => ({
       id: w.id, name: w.name, type: w.type, capacity: w.ammo?.capacity ?? null,
       rofOverride: w.rofOverride ?? null, damageDiceOverride: w.damageDiceOverride ?? null,
+      ...(w.ammoType && w.ammoType !== 'basic' ? { ammoType: w.ammoType } : {}),
     })),
-    armor: { head: armorChoice(c.armor.find((p) => p.location === 'head')), body: armorChoice(c.armor.find((p) => p.location === 'body')) },
+    armor: {
+      head: armorChoice(c.armor.find((p) => p.location === 'head' && !p.id.startsWith('cw:'))),
+      body: armorChoice(c.armor.find((p) => p.location === 'body' && !p.id.startsWith('cw:'))),
+    },
     notes: a.notes ?? '',
+    role: c.role ? { ...c.role } : null,
+    cyberware: (c.cyberware ?? []).map((i) => ({ ...i, effects: i.effects.map((e) => ({ ...e })) })),
   };
 }
 
@@ -174,11 +193,14 @@ export function actorFromDraft(d: ActorDraft, opts: BuildOptions = {}): ActorWit
       ...(capacity !== null ? { ammo: { loaded, capacity } } : {}),
       ...(w.rofOverride ? { rofOverride: w.rofOverride } : {}),
       ...(w.damageDiceOverride ? { damageDiceOverride: clamp(w.damageDiceOverride, 1, 10) } : {}),
+      ...(w.ammoType && w.ammoType !== 'basic' && capacity !== null ? { ammoType: w.ammoType } : {}),
     };
   });
   const armor = (['body', 'head'] as const)
-    .map((loc) => armorPiece(loc, d.armor[loc], pc?.armor.find((p) => p.location === loc)))
-    .filter((p): p is ArmorPiece => p !== null);
+    .map((loc) => armorPiece(loc, d.armor[loc], pc?.armor.find((p) => p.location === loc && !p.id.startsWith('cw:'))))
+    .filter((p): p is ArmorPiece => p !== null)
+    // Keep cyberware armor's ablation; applySystems rebuilds the pieces from the cyberware list.
+    .concat((pc?.armor ?? []).filter((p) => p.id.startsWith('cw:')));
   const id = d.id;
   const actor: ActorWithNotes = {
     id,
@@ -199,9 +221,26 @@ export function actorFromDraft(d: ActorDraft, opts: BuildOptions = {}): ActorWit
       deathSave: pc?.deathSave ?? { accumulatedPenalty: 0 },
       conditions: pc?.conditions ?? { prone: false, unconscious: false, dead: false, stabilized: false },
       ...(pc?.flags ? { flags: pc.flags } : {}),
+      ...(d.role ? { role: { ...d.role } } : {}),
+      ...(d.cyberware.length ? { cyberware: d.cyberware.map((i) => ({ ...i })) } : {}),
+      humanity: humanityFor(stats.EMP, d.cyberware, pc),
+      ...(pc?.onFire ? { onFire: pc.onFire } : {}),
     },
   };
+  actor.combatant = applySystems(actor.combatant);
   return actor;
+}
+
+/**
+ * Humanity: maximum EMP × 10; current = maximum − Humanity Loss. Editing an
+ * existing character keeps whatever else moved it (therapy, GM changes).
+ */
+export function humanityFor(emp: number, cyberware: CyberwareItem[], prev?: Combatant): { current: number; max: number } {
+  const max = emp * 10;
+  const loss = cyberware.reduce((s, i) => s + i.humanityLoss, 0);
+  if (!prev?.humanity) return { current: max - loss, max };
+  const prevLoss = (prev.cyberware ?? []).reduce((s, i) => s + i.humanityLoss, 0);
+  return { current: prev.humanity.current + (max - prev.humanity.max) - (loss - prevLoss), max };
 }
 
 /** Problems that should stop a save. Sentence case for display. */
@@ -211,6 +250,16 @@ export function validateDraft(d: ActorDraft): string[] {
   if (d.weapons.some((w) => !(w.type in WEAPON_TYPES))) out.push('A weapon has an unknown type.');
   const ids = d.weapons.map((w) => w.id);
   if (new Set(ids).size !== ids.length) out.push('Two weapons share an id.');
+  if (d.role) { const p = roleProblem(d.role); if (p) out.push(p); }
+  for (const i of d.cyberware) { const p = cyberwareProblem(i); if (p) out.push(`${i.name || 'Cyberware'}: ${p}`); }
+  const cwIds = d.cyberware.map((i) => i.id);
+  if (new Set(cwIds).size !== cwIds.length) out.push('Two cyberware items share an id.');
+  for (const w of d.weapons) {
+    if (w.ammoType && w.ammoType !== 'basic') {
+      const p = ammoProblem({ id: w.id, name: w.name, type: w.type }, w.ammoType);
+      if (p) out.push(p);
+    }
+  }
   return out;
 }
 

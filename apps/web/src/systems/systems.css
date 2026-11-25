@@ -1,0 +1,17 @@
+/* Track K: sheet and GM panel pieces. Reuses the table's card/btn/warn language. */
+.sys-aw { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; margin-top: 6px; }
+.sys-aw label { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 13px; }
+.sys-aw input { width: 52px; padding: 3px 6px; }
+.sys-aw label.bad input { border-color: var(--magenta); }
+.sys-hum { display: grid; gap: 4px; margin-bottom: 8px; }
+.sys-hum-low .bar > i { background: linear-gradient(90deg, var(--yellow), var(--cyan)); }
+.sys-hum-critical .bar > i, .sys-hum-cyberpsycho .bar > i { background: linear-gradient(90deg, var(--red), var(--magenta)); }
+.sys-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+.sys-ammo { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.sys-ammo select { padding: 4px 6px; }
+.sys-fire { border-color: #ff8a00; background: linear-gradient(180deg, rgba(255, 138, 0, 0.16), rgba(255, 138, 0, 0.04)); }
+.sys-fire > .ttl { color: #ffb15c; }
+.sys-gm { display: grid; gap: 6px; }
+.sys-gm select, .sys-gm input { padding: 5px 8px; }
+.btn.sm { padding: 4px 8px; font-size: 12px; }
+.sys-sub { font: 700 12px var(--head); text-transform: uppercase; letter-spacing: 0.1em; color: var(--cyan); }

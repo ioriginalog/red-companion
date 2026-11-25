@@ -101,7 +101,7 @@ details.skg[open] > summary > span:first-child::before { content: '▾'; }
 .skill .base { font: 700 14px var(--head); color: var(--yellow); text-align: right; }
 .skill.on { color: #fff; }
 .skill:not(.on) { color: var(--dim); }
-.wrow { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr) 74px 74px 74px 32px; gap: 6px; align-items: end; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.wrow { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr) 74px 74px minmax(0, 1fr) 74px 32px; gap: 6px; align-items: end; padding: 6px 0; border-bottom: 1px solid var(--line); }
 @media (max-width: 900px) { .wrow { grid-template-columns: 1fr 1fr 1fr; } }
 .wrow select, .wrow input { width: 100%; padding: 6px; }
 .iconbtn { border: 1px solid var(--line-hi); background: transparent; border-radius: 2px; height: 34px; color: var(--red); font-weight: 700; }
@@ -113,3 +113,16 @@ details.skg[open] > summary > span:first-child::before { content: '▾'; }
 .crop-stage img { display: block; max-width: 100%; max-height: 58vh; width: auto; height: auto; pointer-events: none; }
 .crop-box { position: absolute; border: 2px solid var(--yellow); box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6); }
 .crop-out { width: 96px; height: 96px; border: 2px solid var(--cyan); background: #000; }
+
+/* ----- Track K: Role, cyberware, Humanity ----- */
+.aw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.fld.aw small { font-size: 11px; line-height: 1.3; }
+.fld.aw.bad input { border-color: var(--magenta); }
+.hum { display: grid; gap: 4px; margin-bottom: 8px; }
+.hum-low .bar > i { background: linear-gradient(90deg, var(--yellow), var(--cyan)); }
+.hum-critical .bar > i, .hum-cyberpsycho .bar > i { background: linear-gradient(90deg, var(--red), var(--magenta)); }
+.cw { border-bottom: 1px solid var(--line); padding: 4px 0 8px; display: grid; gap: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chips .chip .x { background: none; border: 0; color: var(--dim); padding: 0 0 0 4px; }
+.eff-add { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.eff-add select, .eff-add input { padding: 4px 6px; }

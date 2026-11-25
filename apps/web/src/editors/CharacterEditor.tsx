@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ARMOR_TYPES, WEAPON_TYPES, type StatKey, type WeaponType } from '@cprc/rules-core';
+import { ARMOR_TYPES, ROLES, WEAPON_TYPES, type RoleId, type StatKey, type WeaponType } from '@cprc/rules-core';
 import type { Actor, Allegiance, Intent, ProjectedActor } from '@cprc/session';
 import { client, type ClientState } from '../net.js';
 import { downloadText, loadImage, pickFile } from '../assets.js';
@@ -11,7 +11,10 @@ import {
 } from './actorModel.js';
 import { freeSquares } from './mapModel.js';
 import { PortraitCropper } from './PortraitCropper.js';
+import { AmmoSelect, CyberwareField, RoleField } from './SystemsFields.js';
 import './editors.css';
+
+const ROLE_NAME = Object.fromEntries(ROLES.map((r) => [r.id, r.name])) as Record<RoleId, string>;
 
 type Sel = { kind: 'session' | 'library'; id: string } | { kind: 'starter'; key: string } | { kind: 'new' };
 
@@ -154,6 +157,8 @@ export function CharacterEditor({ s }: { s: ClientState }) {
     skills: g.skills.filter((k) => (!onlyTrained || (draft.skills[k.name] ?? 0) > 0) && (!skillFilter || k.name.toLowerCase().includes(skillFilter.toLowerCase()))),
   })).filter((g) => g.skills.length);
 
+  const initBonus = (draft.role?.id === 'solo' ? draft.role.awareness?.initiativeReaction ?? 0 : 0)
+    + draft.cyberware.flatMap((i) => i.effects).reduce((t, e) => t + (e.kind === 'initiative' ? e.value : 0), 0);
   const title = sel.kind === 'session' ? 'Session Character' : sel.kind === 'library' ? 'Library Template' : sel.kind === 'starter' ? 'Starter Template' : 'New Character';
 
   return (
@@ -240,6 +245,8 @@ export function CharacterEditor({ s }: { s: ClientState }) {
           <div className="note" style={{ marginTop: 6 }}>HP = 10 + 5 × (BODY + WILL) ÷ 2, rounded up. Typical STATs run 2 to 8.</div>
         </section>
 
+        <RoleField value={draft.role} onChange={(role) => set({ role })} />
+
         <section className="card">
           <div className="ttl">Skills</div>
           <div className="row" style={{ marginBottom: 8, flexWrap: 'wrap' }}>
@@ -293,6 +300,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
                     <option value="">Default ({p.rof})</option><option value="1">1</option><option value="2">2</option>
                   </select>
                 </label>
+                <AmmoSelect type={w.type} value={w.ammoType} onChange={(ammoType) => upd({ ammoType })} />
                 <label className="fld"><span>Damage</span>
                   <input type="number" min={1} max={10} value={w.damageDiceOverride ?? ''} placeholder={`${p.damageDice}d6`}
                     onChange={(e) => upd({ damageDiceOverride: e.target.value ? Number(e.target.value) : null })} aria-label={`${w.name} damage dice override (d6)`} />
@@ -324,6 +332,8 @@ export function CharacterEditor({ s }: { s: ClientState }) {
           <div className="note" style={{ marginTop: 6 }}>The worst armor penalty applies to REF, DEX and MOVE.</div>
         </section>
 
+        <CyberwareField value={draft.cyberware} emp={draft.stats.EMP} onChange={(cyberware) => set({ cyberware })} />
+
         <section className="card">
           <div className="ttl">Notes</div>
           <textarea aria-label="Notes" value={draft.notes} maxLength={2000} onChange={(e) => set({ notes: e.target.value })} placeholder="Cyberware, tactics, loot, motives…" style={{ width: '100%' }} />
@@ -340,7 +350,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
                 <button className="cta" style={{ fontSize: 18, padding: 10 }} disabled={!dirty && !reset} onClick={saveSession}>Save Changes</button>
                 <label className="lbl" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={reset} onChange={(e) => setReset(e.target.checked)} />Reset Health, Armor and Ammo</label>
                 <button className="btn full" onClick={() => saveTemplate(true)}>Save as Template</button>
-                <button className="btn full mag" onClick={removeCurrent}>Remove From Session</button>
+                <button className="btn full mag" onClick={removeCurrent}>Remove from Session</button>
               </>
             )}
             {sel.kind === 'library' && (
@@ -373,7 +383,9 @@ export function CharacterEditor({ s }: { s: ClientState }) {
             <span>Armor (Head / Body)</span><span className="mono">{armorSp(draft.armor.head)} / {armorSp(draft.armor.body)}</span>
             <span>Evasion Base</span><span className="mono">{draft.stats.DEX + (draft.skills.Evasion ?? 0)}</span>
             <span>Can Dodge Bullets</span><span>{draft.stats.REF >= 8 ? 'Yes (REF 8+)' : 'No'}</span>
-            <span>Initiative</span><span className="mono">REF {draft.stats.REF} + 1d10</span>
+            <span>Initiative</span><span className="mono">REF {draft.stats.REF}{initBonus ? ` + ${initBonus}` : ''} + 1d10</span>
+            <span>Humanity</span><span className="mono">{draft.stats.EMP * 10 - draft.cyberware.reduce((t, i) => t + i.humanityLoss, 0)} / {draft.stats.EMP * 10}</span>
+            {draft.role && <><span>Role</span><span>{ROLE_NAME[draft.role.id]} {draft.role.rank}</span></>}
           </div>
         </section>
       </aside>

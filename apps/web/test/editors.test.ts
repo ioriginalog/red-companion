@@ -89,13 +89,17 @@ describe('actors', () => {
   it('derives HP from BODY and WILL and keeps ids unique', () => {
     const d = { ...emptyDraft(), id: 'x', name: 'Test', stats: { ...emptyDraft().stats, BODY: 8, WILL: 3 } };
     expect(actorFromDraft(d).combatant.hp.max).toBe(maxHP(8, 3));
-    expect(uniqueId('Street Thug', ['street-thug'])).toBe('street-thug-2');
+    const id = uniqueId('Street Thug', ['street-thug']);
+    expect(id).toMatch(/^a-[a-z0-9]{10}$/); // opaque: no name, template or count leaks to players
+    expect(id).not.toContain('street');
     expect(numberedNames('Thug', 3, ['Thug 2'])).toEqual(['Thug 1', 'Thug 3', 'Thug 4']);
   });
   it('round-trips an actor through the draft', () => {
     const vex = demoActors()[0]!;
     const back = actorFromDraft(draftFromActor(vex), { previous: vex });
-    expect(back.combatant).toEqual(vex.combatant);
+    // The builder gives every character a Humanity track (EMP × 10) — Track K.
+    const h = vex.combatant.stats.EMP * 10;
+    expect(back.combatant).toEqual({ ...vex.combatant, humanity: { current: h, max: h } });
     expect(back.weapons).toEqual(vex.weapons);
   });
   it('preserves damage, ablation and ammo on edit, unless reset', () => {
@@ -163,5 +167,35 @@ describe('freeSquares', async () => {
       expect(Object.values(m.tokens).some((t) => t.x === c.x && t.y === c.y)).toBe(false);
     }
     expect(Math.max(...squares.map((c) => Math.max(Math.abs(c.x - 6), Math.abs(c.y - 12))))).toBe(1);
+  });
+});
+
+
+describe('Track K: role, cyberware and ammo in the builder', async () => {
+  const { actorFromDraft, emptyDraft, draftFromActor, humanityFor, validateDraft } = await import('../src/editors/actorModel.js');
+  it('builds Humanity from starting EMP and cyberware, and derives mods', () => {
+    const d = { ...emptyDraft(), id: 'a-1', name: 'Vex', stats: { ...emptyDraft().stats, EMP: 6 },
+      role: { id: 'solo' as const, rank: 4, awareness: { precisionAttack: 3 } },
+      cyberware: [{ id: 'cw-1', name: 'Subdermal Armor', humanityLoss: 14, effects: [{ kind: 'armor' as const, location: 'body' as const, sp: 11 }] }] };
+    const a = actorFromDraft(d);
+    expect(a.combatant.humanity).toEqual({ current: 46, max: 60 });
+    expect(a.combatant.stats.EMP).toBe(4);
+    expect(a.combatant.mods?.attack).toBe(1);
+    expect(a.combatant.armor.some((p) => p.id === 'cw:cw-1:body')).toBe(true);
+    const back = draftFromActor(a);
+    expect(back.stats.EMP).toBe(6);
+    expect(back.cyberware).toHaveLength(1);
+    expect(back.armor.body).toEqual({ kind: 'none' });
+  });
+  it('keeps Humanity changes made in play when the GM edits', () => {
+    const prev = actorFromDraft({ ...emptyDraft(), id: 'a-1', name: 'X', stats: { ...emptyDraft().stats, EMP: 5 } });
+    const played = { ...prev.combatant, humanity: { current: 41, max: 50 } };
+    expect(humanityFor(5, [{ id: 'c', name: 'C', humanityLoss: 3, effects: [] }], played)).toEqual({ current: 38, max: 50 });
+  });
+  it('validates role, cyberware and ammo', () => {
+    const base = { ...emptyDraft(), name: 'X' };
+    expect(validateDraft({ ...base, role: { id: 'solo', rank: 2, awareness: { precisionAttack: 3 } } })).toContainEqual(expect.stringMatching(/exceed rank 2/));
+    expect(validateDraft({ ...base, cyberware: [{ id: 'bad id!', name: 'X', humanityLoss: 1, effects: [] }] })).toHaveLength(1);
+    expect(validateDraft({ ...base, weapons: [{ id: 'w', name: 'P', type: 'heavyPistol', capacity: 8, rofOverride: null, damageDiceOverride: null, ammoType: 'smoke' }] })).toContainEqual(expect.stringMatching(/grenades/));
   });
 });

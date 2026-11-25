@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Cell, Terrain } from '@cprc/rules-core';
+import { COVER_MATERIALS, coverMaterial, DEFAULT_COVER_MATERIAL, type Cell, type CoverMaterialId, type Terrain } from '@cprc/rules-core';
 import type { TacticalMap } from '@cprc/session';
 import { client, type ClientState } from '../net.js';
 import { demoMap } from '../demo.js';
@@ -34,6 +34,7 @@ export function MapEditor({ s }: { s: ClientState }) {
   const [blank, setBlank] = useState<{ name: string; w: number; h: number } | null>(null);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [coverMat, setCoverMat] = useState<CoverMaterialId>(DEFAULT_COVER_MATERIAL);
 
   const open = useCallback((m: TacticalMap, src: Source) => {
     setDraft(m);
@@ -50,7 +51,7 @@ export function MapEditor({ s }: { s: ClientState }) {
   const cells = hist.present;
   const dirty = !!draft && (cells !== draft.cells || draft.name !== (source === 'library' ? library[draft.id]?.name : source === 'active' ? active?.name : undefined)
     || draft.sightRange !== (source === 'library' ? library[draft.id]?.sightRange : source === 'active' ? active?.sightRange : undefined));
-  const current: TacticalMap | null = draft ? { ...draft, cells } : null;
+  const current: TacticalMap | null = draft ? { ...draft, cells, cover: coverFor(cells, draft.width, draft.cover, coverMat) } : null;
 
   // ----- Keyboard shortcuts (editor tab only) -----
   useEffect(() => {
@@ -226,6 +227,17 @@ export function MapEditor({ s }: { s: ClientState }) {
                   </label>
                 )}
                 {tool === 'rect' && <label className="zoom lbl"><input type="checkbox" checked={outline} onChange={(e) => setOutline(e.target.checked)} />Outline Only</label>}
+                {terrain === 'c' && (
+                  <>
+                    <label className="zoom lbl">New Cover
+                      <select value={coverMat} onChange={(e) => setCoverMat(e.target.value as CoverMaterialId)} aria-label="Material for new cover squares">
+                        {COVER_MATERIALS.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.hp} HP)</option>)}
+                      </select>
+                    </label>
+                    <button className="btn sm" title="Set every cover square on this map to the selected material, at full HP"
+                      onClick={() => draft && setDraft({ ...draft, cover: allCover(cells, draft.width, coverMat) })}>Apply to All Cover</button>
+                  </>
+                )}
                 <span className="sep" />
                 <button className="btn sm" disabled={!hist.past.length} onClick={() => setHist(undo)} title="Undo (Ctrl+Z)">Undo</button>
                 <button className="btn sm" disabled={!hist.future.length} onClick={() => setHist(redo)} title="Redo (Ctrl+Shift+Z)">Redo</button>
@@ -466,4 +478,21 @@ function PaintCanvas({ map, tool, terrain, size, outline, zoom, actors, onPaint,
       </svg>
     </div>
   );
+}
+
+// ----- Track K: cover materials -------------------------------------------------
+
+/** Cover record for the painted cells: keep existing entries on cover squares, new cover gets `mat` at full HP. */
+function coverFor(cells: string, width: number, prev: TacticalMap['cover'], mat: CoverMaterialId): NonNullable<TacticalMap['cover']> {
+  const out: NonNullable<TacticalMap['cover']> = {};
+  for (let i = 0; i < cells.length; i++) {
+    if (cells[i] !== 'c') continue;
+    const key = `${i % width},${Math.floor(i / width)}`;
+    out[key] = prev?.[key] ?? { material: mat, hp: coverMaterial(mat).hp };
+  }
+  return out;
+}
+
+function allCover(cells: string, width: number, mat: CoverMaterialId): NonNullable<TacticalMap['cover']> {
+  return coverFor(cells, width, {}, mat);
 }
