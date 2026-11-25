@@ -4,7 +4,8 @@
  *   GM:     hello(gm) → append(entries) / truncate / replaceLog / fetchLog / reject(to player)
  *   Player: hello(player) → intent
  *   Relay → GM:     welcome, intent (from a player), playerJoined/Left, log, error
- *   Relay → Player: welcome (with projected snapshot), entries (projected), snapshot, rejected, error
+ *   Relay → Player: welcome (with projected snapshot and the player directory), entries (projected),
+ *                   snapshot, rejected, playerJoined/Left, error
  */
 import type { Cell } from '@cprc/rules-core';
 import type { Intent, LogEntry, ProjectedEntry, ViewState } from './types.js';
@@ -36,7 +37,7 @@ export interface PlayerInfo { playerId: string; name: string; online: boolean }
 
 export type ServerMessage =
   | { t: 'welcome'; role: 'gm'; sessionId: string; headSeq: number; players: PlayerInfo[] }
-  | { t: 'welcome'; role: 'player'; sessionId: string; playerId: string; playerToken: string; view: ViewState }
+  | { t: 'welcome'; role: 'player'; sessionId: string; playerId: string; playerToken: string; view: ViewState; players: PlayerInfo[] }
   | { t: 'entries'; entries: ProjectedEntry[] }
   | { t: 'snapshot'; view: ViewState }
   | { t: 'log'; entries: LogEntry[] }

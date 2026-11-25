@@ -1,10 +1,12 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { client } from './net.js';
 import { Table } from './Table.js';
 import { GmShell } from './editors/GmShell.js';
 
 export function App() {
   const s = useSyncExternalStore(client.subscribe, client.getState);
+  // A reload drops a player back into their last session (Leave forgets it).
+  useEffect(() => { client.autoResume(new URLSearchParams(location.search).get('join')); }, []);
   if (s.role === 'gm' && s.view) return <GmShell s={s} table={<Table s={s} />} />;
   if (s.role && s.view) return <Table s={s} />;
   return <Home busy={s.status === 'connecting'} toast={s.toast?.text ?? null} />;
@@ -12,6 +14,7 @@ export function App() {
 
 function Home({ busy, toast }: { busy: boolean; toast: string | null }) {
   const saved = client.savedGm();
+  const importRef = useRef<HTMLInputElement>(null);
   const [code, setCode] = useState(() => new URLSearchParams(location.search).get('join') ?? '');
   const [name, setName] = useState('');
   return (
@@ -31,6 +34,11 @@ function Home({ busy, toast }: { busy: boolean; toast: string | null }) {
         <div className="stack">
           {saved && <button className="btn yellow" disabled={busy} onClick={() => client.resumeGm(saved)}>Resume Session {saved.joinCode}</button>}
           <button className="btn" disabled={busy} onClick={() => void client.createSession()}>Create a New Session</button>
+          <button className="btn ghost" disabled={busy} onClick={() => importRef.current?.click()} title="Restore a session export as a new session">Import Session</button>
+          <input
+            ref={importRef} type="file" accept="application/json,.json" hidden aria-label="Session export file"
+            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void client.importSession(f); }}
+          />
         </div>
         {toast && <div className="warn" style={{ marginTop: 14 }}>{toast}</div>}
 
