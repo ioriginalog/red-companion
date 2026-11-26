@@ -34,3 +34,21 @@ describe('requiredPrompt', () => {
     expect(requiredPrompt(two, 'p1')?.choices).toHaveLength(0);
   });
 });
+
+describe('contrast (WCAG AA)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const v = (name: string) => css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`))![1]!;
+  const lum = (h: string) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+  };
+  const ratio = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x! + 0.05) / (y! + 0.05); };
+  const backgrounds = ['bg', 'panel', 'panel-2'].map(v).concat(['#071030']);
+  it.each(['text', 'dim', 'cyan', 'yellow', 'red', 'purple', 'green', 'magenta'])('--%s text is at least 4.5:1 on every panel', (fg) => {
+    for (const bg of backgrounds) expect(ratio(v(fg), bg)).toBeGreaterThanOrEqual(4.5);
+  });
+  it('read-only STAT tiles are not dimmed', () => {
+    expect(css).toMatch(/\.stat:disabled[^{]*\{[^}]*opacity:\s*1/);
+  });
+});

@@ -186,6 +186,7 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--cyan)
 .unit { font-size: 13px; } .v.cost { font-size: 16px; padding-top: 4px; }
 .ammo { font-size: 18px; } .ammo .dim { font-size: 13px; } .ammo.empty { color: var(--red); }
 .link { background: none; border: 0; color: var(--cyan); font: 700 12px var(--head); text-transform: uppercase; letter-spacing: 0.08em; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
+.link:disabled { color: var(--dim); text-decoration: none; cursor: not-allowed; opacity: 1; }
 .btn.sm { padding: 4px 9px; font-size: 13px; }
 .btn.icon { padding: 6px 10px; }
 .mode.danger-mode { border-color: var(--red); color: #ffc2c8; }
@@ -204,6 +205,9 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--cyan)
 .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .stat { background: #071030; border: 1px solid var(--line); border-radius: 3px; padding: 6px 4px; display: flex; flex-direction: column; align-items: center; }
 .stat:hover:not(:disabled) { border-color: var(--cyan); }
+/* Read-only STATs and skills are information, not disabled controls: keep full contrast. */
+.stat:disabled, .skill:disabled { opacity: 1; cursor: default; }
+.stat .v { color: var(--text); }
 .stat .k { font: 600 11px var(--head); letter-spacing: 0.08em; color: var(--dim); }
 .stat .v { font: 700 22px var(--head); }
 .skills { display: grid; gap: 3px; }

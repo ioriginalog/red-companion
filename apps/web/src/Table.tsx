@@ -3,7 +3,7 @@ import { profileOf, type Cell, type Weapon } from '@cprc/rules-core';
 import type { Intent } from '@cprc/session';
 import { client, type ClientState } from './net.js';
 import { MapView, type MapMode } from './MapView.js';
-import { aimOf, isFriendly, previewAttack, type AttackMode } from './tactics.js';
+import { aimOf, isFriendly, nearestTarget, previewAttack, type AttackMode } from './tactics.js';
 import { demoIntents } from './demo.js';
 import type { TableCtx } from './table/ctx.js';
 import { HelpOverlay, InitiativeStrip, Prompts, TopBar } from './table/panels.js';
@@ -269,9 +269,11 @@ export function Table({ s }: { s: ClientState }) {
   const tabs: [Tab, string][] = [['combat', 'Combat'], ['sheet', 'Sheet'], ['chat', 'Chat'], ['notes', 'Notes'], ...(showNet ? [['net', 'NET'] as [Tab, string]] : []), ...(isGm ? [['scene', 'Scene'] as [Tab, string]] : [])];
   const fireNow = canAct && !!targetId && !!weapon && !fireBlocked({ attack, usage, weapon }, !!view.pending);
   const chips = useMemo(() => (canAct ? targetChips(view, actingId, chances) : []), [view, actingId, chances, canAct]);
+  const anyShot = useMemo(() => (canAct && actingId ? nearestTarget(view, actingId) !== null : false), [view, actingId, canAct]);
   const targetHint = !canAct ? undefined
     : chips.length === 0 ? 'No enemies in sight. Move to find a line of sight.'
-      : layout.compact || layout.sheet ? 'Tap an enemy on the map or in the target strip.' : 'Click an enemy on the map.';
+      : !anyShot ? `The party can see enemies, but none is in ${acting ? name(acting.id) : 'this character'}’s line of sight. Move for a clear shot.`
+        : layout.compact || layout.sheet ? 'Tap an enemy on the map or in the target strip.' : 'Click an enemy on the map.';
   // Turn banner: your own characters (for the GM, the NPCs the GM runs).
   const bannerTitle = currentId && view.actors[currentId] && !view.actors[currentId]!.placeholder && mine(currentId) && (!isGm || view.actors[currentId]!.controller === 'gm')
     ? (isGm ? `${name(currentId)}’s Turn` : 'Your Turn') : null;

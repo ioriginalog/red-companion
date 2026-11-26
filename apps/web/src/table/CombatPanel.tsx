@@ -141,7 +141,13 @@ export function CombatPanel(p: Props) {
         <section className="card">
           <div className="ttl row" style={{ justifyContent: 'space-between' }}>
             <span>Target</span>
-            {actingId && <button className="link" onClick={() => p.setTargetId(nearestTarget(view, actingId))}>Nearest</button>}
+            {actingId && (() => {
+              const near = nearestTarget(view, actingId);
+              return (
+                <button className="link" disabled={!near} onClick={() => near && p.setTargetId(near)}
+                  title={near ? 'Target the closest enemy in line of sight' : 'No enemy is in this character’s line of sight.'}>Nearest</button>
+              );
+            })()}
           </div>
           {area === 'blast' ? <p className="dim">{weapon?.name ?? 'This weapon'} fires at a square, not a person. Use the Blast Template.</p> : !target ? <p className="dim">{p.targetHint ?? 'Tap an enemy on the map.'}</p> : (
             <>
