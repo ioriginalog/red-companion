@@ -24,13 +24,9 @@ from playwright.sync_api import sync_playwright
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 CHROME = os.environ.get('CHROME', '/usr/bin/google-chrome')
 
-# Round 4 defects fixed on track H2 (redaction). Delete entries once merged.
-KNOWN_OPEN = {
-    'initiative-hidden-count': 'round 4 #2: initiativeRolled keeps one "hidden" entry per unseen NPC',
-    'burning-hp': 'round 4 #3: burning event carries NPC hpAfter',
-    'id:turnDelayed': 'round 4 #4: turnDelayed.after not aliased',
-    'id:coverDamaged': 'round 4 #4: coverDamaged.byId not aliased',
-}
+# Leaks known to be open (fixed elsewhere, not yet merged). Keys: 'id:<eventType>',
+# 'initiative-hidden-count', 'burning-hp'. Empty now that redaction (round 4 H2) is in.
+KNOWN_OPEN: dict = {}
 
 failures, warnings, seen_known = [], [], set()
 
@@ -66,7 +62,8 @@ def wait_for(page, js, timeout=15000):
     page.wait_for_function(js, timeout=timeout)
 
 def new_ctx(browser, **kw):
-    ctx = browser.new_context(**kw)
+    # The service worker can reload the page when it takes control; keep runs deterministic.
+    ctx = browser.new_context(service_workers='block', **kw)
     ctx.add_init_script("try { localStorage.setItem('nsc.e2e', '1'); } catch (e) {}")
     return ctx
 
@@ -81,6 +78,7 @@ def page_errors(page, bucket, who):
 
 def gm_create(page, base):
     page.goto(base)
+    page.wait_for_load_state('networkidle')
     wait_for(page, '() => !!window.__nsc')
     page.evaluate('() => window.__nsc.createSession()')
     wait_for(page, "() => { const s = window.__nsc.getState(); return s.role === 'gm' && s.status === 'online' && !!s.joinCode }")
@@ -136,6 +134,13 @@ def test_identity(browser, base, relay):
     check(names.count('Ana') == 1, f'GM roster still has one Ana ({names})')
     gm.context.close(); pctx.close()
 
+def _events(raw):
+    try: m = json.loads(raw)
+    except Exception: return []
+    if m.get('t') == 'entries': return [e for en in m.get('entries', []) for e in en.get('events', [])]
+    if m.get('t') in ('welcome', 'rewind'): return [e for h in (m.get('history') or []) for e in h.get('events', [])]
+    return []
+
 def scan_leaks(frames, who, secrets):
     """Return (problems, known) found in a player's received frames."""
     problems, known = [], set()
@@ -166,12 +171,13 @@ def scan_leaks(frames, who, secrets):
         blob = json.dumps(rest)
         for s in secrets:
             if s in blob: problems.append(f'{who}: "{s}" outside events in a {m.get("t")} frame: {blob[blob.find(s) - 80: blob.find(s) + 80]}')
-        order = (((rest.get('view') or {}).get('encounter') or {}).get('order')) or []
-        if entries:
-            for en in rest['entries']:
-                order = order + ((((en.get('patch') or {}).get('encounter') or {}).get('order')) or [])
-        if any(str(x).startswith('hidden') for x in order):
-            problems.append(f'{who}: hidden placeholder in Turn order ({order})')
+        # By design one anonymous slot shows while an unseen actor acts; more would be a count.
+        lists = [((rest.get('view') or {}).get('encounter') or {}).get('order') or []]
+        if entries: lists += [(((en.get('patch') or {}).get('encounter') or {}).get('order')) or [] for en in rest['entries']]
+        for o in lists:
+            hidden = [x for x in o if str(x).startswith('hidden')]
+            if len(hidden) > 1 or any(x != 'hidden' for x in hidden):
+                problems.append(f'{who}: hidden actors countable in Turn order ({o})')
     return problems, known
 
 def test_redaction(browser, base):
@@ -183,16 +189,16 @@ def test_redaction(browser, base):
     # 14 × 6 with a full wall at x = 7: the right half is unseen. Cover at (10, 1).
     rows = []
     for y in range(6):
-        rows.append(''.join('#' if x == 7 else '.' for x in range(14)))
+        rows.append(''.join('#' if x == 7 else 'c' if (x, y) == (10, 1) else '.' for x in range(14)))
     for i in [
-        {'type': 'addActor', 'actor': actor('solo', 'Solo', 'pc', pa)},
+        {'type': 'addActor', 'actor': {**actor('solo', 'Solo', 'pc', pa), 'notes': 'Player-visible note', 'gmNotes': 'ZzGmNote: secretly works for the boss'}},
         {'type': 'addActor', 'actor': actor('thug', 'Thug', 'npc')},
         {'type': 'addActor', 'actor': actor('zzsecret', 'Zzhiddenname', 'npc', extra={'onFire': 2})},
         {'type': 'addActor', 'actor': actor('zzsecond', 'Zzothername', 'npc')},
         {'type': 'setMap', 'map': {'id': 'm', 'name': 'Split', 'width': 14, 'height': 6, 'cells': ''.join(rows), 'cellPx': 64, 'sightRange': 30,
                                    'tokens': {'solo': {'x': 2, 'y': 2}, 'thug': {'x': 3, 'y': 4}, 'zzsecret': {'x': 11, 'y': 2}, 'zzsecond': {'x': 12, 'y': 2}},
                                    'watches': {}, 'spotted': []}},
-        {'type': 'setCover', 'at': {'x': 10, 'y': 1}, 'material': 'concrete'},
+        {'type': 'setCover', 'at': {'x': 10, 'y': 1}, 'material': 'thickWood'},
         {'type': 'rollDice', 'label': 'ZzPrivateRoll', 'dice': {'count': 1, 'sides': 10, 'bonus': 0}, 'private': True},
         {'type': 'chat', 'text': 'ZzWhisperForBo', 'to': [pb]},
         {'type': 'adjustHp', 'actorId': 'zzsecret', 'delta': -3, 'reason': 'ZzReason'},
@@ -204,6 +210,7 @@ def test_redaction(browser, base):
     ]:
         ok = gm_act(gm, i)
         if not ok: print(f'    note: GM intent refused: {i["type"]} {gm.evaluate("() => window.__nsc.getState().toast?.text")}')
+    gm_act(gm, {'type': 'net', 'op': {'op': 'revealAccess', 'archId': 'zzarch', 'found': True}})
     gm_act(gm, {'type': 'startEncounter', 'participants': [{'actorId': x} for x in ['solo', 'thug', 'zzsecret', 'zzsecond']]})
     for _ in range(10):
         cur = current_actor(gm)
@@ -223,6 +230,8 @@ def test_redaction(browser, base):
             a.evaluate("() => window.__nsc.act({ type: 'chat', text: 'solo here' })")
             a.evaluate("() => window.__nsc.act({ type: 'net', op: { op: 'jackIn', actorId: 'solo', archId: 'zzarch' } })")
             time.sleep(0.3)
+            a.evaluate("() => window.__nsc.act({ type: 'net', op: { op: 'ability', actorId: 'solo', ability: 'backdoor' } })")
+            time.sleep(0.3)
             a.evaluate("() => window.__nsc.act({ type: 'endTurn' })")
             time.sleep(0.4)
             continue
@@ -234,16 +243,20 @@ def test_redaction(browser, base):
     # Fresh welcomes (history) are checked too.
     a.reload(); wait_for(a, "() => window.__nsc && window.__nsc.getState().status === 'online'")
     time.sleep(0.5)
-    secrets = ['zzsecret', 'zzsecond', 'Zzhiddenname', 'Zzothername', 'ZzSecretFile', 'ZzPrivateRoll', 'ZzReason']
+    secrets = ['zzsecret', 'zzsecond', 'Zzhiddenname', 'Zzothername', 'ZzSecretFile', 'ZzPrivateRoll', 'ZzReason', 'ZzGmNote']
     pa_probs, ka = scan_leaks(fa, 'Ana', secrets)
     pb_probs, kb = scan_leaks(fb, 'Bo', secrets)
     wh_a = any('ZzWhisperForBo' in f for f in fa)
     wh_b = any('ZzWhisperForBo' in f for f in fb)
     check(len(fa) > 5 and len(fb) > 5, f'captured player frames (Ana {len(fa)}, Bo {len(fb)})')
+    kinds = sorted({e.get('type') for raw in fa for e in _events(raw)})
+    print(f'    event types Ana saw: {", ".join(kinds)}')
+    check('initiativeRolled' in kinds, 'initiative went through the redaction path')
     check(not pa_probs, 'Ana received no hidden data' + ('' if not pa_probs else ':\n      ' + '\n      '.join(pa_probs[:8])))
     check(not pb_probs, 'Bo received no hidden data' + ('' if not pb_probs else ':\n      ' + '\n      '.join(pb_probs[:8])))
     check(not wh_a, 'Ana never saw the whisper meant for Bo')
     check(wh_b, 'Bo got his whisper')
+    check(any('Player-visible note' in f for f in fa), 'Ana sees her character’s player notes (gmNotes withheld)')
     seen_known.update(ka | kb)
     check(not errs, f'GM page without errors ({errs[:3]})')
     gctx.close(); actx.close(); bctx.close()
