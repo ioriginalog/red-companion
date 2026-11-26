@@ -138,6 +138,49 @@ export function Prompts({ c, onPickScatter, scatterPicking }: { c: TableCtx; onP
     }
   }
   // --- end Round 3 P ---
+  // --- Round 4 U4: R4 automation hooks ---
+  // Turn-start reminders for whoever is acting now (from the entry that started this Turn).
+  const currentId = enc.active ? enc.order[enc.turnIndex] ?? null : null;
+  const feed = c.s.feed;
+  let turnStart = -1;
+  for (let i = feed.length - 1; i >= 0; i--) {
+    const t = feed[i]!.intentType;
+    if (t === 'endTurn' || t === 'startEncounter' || t === 'delayTurn' || t === 'removeFromInitiative') { turnStart = i; break; }
+  }
+  const reminders = turnStart >= 0 && currentId && (isGm || mine(currentId))
+    ? feed.slice(turnStart).flatMap((f) => f.events).filter((e): e is Extract<typeof e, { type: 'turnReminders' }> => e.type === 'turnReminders' && e.combatantId === currentId)
+    : [];
+  const items = reminders.at(-1)?.items ?? [];
+  if (items.length) {
+    out.push(
+      <div className="card prompt" key="reminders">
+        <div className="ttl">Start of Turn: {name(currentId!)}</div>
+        <ul className="reminders">{items.map((r, i) => <li key={i}>{r.text}</li>)}</ul>
+      </div>,
+    );
+  }
+  // NET threats this Round (GM only): one-click ICE and Demon actions.
+  if (isGm) {
+    const threats = new Map<string, Extract<(typeof feed)[number]['events'][number], { type: 'netThreat' }>>();
+    for (const f of feed.slice(turnStart >= 0 ? turnStart : Math.max(0, feed.length - 20))) {
+      for (const e of f.events) if (e.type === 'netThreat') threats.set(e.combatantId, e);
+    }
+    for (const [runnerId, t] of threats) {
+      if (dismissed.includes(`net:${runnerId}:${turnStart}`)) continue;
+      out.push(
+        <div className="card prompt" key={`net-${runnerId}`}>
+          <div className="ttl">NET Threats: {name(runnerId)}</div>
+          <p>{[...t.ice.map((i) => i.name), ...(t.demon ? [`${t.demon.name} (Demon)`] : [])].join(', ')}</p>
+          <div className="row">
+            {t.ice.length > 0 && <button className="btn yellow" onClick={() => act({ type: 'net', op: { op: 'iceTurn', actorId: runnerId } })}>Black ICE Attacks</button>}
+            {t.demon && <button className="btn yellow" onClick={() => act({ type: 'net', op: { op: 'demonZap', actorId: runnerId, count: t.demon!.netActions } })}>Demon Zaps ×{t.demon.netActions}</button>}
+            <button className="btn" onClick={() => setDismissed([...dismissed, `net:${runnerId}:${turnStart}`])}>Not Now</button>
+          </div>
+        </div>,
+      );
+    }
+  }
+  // --- end Round 4 U4 ---
   if (pending?.kind === 'awaitingDodge' && mine(pending.defenderId)) {
     out.push(<DodgePrompt key="dodge" c={c} pending={pending} />);
   }

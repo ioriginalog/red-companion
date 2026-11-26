@@ -10,7 +10,7 @@ import {
   type AimTarget, type Cell, type Combatant, type Modifier, type Weapon, WEAPON_TYPES,
 } from '@cprc/rules-core';
 import {
-  extrasGate, extrasPenalties, SessionError, visionFor,
+  attackAvailability, extrasGate, extrasPenalties, SessionError, visionFor,
   type Intent, type ProjectedActor, type SessionState, type TacticalMap, type ViewState, type Watch,
 } from '@cprc/session';
 import { chanceToBeat, chanceToWinContest } from './odds.js';
@@ -107,9 +107,13 @@ export function previewAttack(view: ViewState, attackerId: string, targetId: str
   const defender = d.combatant ?? UNKNOWN;
   const aim = aimOf(mode);
   const melee = w === 'brawling' || profileOf(w).melee;
-  // Grapple and Facedown rules: the very functions the authority runs, so the preview can't drift.
-  const extra = extrasPreview(view, attackerId, targetId, w, melee);
-  if (typeof extra === 'string') return { ok: false, reason: extra, distanceM };
+  // Hands, arm injuries, grapples and Facedowns: the authority's own helper (#11),
+  // so the preview can't drift from what will actually be allowed.
+  const av = attackAvailability(view, attackerId, w, targetId);
+  if (!av.ok) return { ok: false, reason: av.reason ?? 'That attack isn’t possible right now.', distanceM };
+  const gate = extrasPreview(view, attackerId, targetId, w, melee);
+  if (typeof gate === 'string') return { ok: false, reason: gate, distanceM };
+  const extra = av.modifiers;
   if (melee) {
     if (gridDistance(from, to) > 1) return { ok: false, reason: 'Melee needs an adjacent square.', distanceM };
     if (mode === 'autofire') return { ok: false, reason: 'Melee can’t Autofire.', distanceM };

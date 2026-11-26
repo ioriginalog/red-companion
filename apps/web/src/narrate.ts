@@ -21,6 +21,8 @@ export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: 
   const k = narrateSystems(e, name); // Track K events
   if (k !== undefined) return k;
   if (e.type === 'extraResolved') return narrateExtras(e); // Round 3 X
+  const r4 = narrateRound4(e, name); // Round 4 R4 events
+  if (r4 !== undefined) return r4;
   switch (e.type) {
     case 'initiativeRolled':
       if (e.entries.length === 1) return { text: `${name(e.entries[0]!.combatantId)} joins the Turn order.`, tone: 'info' }; // Round 3 P
@@ -118,4 +120,33 @@ export function deathSaveMath(e: { natural?: number; penalty?: number; total?: n
   const nat = typeof e.natural === 'number' ? `${e.natural}${pen} = ` : '';
   const vs = typeof e.body === 'number' ? ` vs BODY ${e.body} (needs under)` : '';
   return `${nat}${e.total}${vs}${e.natural === 10 ? ', natural 10 always fails' : ''}.`;
+}
+
+/** Round 4 R4 automation: injury upkeep, Turn reminders, speedware, NET threats. No numbers when redacted. */
+export function narrateRound4(e: CombatEvent, name: (id: string) => string): Line | null | undefined {
+  switch (e.type) {
+    case 'injuryEffect': {
+      const inj = injuryName(e.injuryId);
+      if (e.effect === 'lostAction') return { text: `${name(e.targetId)} loses this Turn’s Action (${inj}).`, tone: 'bad' };
+      if (e.effect === 'noMove') return { text: `${name(e.targetId)} can’t take a Move Action this Turn (${inj}).`, tone: 'bad' };
+      return {
+        text: e.damage !== undefined && !(e as { redacted?: boolean }).redacted
+          ? `${name(e.targetId)}’s ${inj} reopens: ${e.damage} damage.`
+          : `${name(e.targetId)}’s ${inj} reopens.`,
+        tone: 'bad',
+      };
+    }
+    case 'turnReminders':
+      return { text: `${name(e.combatantId)}: ${e.items.map((i) => i.text).join(' ')}`, tone: 'info' };
+    case 'speedwareChanged':
+      if (e.state === 'activated') return { text: `${name(e.combatantId)} activates speedware${e.initiative ? ` (+${e.initiative} Initiative)` : ''}.`, tone: 'info' };
+      if (e.state === 'expired') return { text: `${name(e.combatantId)}’s speedware burns out.`, tone: 'info' };
+      return { text: `${name(e.combatantId)}’s speedware is recharged.`, tone: 'good' };
+    case 'netThreat': {
+      const parts = [...e.ice.map((i) => i.name), ...(e.demon ? [`${e.demon.name} (Demon)`] : [])];
+      return { text: `NET threats to ${name(e.combatantId)}: ${parts.join(', ') || 'none'}.`, tone: 'info' };
+    }
+    default:
+      return undefined;
+  }
 }

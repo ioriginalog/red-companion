@@ -36,6 +36,7 @@ export function SystemsSheet({ c, actorId }: { c: SystemsCtx; actorId: string })
       ) : null}
       <RoleSection c={c} a={a} cb={cb} can={can} />
       <HumanitySection cb={cb} />
+      <SpeedwareSection c={c} cb={cb} actorId={actorId} can={can} />
       <GearSection cb={cb} a={a} />
       <AmmoSection c={c} a={a} cb={cb} can={can} />
       <InjurySection c={c} a={a} cb={cb} />
@@ -85,6 +86,28 @@ function RoleSection({ c, a, cb, can }: { c: SystemsCtx; a: ProjectedActor; cb: 
         </div>
       )}
       {role.notes && <p className="dim" style={{ fontSize: 13, margin: '6px 0 0' }}>{role.notes}</p>}
+    </section>
+  );
+}
+
+/** Round 4 U4: activated (Sandevistan-type) speedware: Activate button and its state. */
+function SpeedwareSection({ c, cb, actorId, can }: { c: SystemsCtx; cb: Combatant; actorId: string; can: boolean }) {
+  const piece = (cb.cyberware ?? []).find((i) => i.effects.some((e) => e.kind === 'speedware'));
+  const eff = piece?.effects.find((e) => e.kind === 'speedware');
+  if (!piece || !eff || eff.kind !== 'speedware') return null;
+  const st = cb.speedware;
+  return (
+    <section className="card">
+      <div className="ttl">Speedware</div>
+      <p style={{ margin: '0 0 8px' }}>
+        <b>{piece.name}</b>: {eff.mode === 'passive'
+          ? `always on, +${eff.initiative} to Initiative.`
+          : st?.active ? `active, ${st.roundsLeft} ${st.roundsLeft === 1 ? 'Round' : 'Rounds'} left (+${eff.initiative} to Initiative rolls made while on).`
+            : st?.spent ? 'spent. It recharges with rest.' : `ready: +${eff.initiative} to Initiative rolls while active.`}
+      </p>
+      {eff.mode === 'activated' && can && !st?.active && !st?.spent && (
+        <button className="btn yellow" onClick={() => c.act({ type: 'activateSpeedware', actorId })}>Activate Speedware (Action)</button>
+      )}
     </section>
   );
 }

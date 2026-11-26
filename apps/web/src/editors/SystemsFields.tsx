@@ -89,10 +89,10 @@ const EFFECT_LABEL: Record<CyberwareEffect['kind'], string> = {
   targetingScope: 'Targeting Scope', neuralLink: 'Neural Link', subdermalGrip: 'Subdermal Grip', interfacePlugs: 'Interface Plugs',
   healingMultiplier: 'Faster Healing', ignoreSeriouslyWounded: 'Ignore Seriously Wounded',
   smartLink: 'Targeting Scope (Old)',
-  speedware: 'Speedware', // Round 4 R4: display-only here until the editor offers it
+  speedware: 'Speedware',
 };
 /** Effects offered when adding (the legacy alias is display-only). */
-const PICKABLE = (Object.keys(EFFECT_LABEL) as CyberwareEffect['kind'][]).filter((k) => k !== 'smartLink' && k !== 'speedware' /* Round 4 R4 */);
+const PICKABLE = (Object.keys(EFFECT_LABEL) as CyberwareEffect['kind'][]).filter((k) => k !== 'smartLink');
 const INSTALL: Record<string, string> = { mall: 'Mall', clinic: 'Clinic', hospital: 'Hospital', none: 'No Surgery' };
 
 function effectText(e: CyberwareEffect): string {
@@ -102,6 +102,7 @@ function effectText(e: CyberwareEffect): string {
     case 'armor': return `${e.location === 'head' ? 'Head' : 'Body'} SP ${e.sp}`;
     case 'initiative': return `Initiative ${signed(e.value)}`;
     case 'healingMultiplier': return `Heal × ${e.value}`;
+    case 'speedware': return `Speedware (${e.mode === 'passive' ? 'Always On' : 'Activated'}), Initiative ${signed(e.initiative)}`;
     default: return EFFECT_LABEL[e.kind];
   }
 }
@@ -238,6 +239,7 @@ function EffectAdder({ onAdd }: { onAdd: (e: CyberwareEffect) => void }) {
   const [skill, setSkill] = useState('Perception');
   const [num, setNum] = useState(1);
   const [loc, setLoc] = useState<'body' | 'head'>('body');
+  const [mode, setMode] = useState<'passive' | 'activated'>('passive');
   const build = (): CyberwareEffect => {
     switch (kind) {
       case 'stat': return { kind, stat, value: num };
@@ -245,6 +247,7 @@ function EffectAdder({ onAdd }: { onAdd: (e: CyberwareEffect) => void }) {
       case 'armor': return { kind, location: loc, sp: Math.max(1, num) };
       case 'initiative': return { kind, value: num };
       case 'healingMultiplier': return { kind, value: Math.max(1, Math.min(4, num)) };
+      case 'speedware': return { kind, mode, initiative: Math.max(1, Math.min(5, num)) };
       default: return { kind } as CyberwareEffect;
     }
   };
@@ -256,7 +259,13 @@ function EffectAdder({ onAdd }: { onAdd: (e: CyberwareEffect) => void }) {
       {kind === 'stat' && <select aria-label="STAT" value={stat} onChange={(e) => setStat(e.target.value as StatKey)}>{STATS.map((s) => <option key={s}>{s}</option>)}</select>}
       {kind === 'skill' && <input aria-label="Skill" value={skill} maxLength={40} onChange={(e) => setSkill(e.target.value)} style={{ width: 110 }} />}
       {kind === 'armor' && <select aria-label="Location" value={loc} onChange={(e) => setLoc(e.target.value as 'body' | 'head')}><option value="body">Body</option><option value="head">Head</option></select>}
-      {['stat', 'skill', 'armor', 'initiative', 'healingMultiplier'].includes(kind) && (
+      {kind === 'speedware' && (
+        <select aria-label="Speedware Mode" value={mode} onChange={(e) => setMode(e.target.value as 'passive' | 'activated')}>
+          <option value="passive">Always On (Kerenzikov Type)</option>
+          <option value="activated">Activated (Sandevistan Type)</option>
+        </select>
+      )}
+      {['stat', 'skill', 'armor', 'initiative', 'healingMultiplier', 'speedware'].includes(kind) && (
         <input aria-label="Value" type="number" value={num} onChange={(e) => setNum(Math.round(Number(e.target.value) || 0))} style={{ width: 56 }} />
       )}
       <button className="btn sm" onClick={() => onAdd(build())}>Add Effect</button>
