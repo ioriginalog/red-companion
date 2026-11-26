@@ -178,7 +178,7 @@ function ArchForm({ draft, setDraft, view, dirty, saved, found, onSave, onDelete
               {f.kind === 'blackIce' && <IceList ice={f.ice ?? []} onChange={(ice) => setFloor({ ...f, ice })} />}
               {f.kind === 'demon' && f.demon && (
                 <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                  <input aria-label="Demon name" value={f.demon.name} maxLength={40} onChange={(e) => setFloor({ ...f, demon: { ...f.demon!, name: e.target.value } })} />
+                  <input aria-label="Demon Name" value={f.demon.name} maxLength={40} onChange={(e) => setFloor({ ...f, demon: { ...f.demon!, name: e.target.value } })} />
                   {(['rez', 'interface', 'netActions'] as const).map((k) => (
                     <label key={k} className="net-mini">{k === 'rez' ? 'REZ' : k === 'interface' ? 'Interface' : 'NET Actions'}
                       <input type="number" value={f.demon![k]} onChange={(e) => setFloor({ ...f, demon: { ...f.demon!, [k]: Number(e.target.value) } })} />
@@ -225,8 +225,8 @@ function IceList({ ice, onChange }: { ice: IceStats[]; onChange: (ice: IceStats[
       {ice.map((x, i) => (
         <div className="net-ice" key={i}>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-            <input aria-label="ICE name" value={x.name} maxLength={40} style={{ width: 120 }} onChange={(e) => set(i, { name: e.target.value })} />
-            <select aria-label="ICE kind" value={x.kind} onChange={(e) => set(i, { kind: e.target.value as IceStats['kind'] })}>
+            <input aria-label="ICE Name" value={x.name} maxLength={40} style={{ width: 120 }} onChange={(e) => set(i, { name: e.target.value })} />
+            <select aria-label="ICE Kind" value={x.kind} onChange={(e) => set(i, { kind: e.target.value as IceStats['kind'] })}>
               <option value="antiPersonnel">Anti-Personnel</option>
               <option value="antiProgram">Anti-Program</option>
             </select>
@@ -282,12 +282,12 @@ function RigRow({ actorId, name, rig, send }: { actorId: string; name: string; r
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
         <span className="h" style={{ minWidth: 90 }}>{name}</span>
         <label className="net-mini">Interface<input type="number" min={1} max={10} value={draft.interface} onChange={(e) => setDraft({ ...draft, interface: Number(e.target.value) })} /></label>
-        <select aria-label="Deck quality" value={draft.slots} onChange={(e) => setDraft({ ...draft, slots: Number(e.target.value) })}>
+        <select aria-label="Deck Quality" value={draft.slots} onChange={(e) => setDraft({ ...draft, slots: Number(e.target.value) })}>
           <option value={DECK_SLOTS.poor}>Poor (5 Slots)</option>
           <option value={DECK_SLOTS.standard}>Standard (7 Slots)</option>
           <option value={DECK_SLOTS.excellent}>Excellent (9 Slots)</option>
         </select>
-        <input aria-label="Deck name" value={draft.deckName} maxLength={40} onChange={(e) => setDraft({ ...draft, deckName: e.target.value })} />
+        <input aria-label="Deck Name" value={draft.deckName} maxLength={40} onChange={(e) => setDraft({ ...draft, deckName: e.target.value })} />
       </div>
       <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
         {catalog.map((p) => (

@@ -10,6 +10,7 @@ import {
 import { uniqueId } from './actorModel.js';
 import { cyberwareGroups, importPackText, removePack, usePacks } from '../data/catalog.js';
 import { GEAR_PRESETS } from '../data/gear.js';
+import { signed } from '../table/format.js';
 
 const STATS: StatKey[] = ['INT', 'REF', 'DEX', 'TECH', 'COOL', 'WILL', 'LUCK', 'MOVE', 'BODY', 'EMP'];
 
@@ -30,7 +31,7 @@ export function RoleField({ value, onChange }: { value: RoleState | null; onChan
           </select>
         </label>
         <label className="fld"><span>Rank</span>
-          <input type="number" min={1} max={10} disabled={!role} value={role?.rank ?? ''} aria-label="Role rank"
+          <input type="number" min={1} max={10} disabled={!role} value={role?.rank ?? ''} aria-label="Role Rank"
             onChange={(e) => role && onChange({ ...role, rank: Math.max(1, Math.min(10, Number(e.target.value) || 1)) })} />
         </label>
       </div>
@@ -95,10 +96,10 @@ const INSTALL: Record<string, string> = { mall: 'Mall', clinic: 'Clinic', hospit
 
 function effectText(e: CyberwareEffect): string {
   switch (e.kind) {
-    case 'stat': return `${e.stat} ${e.value >= 0 ? '+' : ''}${e.value}`;
-    case 'skill': return `${e.skill} ${e.value >= 0 ? '+' : ''}${e.value}`;
+    case 'stat': return `${e.stat} ${signed(e.value)}`;
+    case 'skill': return `${e.skill} ${signed(e.value)}`;
     case 'armor': return `${e.location === 'head' ? 'Head' : 'Body'} SP ${e.sp}`;
-    case 'initiative': return `Initiative ${e.value >= 0 ? '+' : ''}${e.value}`;
+    case 'initiative': return `Initiative ${signed(e.value)}`;
     case 'healingMultiplier': return `Heal × ${e.value}`;
     default: return EFFECT_LABEL[e.kind];
   }
@@ -155,7 +156,7 @@ export function CyberwareField({ value, emp, onChange }: { value: CyberwareItem[
         </div>
       ))}
       <div className="row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
-        <select aria-label="Cyberware to add" value={pick} onChange={(e) => setPick(e.target.value)}>
+        <select aria-label="Cyberware to Add" value={pick} onChange={(e) => setPick(e.target.value)}>
           <option value="custom">Custom Item</option>
           {groups.map((g, gi) => (
             <optgroup key={g.label} label={g.label}>
@@ -220,7 +221,7 @@ export function GearField({ value, onChange }: { value: GearItem[]; onChange: (v
         </div>
       ))}
       <div className="row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
-        <select aria-label="Gear to add" value={pick} onChange={(e) => setPick(e.target.value)}>
+        <select aria-label="Gear to Add" value={pick} onChange={(e) => setPick(e.target.value)}>
           {GEAR_PRESETS.map((g) => <option key={g.name} value={g.name} title={g.summary}>{g.name}</option>)}
           <option value="">Custom Item</option>
         </select>
@@ -248,7 +249,7 @@ function EffectAdder({ onAdd }: { onAdd: (e: CyberwareEffect) => void }) {
   };
   return (
     <span className="eff-add">
-      <select aria-label="Effect type" value={kind} onChange={(e) => setKind(e.target.value as CyberwareEffect['kind'])}>
+      <select aria-label="Effect Type" value={kind} onChange={(e) => setKind(e.target.value as CyberwareEffect['kind'])}>
         {PICKABLE.map((k) => <option key={k} value={k}>{EFFECT_LABEL[k]}</option>)}
       </select>
       {kind === 'stat' && <select aria-label="STAT" value={stat} onChange={(e) => setStat(e.target.value as StatKey)}>{STATS.map((s) => <option key={s}>{s}</option>)}</select>}

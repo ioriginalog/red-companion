@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  currentDeathSavePenalty, effectiveSP, effectiveStat, getInjury, profileOf, unarmedDamageDice, woundState,
+  currentDeathSavePenalty, effectiveSP, effectiveStat, formLevel, knownForms, SPECIAL_MOVES, getInjury, profileOf, unarmedDamageDice, woundState,
   type Combatant,
 } from '@cprc/rules-core';
 import type { StatKeyName } from '@cprc/session';
@@ -32,6 +32,7 @@ export function SheetPanel({ c, preferId }: { c: TableCtx; preferId: string | nu
   const roll = (label: string, stat?: StatKeyName, skill?: string) => canRoll && c.act({
     type: 'rollCheck', actorId: a.id, label, ...(stat ? { stat } : {}), ...(skill ? { skill } : {}),
   });
+  const forms = knownForms(cb);
   const skills = Object.entries(cb.skills).filter(([, v]) => v > 0).sort(([x], [y]) => x.localeCompare(y));
   const dsp = currentDeathSavePenalty(cb);
 
@@ -90,6 +91,19 @@ export function SheetPanel({ c, preferId }: { c: TableCtx; preferId: string | nu
                 <button key={sk} className="skill" disabled={!canRoll} onClick={() => roll(st ? `${st} + ${sk}` : sk, st, sk)} title={`Roll ${st ? `${st} + ` : ''}${sk} + 1d10`}>
                   <span>{sk}</span><span className="dim small">{st ?? '—'}</span><span className="mono lvl">{lvl}</span><span className="mono base">{total}</span>
                 </button>
+              );
+            })}
+          </div>
+        )}
+        {forms.length > 0 && (
+          <div className="ma-forms" style={{ marginTop: 8 }}>
+            {forms.map((f) => {
+              const moves = SPECIAL_MOVES.filter((mv) => mv.form === f);
+              return (
+                <div key={f} className="small">
+                  <b>Martial Arts: {f} {formLevel(cb, f)}</b>
+                  {moves.length > 0 && <span className="dim"> · Special Moves: {moves.map((mv) => mv.name).join(', ')}</span>}
+                </div>
               );
             })}
           </div>

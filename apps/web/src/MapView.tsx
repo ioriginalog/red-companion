@@ -57,6 +57,8 @@ interface Props {
   neutralTemplate?: boolean;
   /** Round 3 P: a short label for the hovered square (e.g. cover HP for the GM). */
   hoverInfo?: (c: Cell) => string | null;
+  /** Aimed square awaiting confirmation: the template stays here instead of following the pointer. */
+  areaLock?: Cell | null;
 }
 
 /** Smallest on-screen square in compact (phone) layout, in CSS px. */
@@ -383,7 +385,9 @@ export function MapView(p: Props) {
     : null;
   const previewCells = useMemo(() => (watchPreview && actingAt ? watchCells(map, actingAt, watchPreview) : null), [watchPreview?.facing, actingAt, map]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const aimAt = p.areaLock ?? hover;
   const template = useMemo(() => {
+    const hover = aimAt;
     if (mode !== 'area' || !hover || !p.areaKind) return null;
     if (p.areaKind === 'blast') {
       const b = blastCells(map, hover);
@@ -394,7 +398,7 @@ export function MapView(p: Props) {
     if (!actingAt) return null;
     const hit = shellCells(map, actingAt, hover);
     return { kind: 'shell' as const, all: [] as Cell[], hit, ids: tokensIn(map.tokens, hit, actingId ?? undefined), los: 'clear' as const };
-  }, [mode, hover, p.areaKind, actingAt, map, actingId, p.neutralTemplate]);
+  }, [mode, aimAt, p.areaKind, actingAt, map, actingId, p.neutralTemplate]);
   const tplColor = template?.los === 'blocked' ? '#ff2bd6' : template?.los === 'neutral' ? '#dce6ff' : '#ffd400';
 
   // Watch cones are LOS-heavy; recompute only when the map or watches change.
@@ -551,11 +555,11 @@ export function MapView(p: Props) {
         {/* Area template */}
         {template && (
           <g pointerEvents="none">
-            {template.kind === 'blast' && hover && (
+            {template.kind === 'blast' && aimAt && (
               <>
                 {template.all.map((c) => <rect key={cellKey(c)} x={c.x * S} y={c.y * S} width={S} height={S} fill={template.hit.has(cellKey(c)) ? 'rgba(255,120,0,0.32)' : 'url(#hatch)'} />)}
-                <rect x={(hover.x - 2) * S} y={(hover.y - 2) * S} width={S * 5} height={S * 5} fill="none" stroke={tplColor} strokeWidth={3} strokeDasharray="12 6" className="march" />
-                <circle cx={center(hover).x} cy={center(hover).y} r={S * 0.2} fill={tplColor} />
+                <rect x={(aimAt.x - 2) * S} y={(aimAt.y - 2) * S} width={S * 5} height={S * 5} fill="none" stroke={tplColor} strokeWidth={p.areaLock ? 4 : 3} strokeDasharray={p.areaLock ? undefined : '12 6'} className={p.areaLock ? undefined : 'march'} />
+                <circle cx={center(aimAt).x} cy={center(aimAt).y} r={S * 0.2} fill={tplColor} />
               </>
             )}
             {template.kind === 'shell' && cellRects(template.hit, 'rgba(255,120,0,0.32)', { stroke: 'rgba(255,212,0,0.6)', strokeWidth: 1 })}

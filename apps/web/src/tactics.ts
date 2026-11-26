@@ -7,9 +7,12 @@ import {
   AUTOFIRE_DV, RANGE_DV, rangeBandIndex,
   attacksPerAction, cellKey, effectiveStat, gridDistance, hasLineOfSight, inCone, metersBetween, previewRangedAttack,
   profileOf, reachableCells, RulesError, skillLevel, standingModifiers, visibleCells, AIMED_SHOT_PENALTY,
-  type AimTarget, type Cell, type Combatant, type Modifier, type Weapon,
+  type AimTarget, type Cell, type Combatant, type Modifier, type Weapon, WEAPON_TYPES,
 } from '@cprc/rules-core';
-import { visionFor, type ProjectedActor, type TacticalMap, type ViewState, type Watch } from '@cprc/session';
+import {
+  extrasGate, extrasPenalties, SessionError, visionFor,
+  type Intent, type ProjectedActor, type SessionState, type TacticalMap, type ViewState, type Watch,
+} from '@cprc/session';
 import { chanceToBeat, chanceToWinContest } from './odds.js';
 
 export const isFriendly = (a?: ProjectedActor) => !!a && (a.public.allegiance === 'party' || a.public.allegiance === 'ally');
@@ -104,12 +107,15 @@ export function previewAttack(view: ViewState, attackerId: string, targetId: str
   const defender = d.combatant ?? UNKNOWN;
   const aim = aimOf(mode);
   const melee = w === 'brawling' || profileOf(w).melee;
+  // Grapple and Facedown rules: the very functions the authority runs, so the preview can't drift.
+  const extra = extrasPreview(view, attackerId, targetId, w, melee);
+  if (typeof extra === 'string') return { ok: false, reason: extra, distanceM };
   if (melee) {
     if (gridDistance(from, to) > 1) return { ok: false, reason: 'Melee needs an adjacent square.', distanceM };
     if (mode === 'autofire') return { ok: false, reason: 'Melee can’t Autofire.', distanceM };
     const skill = w === 'brawling' ? 'Brawling' : 'Melee Weapon';
     const base = effectiveStat(a.combatant, 'DEX') + skillLevel(a.combatant, skill);
-    const modifiers = [...standingModifiers(a.combatant, 'meleeAttack'), ...(aim ? [{ label: 'Aimed Shot', value: AIMED_SHOT_PENALTY }] : [])];
+    const modifiers = [...standingModifiers(a.combatant, 'meleeAttack'), ...(aim ? [{ label: 'Aimed Shot', value: AIMED_SHOT_PENALTY }] : []), ...extra];
     const total = base + modifiers.reduce((s, m) => s + m.value, 0);
     const evade = d.combatant
       ? effectiveStat(d.combatant, 'DEX') + skillLevel(d.combatant, 'Evasion') + standingModifiers(d.combatant, 'other').reduce((s, m) => s + m.value, 0)
@@ -121,7 +127,8 @@ export function previewAttack(view: ViewState, attackerId: string, targetId: str
     };
   }
   try {
-    const pv = previewRangedAttack({ attacker: a.combatant, defender, weapon: w, distance: distanceM, mode: mode === 'autofire' ? 'autofire' : 'single', aimTarget: aim });
+    const pv0 = previewRangedAttack({ attacker: a.combatant, defender, weapon: w, distance: distanceM, mode: mode === 'autofire' ? 'autofire' : 'single', aimTarget: aim });
+    const pv = { ...pv0, modifiers: [...pv0.modifiers, ...extra] };
     const total = pv.base + pv.modifiers.reduce((s, m) => s + m.value, 0);
     return {
       ok: true, melee: false, distanceM, base: pv.base, modifiers: pv.modifiers, baseLabel: 'REF',
@@ -134,6 +141,26 @@ export function previewAttack(view: ViewState, attackerId: string, targetId: str
     if (e instanceof RulesError) return { ok: false, reason: e.message, distanceM };
     throw e;
   }
+}
+
+/**
+ * Grapple/Facedown effects on an attack, using the session's own extrasGate and
+ * extrasPenalties on the viewer's projection: a reason string if the attack is
+ * forbidden, else the extra modifiers the authority will add.
+ */
+export function extrasPreview(view: ViewState, attackerId: string, targetId: string, w: Weapon | 'brawling', melee: boolean): Modifier[] | string {
+  if (!view.extras) return [];
+  const asState = { extras: view.extras, actors: view.actors } as unknown as SessionState;
+  const intent: Intent = melee
+    ? { type: 'meleeAttack', attackerId, defenderId: targetId, with: w === 'brawling' ? { kind: 'brawling' } : { kind: 'weapon', weaponId: w.id } }
+    : { type: 'rangedAttack', attackerId, defenderId: targetId, weaponId: (w as Weapon).id, distance: 1 };
+  try {
+    extrasGate(asState, intent);
+  } catch (e) {
+    if (e instanceof SessionError) return e.message;
+    throw e;
+  }
+  return extrasPenalties(asState, attackerId, targetId);
 }
 
 /** Cone polygon (SVG points) from apex toward bearing, in pixel space. */
@@ -167,22 +194,27 @@ export function nearestTarget(view: ViewState, actorId: string): string | null {
 
 export interface DodgeContext {
   distanceM: number;
-  /** Exact range DV when the attacker's weapon is visible; otherwise the span across weapon types at this range. */
-  dv: { exact: number } | { min: number; max: number; typical: number } | null;
+  /** Exact range DV when the attacker's weapon is visible; otherwise the span across weapon types at this range (no guess). */
+  dv: { exact: number } | { min: number; max: number } | null;
+  /** The attacker's weapon type is known to this viewer. */
+  weaponKnown: boolean;
   /** Defender's DEX + Evasion (+ standing modifiers), from their own sheet. */
   dodgeBase: number | null;
-  /** Chance the dodge total is at least the DV (or the lowest/highest DV of the span). */
-  dodgeBeatsDv: { exact: number } | { atTypical: number } | null;
+  /** Chance the dodge total is at least the DV, or (weapon unknown) at least the span's low and high ends. */
+  dodgeBeatsDv: { exact: number } | { atMin: number; atMax: number } | null;
 }
 
 /**
  * For the defender's prompt: what they face if they take the DV, and how
  * their dodge compares. Uses only what this viewer can see.
  */
-export function dodgeContext(view: ViewState, attack: { attackerId: string; defenderId: string; weaponId: string; distance: number; mode?: 'single' | 'autofire' }): DodgeContext {
+export function dodgeContext(view: ViewState, attack: { attackerId: string; defenderId: string; weaponId: string; distance: number; mode?: 'single' | 'autofire'; weaponType?: Weapon['type'] }): DodgeContext {
   const band = rangeBandIndex(attack.distance);
   const auto = attack.mode === 'autofire';
-  const weapon = view.actors[attack.attackerId]?.weapons?.find((w) => w.id === attack.weaponId);
+  // The defender can see the gun pointed at them: use the attacker's sheet when visible,
+  // else a weapon type the projection shares (if it does).
+  const own = view.actors[attack.attackerId]?.weapons?.find((w) => w.id === attack.weaponId);
+  const weapon: Weapon | undefined = own ?? (attack.weaponType && attack.weaponType in WEAPON_TYPES ? { id: attack.weaponId, name: '', type: attack.weaponType } : undefined);
   let dv: DodgeContext['dv'] = null;
   if (band >= 0) {
     if (weapon) {
@@ -193,7 +225,7 @@ export function dodgeContext(view: ViewState, attack: { attackerId: string; defe
       const rows = auto ? Object.values(AUTOFIRE_DV) : Object.values(RANGE_DV);
       const vals = rows.map((r) => r[band]).filter((v): v is number => v != null);
       vals.sort((a, b) => a - b);
-      if (vals.length) dv = { min: vals[0]!, max: vals[vals.length - 1]!, typical: vals[Math.floor((vals.length - 1) / 2)]! };
+      if (vals.length) dv = { min: vals[0]!, max: vals[vals.length - 1]! };
     }
   }
   const d = view.actors[attack.defenderId]?.combatant;
@@ -202,6 +234,6 @@ export function dodgeContext(view: ViewState, attack: { attackerId: string; defe
     : null;
   // "At least the DV": the dodge total replaces the DV, so matching it is as good as the DV.
   const atLeast = (v: number) => (dodgeBase === null ? 0 : chanceToBeat(dodgeBase, v - 1));
-  const dodgeBeatsDv = dodgeBase === null || !dv ? null : 'exact' in dv ? { exact: atLeast(dv.exact) } : { atTypical: atLeast(dv.typical) };
-  return { distanceM: attack.distance, dv, dodgeBase, dodgeBeatsDv };
+  const dodgeBeatsDv = dodgeBase === null || !dv ? null : 'exact' in dv ? { exact: atLeast(dv.exact) } : { atMin: atLeast(dv.min), atMax: atLeast(dv.max) };
+  return { distanceM: attack.distance, dv, dodgeBase, dodgeBeatsDv, weaponKnown: !!weapon };
 }

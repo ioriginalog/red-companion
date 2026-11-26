@@ -77,7 +77,7 @@ export function RoleAbilityPanel({ c, actorId }: { c: ExtrasCtx; actorId: string
           <div className="ex-sub">Operator {role.rank}</div>
           <ul className="ex-list">{operatorPerks(role.rank).map((p) => <li key={p}>{p}</li>)}</ul>
           <div className="row ex-form" style={{ gap: 6, marginTop: 6 }}>
-            {c.isGm && <input aria-label="Seller total" type="number" placeholder="Seller’s total" value={seller} onChange={(e) => setSeller(e.target.value)} />}
+            {c.isGm && <input aria-label="Seller Total" type="number" placeholder="Seller’s total" value={seller} onChange={(e) => setSeller(e.target.value)} />}
             <button className="btn" disabled={!can} onClick={() => send(c, { kind: 'haggle', actorId, ...(c.isGm && seller !== '' ? { sellerTotal: Number(seller) } : {}) })}>Haggle</button>
           </div>
         </>
@@ -113,8 +113,8 @@ export function RoleAbilityPanel({ c, actorId }: { c: ExtrasCtx; actorId: string
           </ul>
           {c.isGm && (role.team ?? []).length < maxTeam(role.rank) && (
             <div className="row ex-form" style={{ gap: 6, marginTop: 6 }}>
-              <input aria-label="New member name" placeholder="Name" value={recruitName} onChange={(e) => setRecruitName(e.target.value)} />
-              <select aria-label="Member kind" value={recruitKind} onChange={(e) => setRecruitKind(e.target.value as TeamMemberKind)}>
+              <input aria-label="New Member Name" placeholder="Name" value={recruitName} onChange={(e) => setRecruitName(e.target.value)} />
+              <select aria-label="Member Kind" value={recruitKind} onChange={(e) => setRecruitKind(e.target.value as TeamMemberKind)}>
                 {TEAM_KINDS.map((k) => <option key={k} value={k}>{TEAM_KIND_LABEL[k]}</option>)}
               </select>
               <button className="btn sm" disabled={!recruitName.trim()} onClick={() => { send(c, { kind: 'recruit', actorId, name: recruitName, memberKind: recruitKind }); setRecruitName(''); }}>Recruit</button>
@@ -134,7 +134,7 @@ export function RoleAbilityPanel({ c, actorId }: { c: ExtrasCtx; actorId: string
           </ul>
           {c.isGm && (
             <div className="row ex-form" style={{ gap: 6, marginTop: 6 }}>
-              <input aria-label="Add a Family vehicle" placeholder="Add a vehicle" value={vehicle} onChange={(e) => setVehicle(e.target.value)} />
+              <input aria-label="Add a Family Vehicle" placeholder="Add a vehicle" value={vehicle} onChange={(e) => setVehicle(e.target.value)} />
               <button className="btn sm" disabled={!vehicle.trim()} onClick={() => {
                 send(c, { kind: 'setRoleExtras', actorId, moto: { vehicles: [...(role.moto?.vehicles ?? []), vehicle.trim()], upgrades: role.moto?.upgrades ?? [] } });
                 setVehicle('');
@@ -156,11 +156,11 @@ export function RoleAbilityPanel({ c, actorId }: { c: ExtrasCtx; actorId: string
               <select aria-label="Specialty" value={spec} onChange={(e) => setSpec(e.target.value as typeof spec)}>
                 <option value="upgrade">Upgrade</option><option value="fabrication">Fabrication</option><option value="invention">Invention</option>
               </select>
-              <select aria-label="Price category" value={price} onChange={(e) => setPrice(e.target.value as PriceCategory)}>
+              <select aria-label="Price Category" value={price} onChange={(e) => setPrice(e.target.value as PriceCategory)}>
                 {PRICE_CATEGORIES.map((p) => <option key={p} value={p}>{PRICE_LABEL[p]} · DV {MAKER_DV[p]}</option>)}
               </select>
             </div>
-            <select aria-label="Tech skill" value={skill} onChange={(e) => setSkill(e.target.value)}>
+            <select aria-label="Tech Skill" value={skill} onChange={(e) => setSkill(e.target.value)}>
               {TECH_SKILLS.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
             <div className="dim" style={{ fontSize: 12 }}>Takes {MAKER_TIME[spec === 'invention' && PRICE_CATEGORIES.indexOf(price) < 3 ? 'expensive' : price]}.</div>

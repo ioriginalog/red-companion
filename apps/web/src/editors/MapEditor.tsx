@@ -210,7 +210,7 @@ export function MapEditor({ s }: { s: ClientState }) {
                 <h1 className="ed-h">{current.name}</h1>
                 <span className="note">{source === 'active' ? 'Editing the live map' : source === 'library' ? 'Editing a library map' : 'Unsaved new map'}{dirty ? ' · Unsaved changes' : ''}</span>
               </div>
-              <div className="toolbar" role="toolbar" aria-label="Terrain tools">
+              <div className="toolbar" role="toolbar" aria-label="Terrain Tools">
                 {(Object.keys(TOOL_LABEL) as Tool[]).map((t) => (
                   <button key={t} className={`mode${tool === t ? ' sel' : ''}`} aria-pressed={tool === t} onClick={() => setTool(t)} title={`${TOOL_LABEL[t]} (${t === 'rect' ? 'R' : t[0]!.toUpperCase()})`}>{TOOL_LABEL[t]}</button>
                 ))}
@@ -223,14 +223,14 @@ export function MapEditor({ s }: { s: ClientState }) {
                 <span className="sep" />
                 {tool === 'brush' && (
                   <label className="ed-ctl lbl">Size
-                    <select value={size} onChange={(e) => setSize(Number(e.target.value))} aria-label="Brush size">{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n} × {n}</option>)}</select>
+                    <select value={size} onChange={(e) => setSize(Number(e.target.value))} aria-label="Brush Size">{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n} × {n}</option>)}</select>
                   </label>
                 )}
                 {tool === 'rect' && <label className="ed-ctl lbl"><input type="checkbox" checked={outline} onChange={(e) => setOutline(e.target.checked)} />Outline Only</label>}
                 {terrain === 'c' && (
                   <>
                     <label className="ed-ctl lbl">New Cover
-                      <select value={coverMat} onChange={(e) => setCoverMat(e.target.value as CoverMaterialId)} aria-label="Material for new cover squares">
+                      <select value={coverMat} onChange={(e) => setCoverMat(e.target.value as CoverMaterialId)} aria-label="Material for New Cover Squares">
                         {COVER_MATERIALS.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.hp} HP)</option>)}
                       </select>
                     </label>
@@ -267,7 +267,7 @@ export function MapEditor({ s }: { s: ClientState }) {
           )}
       </main>
 
-      <aside className="ed-col ed-side" aria-label="Map settings">
+      <aside className="ed-col ed-side" aria-label="Map Settings">
         {msg && <div className={msg.tone === 'ok' ? 'ok' : 'warn'} role="status">{msg.text}</div>}
         {current && !pending && !blank && (
           <>

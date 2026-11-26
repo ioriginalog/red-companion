@@ -86,7 +86,7 @@ export function NetPanel({ view, actorId, isGm, canAct, act, feed }: NetPanelPro
             <button className="btn" disabled={!canAct} onClick={() => send({ op: 'scan', actorId: actor.id })} title="Meat Action: find access points nearby.">Scanner</button>
             {nv!.quickhacks2070s && (
               <>
-                <select aria-label="Quickhack target" value={targetId} onChange={(e) => setTargetId(e.target.value)}>
+                <select aria-label="Quickhack Target" value={targetId} onChange={(e) => setTargetId(e.target.value)}>
                   <option value="">Quickhack Target</option>
                   {Object.keys(view.map?.tokens ?? {}).filter((id) => id !== actor.id).map((id) => <option key={id} value={id}>{view.actors[id]?.public.name ?? id}</option>)}
                 </select>
@@ -181,7 +181,7 @@ export function NetPanel({ view, actorId, isGm, canAct, act, feed }: NetPanelPro
       </div>
 
       {log.length > 0 && (
-        <div className="net-log" aria-live="polite" aria-label="NET log, newest first">
+        <div className="net-log" aria-live="polite" aria-label="NET Log, Newest First">
           {log.map(({ e, key }) => <div key={key}>{e.type === 'netAction' ? e.text : ''}</div>)}
         </div>
       )}

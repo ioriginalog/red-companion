@@ -162,7 +162,13 @@ describe('dodge prompt context', async () => {
     const ctx = dodgeContext(p1, { attackerId: 'lt', defenderId: 'vex', weaponId: 'ar', distance: 10 });
     expect(ctx.dv && 'min' in ctx.dv).toBe(true);
     expect(ctx.dodgeBase).toBe(7 + 6); // DEX 7 + Evasion 6
-    expect(ctx.dodgeBeatsDv && 'atTypical' in ctx.dodgeBeatsDv).toBe(true);
+    expect(ctx.dodgeBeatsDv && 'atMin' in ctx.dodgeBeatsDv).toBe(true);
+    expect(ctx.weaponKnown).toBe(false);
+  });
+  it('uses the exact DV when the projection shares the weapon type (#15)', () => {
+    const ctx = dodgeContext(p1, { attackerId: 'lt', defenderId: 'vex', weaponId: 'ar', distance: 10, weaponType: 'assaultRifle' });
+    expect(ctx.dv).toEqual({ exact: 16 });
+    expect(ctx.weaponKnown).toBe(true);
   });
   it('shows the exact DV when the attacker’s weapon is visible', () => {
     const gm = projectState(s, { role: 'gm' });

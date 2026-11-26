@@ -22,6 +22,16 @@ export function GmShell({ s, table }: { s: ClientState; table: ReactNode }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   useEffect(() => { try { sessionStorage.setItem('nsc.tab', tab); } catch { /* private mode */ } }, [tab]);
 
+  // Other screens can ask for a tab (e.g. "Place by Clicking" needs the Table).
+  useEffect(() => {
+    const onShow = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (TABS.some((t) => t.id === id)) setTab(id as TabId);
+    };
+    window.addEventListener('nsc:show-tab', onShow);
+    return () => window.removeEventListener('nsc:show-tab', onShow);
+  }, []);
+
   // Alt+1–4 switch tabs from anywhere.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -43,7 +53,7 @@ export function GmShell({ s, table }: { s: ClientState; table: ReactNode }) {
 
   return (
     <div className="shell">
-      <div className="shell-tabs" role="tablist" aria-label="GM workspace">
+      <div className="shell-tabs" role="tablist" aria-label="GM Workspace">
         <span className="shell-brand" aria-hidden="true">///</span>
         {TABS.map((t, i) => (
           <button

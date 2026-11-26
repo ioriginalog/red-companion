@@ -15,7 +15,10 @@ export function TurnBanner({ turnKey, title, sub }: { turnKey: string | null; ti
       last.current = turnKey;
       return () => window.clearTimeout(t);
     }
+    // Turn moved on (or the encounter ended): never leave an old banner up.
+    // (The previous run's cleanup already cancelled its hide timer.)
     last.current = turnKey;
+    setShown(null);
     return undefined;
   }, [turnKey]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!shown) return null;

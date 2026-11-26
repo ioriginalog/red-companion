@@ -31,7 +31,7 @@ export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: 
         tone: e.hit ? 'hit' : 'miss',
       };
     case 'damageRolled':
-      return { text: `Damage ${e.dice.join(' + ')}${e.multiplier > 1 ? ` × ${e.multiplier}` : ''} = ${e.total}${e.critTriggered ? '. Critical Injury!' : '.'}`, tone: 'hit' };
+      return { text: `Damage ${damageMath(e.dice, e.multiplier)} = ${e.total}${e.critTriggered ? '. Critical Injury!' : '.'}`, tone: 'hit' };
     case 'damageApplied':
       return e.through > 0
         ? { text: `${name(e.targetId)} takes ${e.hpBefore - e.hpAfter} to the ${LOC[e.location] ?? e.location} (SP ${e.spCounted} stopped ${Math.min(e.rawDamage, e.spCounted)}).`, tone: 'bad' }
@@ -41,7 +41,7 @@ export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: 
     case 'woundStateChanged':
       return { text: `${name(e.targetId)} is now ${e.to === 'mortally' ? 'Mortally Wounded' : e.to === 'seriously' ? 'Seriously Wounded' : e.to === 'lightly' ? 'Lightly Wounded' : e.to}.`, tone: e.to === 'mortally' ? 'bad' : 'info' };
     case 'deathSaveRolled':
-      return { text: `${name(e.targetId)} rolls a Death Save: ${e.success ? 'holds on.' : 'fails.'}`, tone: e.success ? 'good' : 'bad' };
+      return { text: `${name(e.targetId)} rolls a Death Save: ${deathSaveMath(e)} ${e.success ? 'Holds on.' : 'Fails.'}`, tone: e.success ? 'good' : 'bad' };
     case 'died':
       return { text: `${name(e.targetId)} is dead.`, tone: 'bad' };
     case 'stabilized':
@@ -100,4 +100,20 @@ export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: 
     default:
       return null;
   }
+}
+
+/** "(1 + 2) × 4", never "1 + 2 × 4" (#20). */
+export function damageMath(dice: number[], multiplier: number): string {
+  const sum = dice.join(' + ');
+  if (multiplier <= 1) return sum;
+  return dice.length > 1 ? `(${sum}) × ${multiplier}` : `${sum} × ${multiplier}`;
+}
+
+/** The roll against BODY (#21); fields can be missing on redacted NPC rolls. */
+export function deathSaveMath(e: { natural?: number; penalty?: number; total?: number; body?: number }): string {
+  if (typeof e.total !== 'number') return '';
+  const pen = e.penalty ? ` + ${e.penalty} penalty` : '';
+  const nat = typeof e.natural === 'number' ? `${e.natural}${pen} = ` : '';
+  const vs = typeof e.body === 'number' ? ` vs BODY ${e.body} (needs under)` : '';
+  return `${nat}${e.total}${vs}${e.natural === 10 ? ', natural 10 always fails' : ''}.`;
 }

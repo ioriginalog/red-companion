@@ -49,7 +49,7 @@ export function PortraitCropper({ img, onDone, onCancel }: { img: HTMLImageEleme
           <StageBox crop={crop} nw={nw} nh={nh} />
         </div>
         <div className="row" style={{ alignItems: 'center' }}>
-          <canvas ref={out} width={96} height={96} className="crop-out" aria-label="Portrait preview" />
+          <canvas ref={out} width={96} height={96} className="crop-out" aria-label="Portrait Preview" />
           <label className="fld" style={{ flex: 1 }}><span>Crop Size</span>
             <input type="range" min={32} max={maxSize} value={crop.size} onChange={(e) => setCrop((c) => clampCrop({ ...c, size: Number(e.target.value) }))} />
           </label>

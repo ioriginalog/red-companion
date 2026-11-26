@@ -471,3 +471,12 @@ kbd, code { font: 600 12px ui-monospace, monospace; background: #071030; border:
 /* --- end Round 3 P --- */
 .table.compact .zoom .btn { background: rgba(8, 14, 40, 0.72); }
 .table.compact .zoom:hover .btn, .table.compact .zoom:focus-within .btn { background: rgba(8, 14, 40, 0.95); }
+
+/* Round 4 U4: area-attack confirm (#13) */
+.area-confirm { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 6; background: rgba(5, 8, 22, 0.95); border: 1px solid var(--yellow); box-shadow: 0 0 18px rgba(255, 212, 0, 0.25); padding: 10px 14px; min-width: 260px; max-width: min(92vw, 460px); display: grid; gap: 4px; }
+.area-confirm .ttl-sm { color: var(--yellow); font-size: 16px; letter-spacing: 0.08em; }
+.warn-txt { color: #ff8aa0; }
+.table.compact .area-confirm { bottom: 74px; left: 8px; right: 8px; transform: none; max-width: none; }
+.place-queue .btn { padding: 2px 8px; font-size: 12px; }
+.chatcard { position: relative; }
+.new-msgs { position: absolute; left: 50%; transform: translateX(-50%); bottom: 132px; z-index: 2; padding: 4px 12px; font-size: 13px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5); }

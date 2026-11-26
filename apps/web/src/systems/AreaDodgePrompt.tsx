@@ -17,7 +17,7 @@ export function AreaDodgePrompt({ view, isGm, mine, name, act }: Props) {
   const label = p.areaKind === 'shotgunShell' ? 'Shotgun Shell' : 'Blast';
   if (!yours.length && !isGm) return null;
   return (
-    <div className="card prompt" role="alertdialog" aria-label="Dodge the area attack">
+    <div className="card prompt" role="alertdialog" aria-label="Dodge the Area Attack">
       <div className="ttl">{label} Incoming</div>
       <p style={{ margin: '0 0 8px' }}>
         {name(p.attackerId)} rolled {p.attack.total}. Dodging is DEX + Evasion + 1d10; beat {p.attack.total} to get clear. Damage is rolled once everyone decides.

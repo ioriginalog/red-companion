@@ -195,8 +195,9 @@ export function terrainCounts(cells: string): Record<string, number> {
  * Up to `count` open, unoccupied squares, nearest first to `near` (default:
  * the map's center), for dropping new tokens.
  */
-export function freeSquares(m: TacticalMap, count: number, near?: Cell): Cell[] {
+export function freeSquares(m: TacticalMap, count: number, near?: Cell, avoid?: Set<string>): Cell[] {
   const taken = new Set(Object.values(m.tokens).map((c) => `${c.x},${c.y}`));
+  if (avoid) for (const k of avoid) taken.add(k);
   const start = near ?? { x: Math.floor(m.width / 2), y: Math.floor(m.height / 2) };
   const open = (c: Cell) => c.x >= 0 && c.y >= 0 && c.x < m.width && c.y < m.height && (m.cells[c.y * m.width + c.x] === '.' || m.cells[c.y * m.width + c.x] === '~');
   const out: Cell[] = [];

@@ -27,7 +27,7 @@ export function GmSystemsPanel({ c }: { c: SystemsCtx }) {
         <div className="sys-sub">Rest</div>
         <div className="row" style={{ flexWrap: 'wrap' }}>
           <label className="row"><span className="dim">Days</span><input type="number" min={1} max={60} value={days} onChange={(e) => setDays(Math.max(1, Math.min(60, Number(e.target.value) || 1)))} style={{ width: 64 }} /></label>
-          <select value={care} onChange={(e) => setCare(e.target.value as Care)} aria-label="Where they rest">
+          <select value={care} onChange={(e) => setCare(e.target.value as Care)} aria-label="Where They Rest">
             <option value="home">At Home (BODY per Day)</option>
             <option value="hospital">Hospital Bed (BODY × 2)</option>
             <option value="street">On the Street (No Healing)</option>
@@ -46,7 +46,7 @@ export function GmSystemsPanel({ c }: { c: SystemsCtx }) {
             <option value="standard">Standard Therapy (DV {THERAPY.standard.dv}, Humanity 40+)</option>
             <option value="extreme">Extreme Therapy (DV {THERAPY.extreme.dv}, Below 40)</option>
           </select>
-          <label className="row"><span className="dim">Therapist</span><input type="number" min={0} max={40} value={base} onChange={(e) => setBase(Math.max(0, Math.min(40, Number(e.target.value) || 0)))} style={{ width: 56 }} aria-label="Therapist STAT plus skill" /></label>
+          <label className="row"><span className="dim">Therapist</span><input type="number" min={0} max={40} value={base} onChange={(e) => setBase(Math.max(0, Math.min(40, Number(e.target.value) || 0)))} style={{ width: 56 }} aria-label="Therapist STAT plus Skill" /></label>
           <button className="btn" disabled={!target?.humanity} onClick={() => c.act({ type: 'therapy', actorId: who, kind, therapistBase: base })}>Run a Week of Therapy</button>
         </div>
 

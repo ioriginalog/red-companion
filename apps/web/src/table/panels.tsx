@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { profileOf } from '@cprc/rules-core';
+import { profileOf, type Weapon } from '@cprc/rules-core';
 import type { ProjectedActor } from '@cprc/session';
 import { client } from '../net.js';
 import { dodgeContext, isFriendly } from '../tactics.js';
@@ -55,12 +55,22 @@ export function TopBar({ c, onHelp }: { c: TableCtx; onHelp: () => void }) {
   );
 }
 
+const ALLEGIANCE_WORD: Record<string, string> = { party: 'Party', ally: 'Ally', neutral: 'Neutral', hostile: 'Hostile' };
+const WOUND_WORD: Record<string, string> = { unhurt: 'Unhurt', lightly: 'Lightly Wounded', seriously: 'Seriously Wounded', mortally: 'Mortally Wounded' };
+/** Screen-reader name for an initiative card (#19): never empty, even when the label text is hidden. */
+export function initLabel(a: ProjectedActor, acting: boolean, mine: boolean): string {
+  const parts = [a.public.name || 'Unnamed', ALLEGIANCE_WORD[a.public.allegiance] ?? '', a.public.conditions.dead ? 'Dead' : WOUND_WORD[a.public.woundState] ?? ''];
+  if (acting) parts.push('Acting Now');
+  if (mine) parts.push('Yours');
+  return parts.filter(Boolean).join(', ');
+}
+
 export function InitiativeStrip({ c, onPick }: { c: TableCtx; onPick: (id: string, friendly: boolean) => void }) {
   const { view, isGm } = c;
   const enc = view.encounter;
   const order = enc.active ? [...enc.order.slice(enc.turnIndex), '|', ...enc.order.slice(0, enc.turnIndex)] : [];
   return (
-    <nav className="init" aria-label="Initiative order">
+    <nav className="init" aria-label="Initiative Order">
       {!enc.active && <span className="h dim">{isGm ? 'Set up the scene, then start the encounter.' : 'Waiting for the encounter to start.'}</span>}
       {order.map((id, i) => {
         if (id === '|') return <div className="round-div" key="div">Round {enc.round + 1}</div>;
@@ -77,7 +87,8 @@ export function InitiativeStrip({ c, onPick }: { c: TableCtx; onPick: (id: strin
         }
         const mine = c.mine(id) && !isGm;
         return (
-          <button key={`${id}-${i}`} className={`init-card${i === 0 ? ' active' : ''}${mine ? ' mine' : ''}`} onClick={() => onPick(id, isFriendly(a))} title={a.public.name}>
+          <button key={`${id}-${i}`} className={`init-card${i === 0 ? ' active' : ''}${mine ? ' mine' : ''}`} onClick={() => onPick(id, isFriendly(a))} title={a.public.name}
+            aria-label={initLabel(a, i === 0, mine)}>
             <Portrait a={a} active={i === 0} />
             <div className="nm">{a.public.name}</div>
           </button>
@@ -178,15 +189,16 @@ export function Prompts({ c, onPickScatter, scatterPicking }: { c: TableCtx; onP
 
 function DodgePrompt({ c, pending }: { c: TableCtx; pending: Extract<NonNullable<TableCtx['view']['pending']>, { kind: 'awaitingDodge' }> }) {
   const { name, act } = c;
-  const ctx = dodgeContext(c.view, pending.attack);
+  const ctx = dodgeContext(c.view, pending.attack as typeof pending.attack & { weaponType?: Weapon['type'] });
   const dv = ctx.dv;
-  const dvTile = !dv ? 'Out' : 'exact' in dv ? `${dv.exact}` : `~${dv.typical}`;
-  const odds = ctx.dodgeBeatsDv ? pct('exact' in ctx.dodgeBeatsDv ? ctx.dodgeBeatsDv.exact : ctx.dodgeBeatsDv.atTypical) : null;
+  const dvTile = !dv ? (ctx.weaponKnown ? 'Out' : 'Unknown') : 'exact' in dv ? `${dv.exact}` : 'Unknown';
+  const b = ctx.dodgeBeatsDv;
+  const odds = !b ? null : 'exact' in b ? pct(b.exact) : b.atMin === b.atMax ? pct(b.atMin) : `${pct(b.atMax)}–${pct(b.atMin)}`;
   const note = !dv
-    ? 'They’re out of range for most weapons.'
+    ? (ctx.weaponKnown ? 'Their weapon can’t normally reach you at this range.' : 'Unknown weapon.')
     : 'exact' in dv
       ? `Taking it, they need to beat DV ${dv.exact}.`
-      : `Their weapon is hidden. At ${ctx.distanceM} m, range DVs run ${dv.min}–${dv.max}; ${dv.typical} is typical.`;
+      : `Unknown weapon. At ${ctx.distanceM} m, range DVs run from ${dv.min} to ${dv.max} depending on the weapon.`;
   return (
     <div className="card prompt" role="alertdialog" aria-label="Incoming Fire">
       <div className="ttl">Incoming Fire</div>

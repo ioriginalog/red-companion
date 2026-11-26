@@ -6,6 +6,8 @@
  * square, in the shooter's line of sight. The 90° width is an interpretation.
  */
 import {
+  effectiveStat, RANGE_DV, rangeBandIndex, SHOTGUN_SHELL, skillLevel, standingModifiers, WEAPON_TYPES,
+  type Combatant, type Modifier,
   AUTOFIRE_DV, cellKey, gridDistance, hasLineOfSight, inBounds, inCone, isOpaque, metersBetween, profileOf, RANGE_BANDS, bearing,
   type Cell, type GridMap, type Weapon,
 } from '@cprc/rules-core';
@@ -80,4 +82,24 @@ export function suppressiveTargets(view: ViewState, attackerId: string, w: Weapo
 
 export function canSuppress(w: Weapon | undefined): boolean {
   return !!w && autofireMaxMeters(w) !== null && (!w.ammo || w.ammo.loaded >= 10);
+}
+
+/**
+ * What an area attack would roll against, without rolling (for the confirm
+ * step). Mirrors rules-core resolveAreaAttack; a test keeps them in lockstep.
+ */
+export interface AreaOdds { stat: 'REF' | 'DEX'; skill: string; base: number; modifiers: Modifier[]; dv: number | null; distanceM: number }
+export function areaOdds(attacker: Combatant, w: Weapon, kind: AreaKind, distanceM: number, extra: Modifier[] = []): AreaOdds {
+  const modifiers = [...standingModifiers(attacker, 'rangedAttack'), ...extra];
+  if (kind === 'shell') {
+    const skill = profileOf(w).skill;
+    return { stat: 'REF', skill, base: effectiveStat(attacker, 'REF') + skillLevel(attacker, skill), modifiers, dv: SHOTGUN_SHELL.dv, distanceM };
+  }
+  const thrown = w.type === 'grenade';
+  const row = thrown ? 'grenadeLauncher' : profileOf(w).rangeRow;
+  const band = rangeBandIndex(distanceM);
+  const dv = band < 0 || !row ? null : RANGE_DV[row][band] ?? null;
+  const stat = thrown ? 'DEX' : 'REF';
+  const skill = thrown ? 'Athletics' : WEAPON_TYPES[w.type].skill;
+  return { stat, skill, base: effectiveStat(attacker, stat) + skillLevel(attacker, skill), modifiers, dv, distanceM };
 }

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { ARMOR_TYPES, creationHumanity, ROLES, WEAPON_TYPES, type RoleId, type StatKey, type WeaponType } from '@cprc/rules-core';
-import type { Actor, Allegiance, Intent, ProjectedActor } from '@cprc/session';
+import { ARMOR_TYPES, CORE_FORMS, creationHumanity, formSkill, ROLES, WEAPON_TYPES, type RoleId, type StatKey, type WeaponType } from '@cprc/rules-core';
+import type { Actor, Allegiance, Intent, ProjectedActor, ViewState } from '@cprc/session';
 import { client, type ClientState } from '../net.js';
 import { downloadText, loadImage, pickFile } from '../assets.js';
 import { SKILL_GROUPS, STAT_KEYS } from '../data/skills.js';
@@ -10,9 +10,27 @@ import {
   uniqueId, validateDraft, type ActorDraft, type ActorWithNotes, type ArmorChoice,
 } from './actorModel.js';
 import { freeSquares } from './mapModel.js';
+import { queuePlacement } from '../table/placement.js';
+import { isFriendly, partyVision } from '../tactics.js';
 import { PortraitCropper } from './PortraitCropper.js';
 import { AmmoSelect, CyberwareField, GearField, RoleField } from './SystemsFields.js';
 import './editors.css';
+import { num } from '../table/format.js';
+
+type Placement = 'off' | 'click' | 'near';
+
+/**
+ * Free squares near the party. Hostile or neutral arrivals avoid squares the
+ * party can see, so "Near the Party" never reveals them by itself.
+ */
+function nearPartySquares(view: ViewState, n: number, allegiance: string): { x: number; y: number }[] {
+  const map = view.map!;
+  const near = Object.entries(map.tokens).find(([tid]) => isFriendly(view.actors[tid]))?.[1];
+  const hostile = allegiance === 'hostile' || allegiance === 'neutral';
+  if (!hostile) return freeSquares(map, n, near);
+  const hidden = freeSquares(map, n, near, partyVision(view));
+  return hidden.length === n ? hidden : [...hidden, ...freeSquares(map, n - hidden.length, near)].slice(0, n);
+}
 
 const ROLE_NAME = Object.fromEntries(ROLES.map((r) => [r.id, r.name])) as Record<RoleId, string>;
 
@@ -37,7 +55,8 @@ export function CharacterEditor({ s }: { s: ClientState }) {
   const [draft, setDraft] = useState<ActorDraft>(() => ({ ...emptyDraft(), name: '' }));
   const [baseline, setBaseline] = useState('');
   const [reset, setReset] = useState(false);
-  const [place, setPlace] = useState(true);
+  // Where new characters go. Off Map by default, so reinforcements stay a surprise.
+  const [place, setPlace] = useState<Placement>('off');
   const [copies, setCopies] = useState(3);
   const [cropImg, setCropImg] = useState<HTMLImageElement | null>(null);
   const [skillFilter, setSkillFilter] = useState('');
@@ -67,13 +86,13 @@ export function CharacterEditor({ s }: { s: ClientState }) {
     const actor = actorFromDraft({ ...draft, id });
     if (!act({ type: 'addActor', actor })) return;
     let placed = false;
-    if (place && view.map) {
-      const near = draft.allegiance === 'party' ? Object.entries(view.map.tokens).find(([tid]) => view.actors[tid]?.public.allegiance === 'party')?.[1] : undefined;
-      const at = freeSquares(view.map, 1, near)[0];
+    if (place === 'near' && view.map) {
+      const at = nearPartySquares(view, 1, draft.allegiance)[0];
       if (at) placed = act({ type: 'placeToken', actorId: id, at });
     }
+    if (place === 'click' && view.map) queuePlacement([id]);
     load(draftFromActor(actor), { kind: 'session', id });
-    setMsg({ tone: 'ok', text: `Added ${actor.combatant.name} to the session${placed ? ' and placed them on the map' : ''}.` });
+    setMsg({ tone: 'ok', text: `Added ${actor.combatant.name} to the session${placed ? ' and placed them near the party' : place === 'click' ? '. Tap a square on the Table to place them' : ', off the map'}.` });
   }
 
   function saveSession() {
@@ -102,7 +121,8 @@ export function CharacterEditor({ s }: { s: ClientState }) {
     if (sel.kind !== 'library') return;
     const n = Math.max(1, Math.min(20, copies));
     const names = numberedNames(draft.name, n, sessionActors.map((a) => a.public.name));
-    const squares = view.map && place ? freeSquares(view.map, n) : [];
+    const squares = view.map && place === 'near' ? nearPartySquares(view, n, draft.allegiance) : [];
+    const toPlace: string[] = [];
     const taken = [...allIds];
     let done = 0;
     for (let i = 0; i < n; i++) {
@@ -110,9 +130,11 @@ export function CharacterEditor({ s }: { s: ClientState }) {
       taken.push(newId);
       const at = squares[i];
       if (!act({ type: 'spawnFromLibrary', templateId: sel.id, newId, name: names[i]!, ...(at ? { at } : {}) })) break;
+      if (place === 'click') toPlace.push(newId);
       done++;
     }
-    if (done) setMsg({ tone: 'ok', text: `Spawned ${done} ${done > 1 ? 'copies' : 'copy'} of ${draft.name}.` });
+    if (toPlace.length && view.map) queuePlacement(toPlace);
+    if (done) setMsg({ tone: 'ok', text: `Spawned ${done} ${done > 1 ? 'copies' : 'copy'} of ${draft.name}${place === 'click' ? '. Tap squares on the Table to place them' : place === 'off' ? ', off the map' : ''}.` });
   }
 
   function removeCurrent() {
@@ -252,9 +274,24 @@ export function CharacterEditor({ s }: { s: ClientState }) {
         <section className="card">
           <div className="ttl">Skills</div>
           <div className="row" style={{ marginBottom: 8, flexWrap: 'wrap' }}>
-            <input placeholder="Filter skills" aria-label="Filter skills" value={skillFilter} onChange={(e) => setSkillFilter(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+            <input placeholder="Filter skills" aria-label="Filter Skills" value={skillFilter} onChange={(e) => setSkillFilter(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
             <label className="lbl" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={onlyTrained} onChange={(e) => setOnlyTrained(e.target.checked)} />Trained Only</label>
           </div>
+          {(draft.skills['Martial Arts'] ?? 0) > 0 && (
+            <div className="warn" role="alert" style={{ marginBottom: 8 }}>
+              Martial Arts is learned per Form. This character has an untyped Martial Arts {draft.skills['Martial Arts']}, which can’t be used for strikes or Special Moves.{' '}
+              <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>Move It to
+                <select aria-label="Martial Arts Form for the Untyped Skill" defaultValue="" onChange={(e) => {
+                  if (!e.target.value) return;
+                  const { 'Martial Arts': lv = 0, ...rest } = draft.skills;
+                  set({ skills: { ...rest, [formSkill(e.target.value)]: Math.max(lv, rest[formSkill(e.target.value)] ?? 0) } });
+                }}>
+                  <option value="">Choose a Form</option>
+                  {CORE_FORMS.map((f) => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </label>
+            </div>
+          )}
           {visibleGroups.map((g) => {
             const trained = g.skills.filter((k) => (draft.skills[k.name] ?? 0) > 0).length;
             return (
@@ -332,7 +369,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
             );
           })}
           <div className="row" style={{ marginTop: 8 }}>
-            <select aria-label="Weapon type to add" id="add-weapon" defaultValue="heavyPistol">
+            <select aria-label="Weapon Type to Add" id="add-weapon" defaultValue="heavyPistol">
               <optgroup label="Ranged">{RANGED.map((t) => <option key={t} value={t}>{WEAPON_TYPES[t].displayName}</option>)}</optgroup>
               <optgroup label="Thrown">{THROWN.map((t) => <option key={t} value={t}>{WEAPON_TYPES[t].displayName}</option>)}</optgroup>
               <optgroup label="Melee">{MELEE.map((t) => <option key={t} value={t}>{WEAPON_TYPES[t].displayName}</option>)}</optgroup>
@@ -365,7 +402,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
         </section>
       </main>
 
-      <aside className="ed-col ed-side" aria-label="Save character">
+      <aside className="ed-col ed-side" aria-label="Save Character">
         {msg && <div className={msg.tone === 'ok' ? 'ok' : 'warn'} role="status">{msg.text}</div>}
         <section className="card">
           <div className="ttl">{title}</div>
@@ -382,7 +419,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
               <>
                 <button className="cta" style={{ fontSize: 18, padding: 10 }} onClick={addToSession}>Add to Session</button>
                 <div className="row">
-                  <input type="number" min={1} max={20} value={copies} aria-label="Number of copies" onChange={(e) => setCopies(Number(e.target.value) || 1)} style={{ width: 70 }} />
+                  <input type="number" min={1} max={20} value={copies} aria-label="Number of Copies" onChange={(e) => setCopies(Number(e.target.value) || 1)} style={{ width: 70 }} />
                   <button className="btn" style={{ flex: 1 }} onClick={spawnCopies}>Spawn Copies</button>
                 </div>
                 <button className="btn full" disabled={!dirty} onClick={() => saveTemplate(false)}>Save Template</button>
@@ -396,7 +433,13 @@ export function CharacterEditor({ s }: { s: ClientState }) {
               </>
             )}
             {sel.kind !== 'session' && view.map && (
-              <label className="lbl" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={place} onChange={(e) => setPlace(e.target.checked)} />Place on the Map</label>
+              <label className="fld"><span>Placement</span>
+                <select value={place} onChange={(e) => setPlace(e.target.value as Placement)} aria-label="Placement on the Map">
+                  <option value="off">Off Map</option>
+                  <option value="click">Place by Clicking</option>
+                  <option value="near">Near the Party</option>
+                </select>
+              </label>
             )}
             <button className="btn full ghost" onClick={() => downloadText(`${uniqueId(draft.name || 'character', [])}.json`, exportActors([actorFromDraft({ ...draft, id: draft.id || uniqueId(draft.name, []) })]))}>Export JSON</button>
           </div>
@@ -442,7 +485,7 @@ function ArmorField({ label, value, onChange }: { label: string; value: ArmorCho
           onChange(v === 'none' ? { kind: 'none' } : v === 'custom' ? { kind: 'custom', name: 'Custom Armor', sp: 7, penalty: 0 } : { kind: 'type', typeId: v });
         }}>
           <option value="none">None</option>
-          {ARMOR_TYPES.map((a) => <option key={a.id} value={a.id}>{a.displayName} (SP {a.sp}{a.penalty ? `, ${a.penalty}` : ''})</option>)}
+          {ARMOR_TYPES.map((a) => <option key={a.id} value={a.id}>{a.displayName} (SP {a.sp}{a.penalty ? `, ${num(a.penalty)}` : ''})</option>)}
           <option value="custom">Custom…</option>
         </select>
       </label>

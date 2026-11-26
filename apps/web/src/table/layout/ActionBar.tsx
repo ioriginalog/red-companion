@@ -75,7 +75,7 @@ export function ActionBar(p: ActionBarProps) {
     return (
       <footer className="actions" aria-label="Actions">
         {canAct && enc.active && (
-          <div className="econ" aria-label="Turn economy">
+          <div className="econ" aria-label="Turn Economy">
             <span>Move <b className="mono">{usage?.moveUsed ?? 0}/{move ?? '?'}</b></span>
             <span className={usage?.actionUsed ? 'used' : ''}>Action</span>
           </div>

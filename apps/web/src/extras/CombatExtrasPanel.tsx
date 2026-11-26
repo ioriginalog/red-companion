@@ -33,7 +33,9 @@ export function CombatExtrasPanel({ c, actingId, targetId, canAct }: { c: Extras
   const a = actingId ? view.actors[actingId] : undefined;
   const t = targetId && targetId !== actingId ? view.actors[targetId] : undefined;
   const ac = a?.combatant;
-  const myFacedowns = (x?.facedowns ?? []).filter((f) => c.isGm || c.mine(f.loserId) || c.mine(f.winnerId));
+  // A "fighting on at −2" Facedown is a combat state: hide it once no encounter is running (#14).
+  // One still waiting for the loser's choice stays, since Facedowns can happen outside combat.
+  const myFacedowns = (x?.facedowns ?? []).filter((f) => (view.encounter.active || f.status === 'choosing') && (c.isGm || c.mine(f.loserId) || c.mine(f.winnerId)));
   if (!a || !ac) {
     return myFacedowns.length ? <FacedownCard c={c} /> : null;
   }
@@ -103,9 +105,9 @@ export function CombatExtrasPanel({ c, actingId, targetId, canAct }: { c: Extras
         )}
         {usable && c.isGm && t?.weapons?.length && !holding && !heldBy ? (
           <label className="ex-form" style={{ marginTop: 8 }}>
-            <span className="dim" style={{ fontSize: 12 }}>Item to snatch (GM)</span>
+            <span className="dim" style={{ fontSize: 12 }}>Item to Snatch (GM)</span>
             <select value={itemId} onChange={(e) => setItemId(e.target.value)}>
-              <option value="">GM decides later</option>
+              <option value="">GM Decides Later</option>
               {t.weapons.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
           </label>

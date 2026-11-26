@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { profileOf, type Weapon } from '@cprc/rules-core';
+import { profileOf, type Cell, type Weapon } from '@cprc/rules-core';
 import type { Intent } from '@cprc/session';
 import { client, type ClientState } from './net.js';
 import { MapView, type MapMode } from './MapView.js';
@@ -24,6 +24,8 @@ import { ActionBar } from './table/layout/ActionBar.js';
 import { TargetChips, targetChips } from './table/layout/TargetChips.js';
 import { TurnBanner } from './table/layout/TurnBanner.js';
 import { useLayout } from './table/layout/useMedia.js';
+import { AreaConfirm } from './table/AreaConfirm.js';
+import { clearPlacement, prunePlacement, shiftPlacement, usePlacementQueue } from './table/placement.js';
 
 type Tab = 'combat' | 'sheet' | 'chat' | 'notes' | 'net' | 'scene';
 /** Bottom sheet height on phones and portrait tablets. */
@@ -101,7 +103,27 @@ export function Table({ s }: { s: ClientState }) {
   const scatter = view.pending?.kind === 'awaitingScatter' ? view.pending : null;
   useEffect(() => { if (!scatter) setScatterPick(false); }, [scatter?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setCoverPick(false); setDelayOpen(null); }, [actingId, weapon?.id]);
-  const effMode: MapMode = scatterPick ? 'area' : coverPick ? 'place' : mapMode;
+  // GM "Place by Clicking" queue from the character editor (#12).
+  const placing = usePlacementQueue();
+  const placeNext = isGm && view.map ? placing[0] ?? null : null;
+  useEffect(() => {
+    prunePlacement((id) => !!view.actors[id] && !view.map?.tokens[id]);
+  }, [view.actors, view.map?.tokens]);
+  const effMode: MapMode = scatterPick ? 'area' : coverPick || placeNext ? 'place' : mapMode;
+  // Encounter over: drop combat-only UI state (#14).
+  useEffect(() => {
+    if (enc.active) return;
+    setTargetId(null); setMapMode('move'); setDelayOpen(null); setCoverPick(false); setScatterPick(false);
+  }, [enc.active]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Area attacks aim first, then confirm (#13).
+  const [areaAim, setAreaAim] = useState<Cell | null>(null);
+  useEffect(() => { setAreaAim(null); }, [effMode, actingId, weapon?.id, scatter?.id]);
+  const confirmArea = () => {
+    if (!areaAim) return;
+    if (scatterPick && scatter) { if (c.act({ type: 'placeScatter', pendingId: scatter.id, at: areaAim })) { setScatterPick(false); setAreaAim(null); } return; } // Round 3 P
+    if (!actingId || !weapon || !areaKind) return;
+    if (c.act({ type: 'areaAttack', attackerId: actingId, weaponId: weapon.id, kind: areaKind === 'blast' ? 'launcher' : 'shotgunShell', at: areaAim })) { setMapMode('move'); setAreaAim(null); }
+  };
   // --- end Round 3 P ---
 
   const attack = useMemo(
@@ -291,6 +313,7 @@ export function Table({ s }: { s: ClientState }) {
                 if (actingId && weapon && c.act({ type: 'attackCover', attackerId: actingId, weaponId: weapon.id, at: cell })) setCoverPick(false);
                 return;
               }
+              if (placeNext) { if (c.act({ type: 'placeToken', actorId: placeNext, at: cell })) shiftPlacement(); return; }
               if (mapMode === 'place' && isGm && (focusId ?? selected)) { c.act({ type: 'placeToken', actorId: (focusId ?? selected)!, at: cell }); return; }
               if (!actingId || !canAct) return;
               c.act({ type: 'moveToken', actorId: actingId, to: cell, ...(run ? { run: true } : {}) });
@@ -300,11 +323,8 @@ export function Table({ s }: { s: ClientState }) {
               c.act({ type: 'moveToken', actorId: id, to: cell, ...(run && !isGm ? { run: true } : {}) });
             }}
             onWatchFacing={(deg) => { if (actingId) { c.act({ type: 'setWatch', actorId: actingId, facing: deg, arc: 90 }); setMapMode('move'); } }}
-            onArea={(at) => {
-              if (scatterPick && scatter) { if (c.act({ type: 'placeScatter', pendingId: scatter.id, at })) setScatterPick(false); return; } // Round 3 P
-              if (!actingId || !weapon || !areaKind) return;
-              if (c.act({ type: 'areaAttack', attackerId: actingId, weaponId: weapon.id, kind: areaKind === 'blast' ? 'launcher' : 'shotgunShell', at })) setMapMode('move');
-            }}
+            onArea={(at) => setAreaAim(at)}
+            areaLock={effMode === 'area' ? areaAim : null}
             onReveal={(cells, add) => {
               const l = view.map?.lighting ?? {};
               const set = new Set(l.revealed ?? []);
@@ -337,8 +357,19 @@ export function Table({ s }: { s: ClientState }) {
             <span><i style={{ background: 'rgba(2,4,14,0.9)', border: '1px solid #445' }} />Unseen</span>
           </div>
         )}
+        {effMode === 'area' && areaAim && view.map && (areaKind || scatterPick) && (
+          <AreaConfirm view={view} actingId={scatterPick ? (scatter?.attackerId ?? null) : actingId} weapon={weapon} kind={scatterPick ? 'blast' : areaKind!}
+            aim={areaAim} scatter={!!scatterPick} onConfirm={confirmArea} onCancel={() => setAreaAim(null)} />
+        )}
         {(scatterPick || coverPick) && <div className="mode-banner h">{scatterPick ? 'Scatter: tap where the explosive lands.' : 'Shoot Cover: tap a cover square.'} <button className="link" onClick={() => { setScatterPick(false); setCoverPick(false); }}>Cancel (Esc)</button></div>}
-        {!scatterPick && !coverPick && mapMode !== 'move' && <div className="mode-banner h">{
+        {placeNext && !scatterPick && !coverPick && (
+          <div className="mode-banner h place-queue" role="status">
+            Place {view.actors[placeNext]?.public.name ?? 'Them'}: Tap a Square{placing.length > 1 ? ` (${placing.length - 1} More After)` : ''}
+            <button className="btn ghost" onClick={shiftPlacement}>Skip</button>
+            <button className="btn ghost" onClick={clearPlacement}>Done</button>
+          </div>
+        )}
+        {!placeNext && !scatterPick && !coverPick && mapMode !== 'move' && <div className="mode-banner h">{
           mapMode === 'ruler' ? 'Ruler: drag to measure. Everyone sees it.'
             : mapMode === 'watch' ? 'Watch: tap where to face (90° cone).'
               : mapMode === 'area' ? (areaKind === 'blast' ? 'Blast: tap the aim square.' : 'Shell: tap the direction to fire.')

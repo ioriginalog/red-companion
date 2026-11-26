@@ -28,10 +28,10 @@ export function Inspector({ c, id, onClose, onTarget }: { c: TableCtx; id: strin
       </div>
       <div className="hp-adjust">
         {[-5, -1, 1, 5].map((d) => <button key={d} className={`btn sm${d < 0 ? ' danger' : ''}`} onClick={() => adjust(d)}>{d > 0 ? `+${d}` : `−${-d}`}</button>)}
-        <input aria-label="Custom HP change" inputMode="numeric" placeholder="±HP" value={custom} onChange={(e) => setCustom(e.target.value.replace(/[^\d-]/g, ''))} style={{ width: 64 }} />
+        <input aria-label="Custom HP Change" inputMode="numeric" placeholder="±HP" value={custom} onChange={(e) => setCustom(e.target.value.replace(/[^\d-]/g, ''))} style={{ width: 64 }} />
         <button className="btn sm" disabled={!Number(custom)} onClick={() => { adjust(Number(custom)); setCustom(''); }}>Apply</button>
       </div>
-      <input aria-label="Reason (optional)" placeholder="Reason (optional), e.g. fire, fall" value={reason} onChange={(e) => setReason(e.target.value)} style={{ width: '100%', marginTop: 6 }} />
+      <input aria-label="Reason (Optional)" placeholder="Reason (Optional), e.g. fire, fall" value={reason} onChange={(e) => setReason(e.target.value)} style={{ width: '100%', marginTop: 6 }} />
       <div className="modes" style={{ marginTop: 10 }}>
         {CONDITIONS.map(([k, label]) => (
           <button key={k} className={`mode${a.public.conditions[k] ? ' sel' : ''}`} aria-pressed={a.public.conditions[k]}

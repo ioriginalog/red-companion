@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { isNearBottom, liveFeed } from './feed.js';
 import type { CheckResult, CombatEvent } from '@cprc/rules-core';
 import { narrate } from '../narrate.js';
 import { COMMANDS } from './panels.js';
@@ -45,13 +46,30 @@ export function ChatPanel({ c, rollerId, onUnreadReset }: { c: TableCtx; rollerI
   }, [isGm, s.players, view.actors, c.me]);
 
   const roller = rollerId ? view.actors[rollerId] : undefined;
-  const items = useMemo(() => s.feed.flatMap((f) => f.events.map((e, i) => ({ key: `${f.seq}-${i}`, seq: f.seq, e }))).slice(-200), [s.feed]);
+  const items = useMemo(
+    () => liveFeed(s.feed, view.seq).flatMap((f) => f.events.map((e, i) => ({ key: `${f.seq}-${i}`, seq: f.seq, e }))).slice(-200),
+    [s.feed, view.seq],
+  );
 
-  useEffect(() => {
+  // Stick to the newest message unless the reader has scrolled up (#17).
+  const stuck = useRef(true);
+  const [behind, setBehind] = useState(0);
+  const lastCount = useRef(items.length + local.length);
+  const jump = () => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
+    stuck.current = true;
+    setBehind(0);
     onUnreadReset?.();
+  };
+  useEffect(() => {
+    const added = items.length + local.length - lastCount.current;
+    lastCount.current = items.length + local.length;
+    if (stuck.current) jump();
+    else if (added > 0) setBehind((b) => b + added);
   }, [items.length, local.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Sending your own message always brings you to the bottom.
+  useEffect(() => { if (local.length) jump(); }, [local.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = () => {
     const r = parseCommand(text, { actorId: roller?.combatant ? roller.id : null, skills: Object.keys(roller?.combatant?.skills ?? {}), recipients });
@@ -95,14 +113,18 @@ export function ChatPanel({ c, rollerId, onUnreadReset }: { c: TableCtx; rollerI
   return (
     <section className="card chatcard">
       <div className="ttl">Log and Chat</div>
-      <div className="feed" ref={listRef} aria-live="polite">
+      <div className="feed" ref={listRef} aria-live="polite" onScroll={(e) => {
+        stuck.current = isNearBottom(e.currentTarget);
+        if (stuck.current && behind) { setBehind(0); onUnreadReset?.(); }
+      }}>
         {items.map(({ key, e }) => render(e, key))}
         {local.map((l) => <div key={`l${l.id}`} className={`msg ${l.tone}`}>{l.text}</div>)}
         {items.length === 0 && local.length === 0 && <span className="dim">Nothing yet. Type /help for commands.</span>}
       </div>
+      {behind > 0 && <button className="btn yellow new-msgs" onClick={jump}>{behind} New {behind === 1 ? 'Message' : 'Messages'}</button>}
       <form className="chat-input" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <input
-          aria-label="Chat or command" value={text} maxLength={520}
+          aria-label="Chat or Command" value={text} maxLength={520}
           placeholder={roller?.combatant ? `Chat, /r 2d6, /check REF+Handgun (${roller.public.name})` : 'Chat, /r 2d6, /w Name message'}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {

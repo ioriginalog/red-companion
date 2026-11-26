@@ -2,7 +2,7 @@
  * RED Core skill list: game-term names and linked STATs only, grouped by the
  * book's categories. No rules text.
  */
-import type { StatKey } from '@cprc/rules-core';
+import { CORE_FORMS, formSkill, type StatKey } from '@cprc/rules-core';
 
 export interface SkillDef { name: string; stat: StatKey }
 export interface SkillGroup { category: string; skills: SkillDef[] }
@@ -22,7 +22,11 @@ export const SKILL_GROUPS: SkillGroup[] = [
       s('Wilderness Survival', 'INT'),
     ],
   },
-  { category: 'Fighting', skills: [s('Brawling', 'DEX'), s('Evasion', 'DEX'), s('Martial Arts', 'DEX'), s('Melee Weapon', 'DEX')] },
+  {
+    category: 'Fighting',
+    // Martial Arts is learned per Form; the engine reads `Martial Arts (Form)`.
+    skills: [s('Brawling', 'DEX'), s('Evasion', 'DEX'), ...CORE_FORMS.map((f) => s(formSkill(f), 'DEX')), s('Melee Weapon', 'DEX')],
+  },
   { category: 'Performance', skills: [s('Acting', 'COOL'), s('Play Instrument', 'TECH')] },
   { category: 'Ranged Weapon', skills: [s('Archery', 'REF'), s('Autofire', 'REF'), s('Handgun', 'REF'), s('Heavy Weapons', 'REF'), s('Shoulder Arms', 'REF')] },
   {

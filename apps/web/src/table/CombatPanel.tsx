@@ -7,6 +7,7 @@ import type { MapMode } from '../MapView.js';
 import { areaKindFor, canSuppress, suppressiveTargets } from './area.js';
 import { ALLEGIANCE, WOUND, type TableCtx } from './ctx.js';
 import { Portrait } from './panels.js';
+import { signed } from './format.js';
 
 interface Props {
   c: TableCtx;
@@ -102,7 +103,7 @@ export function CombatPanel(p: Props) {
             ))}
           </div>
           {weapon && directModes(weapon).length > 0 && (
-            <div className="modes" role="radiogroup" aria-label="Attack mode">
+            <div className="modes" role="radiogroup" aria-label="Attack Mode">
               {directModes(weapon).map(([m, label]) => (
                 <button key={m} role="radio" aria-checked={p.mode === m} className={`mode${p.mode === m ? ' sel' : ''}`} onClick={() => p.setMode(m)}>{label}</button>
               ))}
@@ -160,7 +161,7 @@ export function CombatPanel(p: Props) {
               {attack?.ok && (
                 <div className="breakdown" style={{ marginTop: 10 }}>
                   <span>{attack.baseLabel} + {attack.skill}</span><span className="mono">{attack.base}</span>
-                  {attack.modifiers.map((m, i) => <Fragment key={i}><span>{m.label}</span><span className="mono">{m.value > 0 ? `+${m.value}` : m.value}</span></Fragment>)}
+                  {attack.modifiers.map((m, i) => <Fragment key={i}><span>{m.label}</span><span className="mono">{signed(m.value)}</span></Fragment>)}
                   <span>+ 1d10</span><span />
                   <span className="tot">{attack.melee ? 'vs DEX + Evasion + 1d10' : `vs DV ${attack.dv} (${attack.distanceM} m)`}</span><span className="tot mono" />
                   {attack.dodgeChance !== null && <span className="dim full">If they dodge: {pct(attack.dodgeChance)}</span>}
