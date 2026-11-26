@@ -26,6 +26,7 @@ import { TurnBanner } from './table/layout/TurnBanner.js';
 import { useLayout } from './table/layout/useMedia.js';
 import { AreaConfirm } from './table/AreaConfirm.js';
 import { clearPlacement, prunePlacement, shiftPlacement, usePlacementQueue } from './table/placement.js';
+import { requiredPrompt } from './table/required.js';
 
 type Tab = 'combat' | 'sheet' | 'chat' | 'notes' | 'net' | 'scene';
 /** Bottom sheet height on phones and portrait tablets. */
@@ -235,6 +236,19 @@ export function Table({ s }: { s: ClientState }) {
 
   const openTab = (t: Tab) => { setTab(t); setSheetOpen(true); if (t === 'chat') setUnread(0); if (t === 'notes') setNotesUnread(0); };
 
+  // A prompt this viewer must answer takes over the action bar, and the panel opens to it once.
+  const required = useMemo(() => requiredPrompt(view, me), [view, me]);
+  const lastRequired = useRef<string | null>(null);
+  useEffect(() => {
+    const key = required?.key ?? null;
+    if (key && key !== lastRequired.current) {
+      setTab('combat');
+      if (layout.sheet || layout.compact) setSheet((sh) => (sh === 'closed' ? 'half' : sh));
+      else setSideCollapsed(false);
+    }
+    lastRequired.current = key;
+  }, [required?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const pickToken = (id: string) => {
     const a = view.actors[id];
     if (!a || a.placeholder) return;
@@ -295,12 +309,12 @@ export function Table({ s }: { s: ClientState }) {
           <MapView
             view={view} isGm={isGm} actingId={actingId} canAct={canAct} targetId={targetId} attack={attack} chances={chances}
             compact={layout.compact || layout.sheet}
-            bottomInset={(layout.compact || layout.sheet) && canAct && mapMode === 'move' && chips.length ? 62 : 0}
+            bottomInset={(layout.compact || layout.sheet) && canAct && mapMode === 'move' && chips.length && !required ? 62 : 0}
             followIds={[...(actingId && view.map.tokens[actingId] ? [actingId] : []), ...(targetId && targetId !== actingId ? [targetId] : [])]}
             followKey={`${turnKey ?? 'free'}|${actingId ?? ''}|${targetId ?? ''}|${sheet}`}
             showMini={showMini} onToggleMini={() => { const v = !showMini; setShowMini(v); store.set('nsc.minimap', v ? '1' : '0'); }}
             mode={effMode} areaKind={scatterPick ? 'blast' : areaKind} partyFog={partyFog} neutralTemplate={!!scatterPick}
-            hoverInfo={(cell) => { const ci = view.map ? coverAt(view.map, cell) : null; return ci ? coverLabel(ci, isGm) : null; } /* */} focusId={isGm ? focusId : null} highlight={highlight}
+            hoverInfo={(cell) => { const ci = view.map ? coverAt(view.map, cell) : null; return ci ? coverLabel(ci, isGm) : null; }} focusId={isGm ? focusId : null} highlight={highlight}
             shareCursor={!isGm || gmCursor}
             signals={s.signals} effects={effects} nameOf={(f) => client.nameOf(f)}
             canDrag={(id) => isGm || (mine(id) && (!enc.active || currentId === id))}
@@ -342,7 +356,7 @@ export function Table({ s }: { s: ClientState }) {
             ) : <p className="dim">The GM hasn’t loaded a map.</p>}
           </div>
         )}
-        {(layout.compact || layout.sheet) && canAct && mapMode === 'move' && <TargetChips chips={chips} targetId={targetId} onPick={setTargetId} />}
+        {(layout.compact || layout.sheet) && canAct && mapMode === 'move' && !required && <TargetChips chips={chips} targetId={targetId} onPick={setTargetId} />}
         <TurnBanner turnKey={turnKey} title={bannerTitle} sub={bannerTitle && !isGm ? name(currentId!) : undefined} />
         {!sheetMode && !layout.shortLandscape && sideCollapsed && (
           <button className="btn side-open" onClick={toggleSide} aria-label="Show Panels" title="Show Panels">Panels ‹</button>
@@ -380,6 +394,7 @@ export function Table({ s }: { s: ClientState }) {
         c={c} compact={layout.compact} mapMode={mapMode} setMapMode={setMapMode} actingId={actingId} acting={acting} canAct={canAct}
         usage={usage} weapon={weapon} targetId={targetId} attack={attack} fireNow={fireNow} onFire={fire} canEndTurn={canEndTurn}
         partyFog={partyFog} setPartyFog={setPartyFog} extra={delaySlot}
+        required={required} onOpenPanel={() => { openTab('combat'); setSideCollapsed(false); }}
       />
 
       <aside className="side" aria-label="Panels">
@@ -409,7 +424,7 @@ export function Table({ s }: { s: ClientState }) {
                 setHighlight={setHighlight} onFire={fire} coverPick={coverPick} setCoverPick={setCoverPick}
                 ownIds={ownIds} onSelectOwn={(id) => setSelected(id)} targetHint={targetHint}
               />
-              <CombatExtrasPanel c={c} actingId={actingId} targetId={targetId} canAct={canAct} />{/* */}
+              <CombatExtrasPanel c={c} actingId={actingId} targetId={targetId} canAct={canAct} />
             </>
           )}
           {tab === 'sheet' && <SheetPanel c={c} preferId={isGm ? (focusId ?? actingId) : actingId} />}

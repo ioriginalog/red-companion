@@ -6,6 +6,7 @@ import { isFriendly, type Attack } from '../../tactics.js';
 import { pct } from '../../odds.js';
 import type { MapMode } from '../../MapView.js';
 import type { TableCtx } from '../ctx.js';
+import type { Required } from '../required.js';
 
 export interface ActionBarProps {
   c: TableCtx;
@@ -24,8 +25,11 @@ export interface ActionBarProps {
   canEndTurn: boolean;
   partyFog: boolean;
   setPartyFog: (v: boolean) => void;
-  /** Extra primary actions (e.g. Delay/Hold from the play-loop track), shown in both layouts. */
+  /** Extra primary actions (e.g. Delay), shown in both layouts. */
   extra?: ReactNode;
+  /** Something this viewer must answer first (Death Save, dodge…): takes over the bar. */
+  required?: Required | null;
+  onOpenPanel?: () => void;
 }
 
 interface Item { key: string; label: string; on?: boolean; disabled?: boolean; title?: string; tone?: 'yellow' | 'danger'; run: () => void }
@@ -70,6 +74,23 @@ export function ActionBar(p: ActionBarProps) {
   const showEndTurn = enc.active && (isGm || mine(currentId));
   const fireLabel = weapon && profileOf(weapon).melee ? 'Strike' : 'Fire';
   const chance = p.attack?.ok && p.attack.chance != null ? pct(p.attack.chance) : null;
+
+  const req = p.required;
+  if (req) {
+    // Nothing else can happen until this is answered: the bar becomes the prompt.
+    return (
+      <footer className={`actions${compact ? ' dock' : ''} dock-required`} aria-label={`Action Required: ${req.title}`} role="region">
+        <span className="req-title h"><span aria-hidden>! </span>{req.title}</span>
+        <div className="spacer" />
+        {req.choices.map((ch) => (
+          <button key={ch.label} className={`btn${ch.tone === 'yellow' ? ' yellow req-main' : ''}`} onClick={() => c.act(ch.intent)}>{ch.label}</button>
+        ))}
+        {(req.choices.length === 0 || !compact) && p.onOpenPanel && (
+          <button className="btn ghost" onClick={p.onOpenPanel}>{req.choices.length === 0 ? 'Answer in Panel' : 'Details'}</button>
+        )}
+      </footer>
+    );
+  }
 
   if (!compact) {
     return (
