@@ -344,6 +344,9 @@ export class Client {
           const prev = store.get<{ token: string; name: string }>(playerKey(this.state.joinCode!));
           store.set(playerKey(this.state.joinCode!), { token: m.playerToken, name: (this.hello as { name?: string })?.name || prev?.name || 'Player' });
           store.set(LAST_JOIN, { code: this.state.joinCode });
+          // Reconnects reuse this.hello: carry the token so the relay restores this
+          // player instead of creating a new, unassigned one.
+          if (this.hello) this.hello = { ...this.hello, playerToken: m.playerToken };
           this.queuedIds.clear();
           this.set({ status: 'online', sessionId: m.sessionId, playerId: m.playerId, view: m.view, players: m.players ?? [], feed: feedFromHistory(m.history), queued: 0, lockedUntil: null });
         }
