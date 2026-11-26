@@ -29,8 +29,10 @@ export interface Actor {
   allegiance?: Allegiance;
   /** Portrait image URL. */
   portrait?: string;
-  /** Free-text notes (cyberware, gear, background). Full-sheet viewers only. */
+  /** Free-text notes (cyberware, gear, background). Shared with everyone who sees the full sheet (players see all PCs' sheets). */
   notes?: string;
+  /** GM-only notes (motives, secrets, loot). Never projected to players. */
+  gmNotes?: string;
 }
 
 export type Allegiance = 'party' | 'ally' | 'neutral' | 'hostile';
@@ -370,6 +372,8 @@ export interface ProjectedActor {
   combatant?: Combatant;
   weapons?: Weapon[];
   notes?: string;
+  /** GM view only. */
+  gmNotes?: string;
 }
 
 export interface ViewState {
