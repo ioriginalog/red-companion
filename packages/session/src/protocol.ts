@@ -45,6 +45,8 @@ export type ServerMessage =
   | { t: 'welcome'; role: 'player'; sessionId: string; playerId: string; playerToken: string; view: ViewState; players: PlayerInfo[]; history?: HistoryItem[] }
   | { t: 'entries'; entries: ProjectedEntry[] }
   | { t: 'snapshot'; view: ViewState }
+  /** The GM undid entries or replaced the log: the player's view and history, rebuilt up to `toSeq`. */
+  | { t: 'rewind'; toSeq: number; view: ViewState; history: HistoryItem[] }
   | { t: 'log'; entries: LogEntry[] }
   | { t: 'intent'; from: string; clientMsgId: string; intent: Intent }
   | { t: 'rejected'; clientMsgId: string; code: string; message: string }

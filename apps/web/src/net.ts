@@ -60,10 +60,16 @@ export interface ClientState {
   queued: number;
   /** Epoch ms when a hello lockout lifts (the client retries then). */
   lockedUntil: number | null;
+  /** The session menu (GM key, backup, export, leave) is open. */
+  sessionMenu: boolean;
 }
 
-interface GmCreds { sessionId: string; gmKey: string; joinCode: string }
+export interface GmCreds { sessionId: string; gmKey: string; joinCode: string }
+/** A GM session saved on this device. */
+export interface SavedGm extends GmCreds { name?: string; lastUsed: number }
+/** Legacy single-slot key (migrated into GM_SESSIONS on first read). */
 const GM_KEY = 'nsc.gm';
+const GM_SESSIONS = 'nsc.gmSessions';
 const LAST_JOIN = 'nsc.lastJoin';
 const playerKey = (code: string) => `nsc.player.${code}`;
 
@@ -95,7 +101,7 @@ type Listener = () => void;
 export class Client {
   state: ClientState = {
     status: 'idle', role: null, sessionId: null, joinCode: null, playerId: null, view: null, players: [], gmOnline: false, feed: [], toast: null,
-    signals: { pings: [], measures: {}, cursors: {} }, unsynced: 0, queued: 0, lockedUntil: null,
+    signals: { pings: [], measures: {}, cursors: {} }, unsynced: 0, queued: 0, lockedUntil: null, sessionMenu: false,
   };
   /** GM log cache (IndexedDB, localStorage fallback). Replaceable for tests. */
   kv: KV = idbKV();
@@ -117,22 +123,91 @@ export class Client {
   private gmCreds: GmCreds | null = null;
 
   subscribe = (l: Listener) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
-  getState = () => this.state;
+  /** Latest state; a GM view marked stale is rebuilt here, once, however many entries arrived. */
+  getState = () => {
+    if (this.viewDirty && this.full) {
+      this.viewDirty = false;
+      this.state = { ...this.state, view: projectState(this.full, { role: 'gm' }) };
+    }
+    return this.state;
+  };
+  private viewDirty = false;
+  private notifyScheduled = false;
+  /**
+   * State changes apply at once, but listeners (React) hear about them at most
+   * once per frame. A burst of entries (a player flooding chat, a long log
+   * replay) used to re-render per message and trip React's update-depth limit.
+   */
   private set(patch: Partial<ClientState>) {
     this.state = { ...this.state, ...patch };
-    for (const l of this.listeners) l();
+    this.scheduleNotify();
+  }
+  private scheduleNotify() {
+    if (this.notifyScheduled) return;
+    this.notifyScheduled = true;
+    let done = false;
+    const run = () => {
+      if (done) return;
+      done = true;
+      this.notifyScheduled = false;
+      for (const l of this.listeners) l();
+    };
+    // rAF pauses in background tabs; the timer keeps a hidden GM tab current.
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+    setTimeout(run, 50);
   }
   toast(text: string) { this.set({ toast: { text, at: Date.now() } }); }
 
-  savedGm(): GmCreds | null { return store.get<GmCreds>(GM_KEY); }
+  /** GM sessions saved on this device, most recent first (migrates the old single slot). */
+  savedGmSessions(): SavedGm[] {
+    const list = store.get<SavedGm[]>(GM_SESSIONS) ?? [];
+    const legacy = store.get<GmCreds>(GM_KEY);
+    if (legacy && !list.some((x) => x.sessionId === legacy.sessionId)) {
+      list.push({ ...legacy, lastUsed: 0 });
+      store.set(GM_SESSIONS, list);
+    }
+    if (legacy) store.del(GM_KEY);
+    return [...list].sort((a, b) => b.lastUsed - a.lastUsed);
+  }
+  /** The most recently used GM session, if any. */
+  savedGm(): SavedGm | null { return this.savedGmSessions()[0] ?? null; }
+  private rememberGm(creds: GmCreds) {
+    const list = this.savedGmSessions().filter((x) => x.sessionId !== creds.sessionId);
+    const prev = this.savedGmSessions().find((x) => x.sessionId === creds.sessionId);
+    store.set(GM_SESSIONS, [{ ...prev, ...creds, lastUsed: Date.now() }, ...list]);
+  }
+  /** Remove a GM session (key and cached log) from this device. The session itself lives on at the relay. */
+  forgetGm(sessionId: string) {
+    store.set(GM_SESSIONS, this.savedGmSessions().filter((x) => x.sessionId !== sessionId));
+    void this.kv.del(cacheKey(sessionId)).catch(() => {});
+    this.set({});
+  }
+  /** The open session's GM credentials (for Show GM Key / backup). */
+  currentGm(): GmCreds | null { return this.gmCreds; }
+  /** GM backup file contents: everything needed to resume this session on another device. */
+  gmBackup(): string | null {
+    const c = this.gmCreds;
+    if (!c) return null;
+    return JSON.stringify({ format: 'nsc-gm-backup', version: 1, sessionId: c.sessionId, gmKey: c.gmKey, joinCode: c.joinCode, savedAt: new Date().toISOString() }, null, 2);
+  }
+  /** GM: download the session export (meta without secrets, full log) from the relay. */
+  async exportSession(): Promise<Blob | null> {
+    const c = this.gmCreds;
+    if (!c) return null;
+    const res = await fetch(`/api/sessions/${encodeURIComponent(c.sessionId)}/export`, { headers: { Authorization: `Bearer ${c.gmKey}` } });
+    if (!res.ok) { this.toast('Couldn’t export the session. Try again when you’re online.'); return null; }
+    return res.blob();
+  }
+  openSessionMenu() { this.set({ sessionMenu: true }); }
+  closeSessionMenu() { this.set({ sessionMenu: false }); }
 
   async createSession() {
     this.set({ status: 'connecting' });
     const res = await fetch('/api/sessions', { method: 'POST' });
     if (!res.ok) { this.set({ status: 'error' }); this.toast((await res.json().catch(() => ({}))).error ?? 'Could not create a session.'); return; }
     const creds = (await res.json()) as GmCreds;
-    store.set(GM_KEY, creds);
-    this.resumeGm(creds);
+    this.rememberGm(creds);
+    void this.resumeGm(creds);
   }
 
   /**
@@ -142,6 +217,7 @@ export class Client {
    */
   async resumeGm(creds: GmCreds) {
     this.gmCreds = creds;
+    this.rememberGm(creds);
     this.full = emptySession(creds.sessionId);
     this.log = [];
     this.synced = 0;
@@ -207,18 +283,30 @@ export class Client {
     return true;
   }
 
-  /** GM: restore an exported session as a new session (fresh key and join code). */
+  /**
+   * GM: open a file from Import. A GM backup (from Download GM Backup) resumes
+   * that session on this device; a session export becomes a new session
+   * (fresh key and join code).
+   */
   async importSession(file: Blob) {
+    let parsed: unknown = null;
+    try { parsed = JSON.parse(await file.text()); } catch { this.toast('That file isn’t a session export or a GM backup.'); return; }
+    const b = parsed as Partial<GmCreds> & { format?: string };
+    if (b && b.format === 'nsc-gm-backup') {
+      if (typeof b.sessionId !== 'string' || typeof b.gmKey !== 'string' || typeof b.joinCode !== 'string') { this.toast('That GM backup is incomplete.'); return; }
+      void this.resumeGm({ sessionId: b.sessionId, gmKey: b.gmKey, joinCode: b.joinCode });
+      return;
+    }
     this.set({ status: 'connecting' });
-    const res = await fetch('/api/sessions/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: file });
+    const res = await fetch('/api/sessions/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(parsed) });
     if (!res.ok) {
       this.set({ status: 'idle' });
       this.toast(((await res.json().catch(() => ({}))) as { error?: string }).error ?? 'Could not import that session.');
       return;
     }
     const creds = (await res.json()) as GmCreds;
-    store.set(GM_KEY, creds);
-    this.resumeGm(creds);
+    this.rememberGm(creds);
+    void this.resumeGm(creds);
     this.toast('Session imported. Players rejoin with the new join code; reassign their characters in the roster.');
   }
 
@@ -229,17 +317,24 @@ export class Client {
     this.connect({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode: code, name: name.trim() || saved?.name || 'Player', ...(saved ? { playerToken: saved.token } : {}) });
   }
 
-  leave() {
+  /**
+   * Leave the table. The GM key (and cached log) stay on this device unless
+   * `forget` is set; players keep their token, so they can rejoin as themselves.
+   */
+  leave(opts: { forget?: boolean } = {}) {
     this.hello = null;
     this.ws?.close();
     if (this.state.role === 'gm') {
-      store.del(GM_KEY);
-      if (this.full) void this.kv.del(cacheKey(this.full.sessionId)).catch(() => {});
-    } else store.del(LAST_JOIN);
+      if (opts.forget && this.gmCreds) this.forgetGm(this.gmCreds.sessionId);
+    } else {
+      store.del(LAST_JOIN);
+      if (opts.forget && this.state.joinCode) store.del(playerKey(this.state.joinCode));
+    }
     this.gmCreds = null;
     this.full = null;
+    this.viewDirty = false;
     this.queuedIds.clear();
-    this.set({ status: 'idle', role: null, view: null, sessionId: null, joinCode: null, feed: [], queued: 0, lockedUntil: null });
+    this.set({ status: 'idle', role: null, view: null, sessionId: null, joinCode: null, feed: [], queued: 0, lockedUntil: null, sessionMenu: false });
   }
 
   private connect(hello: object) {
@@ -392,6 +487,10 @@ export class Client {
       case 'snapshot':
         this.set({ view: m.view });
         return;
+      case 'rewind':
+        // The GM undid entries: take the rebuilt view and history, so undone lines vanish.
+        this.set({ view: m.view, feed: feedFromHistory(m.history) });
+        return;
       case 'intent':
         this.runIntent(m.intent, { role: 'player', playerId: m.from }, m.clientMsgId);
         return;
@@ -430,7 +529,13 @@ export class Client {
           }, secs * 1000 + 250);
           return;
         }
-        if (m.code === 'AUTH_FAILED' && this.state.role === 'gm') store.del(GM_KEY);
+        if (m.code === 'TOO_MANY') {
+          // Too many sockets from this network at once: back off and retry.
+          const hello = this.hello;
+          setTimeout(() => { if (hello && this.hello === hello) this.connect(hello); }, 3000);
+          return;
+        }
+        // A refused GM key is kept (Forget removes it): the relay may be restoring data.
         this.toast(m.message);
         if (m.code === 'AUTH_FAILED') {
           this.hello = null;
@@ -447,8 +552,11 @@ export class Client {
     }
   }
 
+  /** GM: mark the projected view stale; it's rebuilt lazily by getState (once per batch). */
   private refreshGmView() {
-    if (this.full) this.set({ view: projectState(this.full, { role: 'gm' }) });
+    if (!this.full) return;
+    this.viewDirty = true;
+    this.scheduleNotify();
   }
 
   /** GM device: run an intent through the authority. */

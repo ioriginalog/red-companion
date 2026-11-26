@@ -153,9 +153,9 @@ describe('relay', () => {
     gm.send({ t: 'append', entries: [{ ...auth.log[0]!, seq: 99 }] });
     expect(await gm.nextOf('error')).toMatchObject({ code: 'GAP' });
 
-    // Undo → snapshot to players.
+    // Undo → rewind to players (view and history rebuilt).
     gm.send({ t: 'truncate', toSeq: 2 });
-    const snap = await p.nextOf('snapshot');
+    const snap = await p.nextOf('rewind');
     expect(snap.view.seq).toBe(2);
     expect(snap.view.pending).toBeNull();
 
@@ -506,29 +506,45 @@ describe('round 3: lockout, history, offline queue', () => {
   }
   const H = PROTOCOL_VERSION;
 
-  it('never locks out a valid GM key or player token; locks only guessing, briefly (critic #2)', async () => {
-    let t = 1_000_000;
-    await restart({ now: () => t });
+  it('tarpits failed guessing proportionally and never blocks secrets or valid joins (round 3 #2, round 4 #10)', async () => {
+    await restart({ helloTarpit: { free: 2, msPerFailure: 100, maxMs: 300, decayMs: 60_000 } });
     const { sessionId, gmKey, joinCode } = await createSession();
     const { c: p0, first: w } = await hello({ t: 'hello', v: H, role: 'player', joinCode, name: 'Nix' });
     if (w.t !== 'welcome' || w.role !== 'player') throw new Error('welcome');
     p0.ws.close();
-    // Ten wrong codes from this address burn the burst.
-    for (let i = 0; i < 10; i++) expect((await hello({ t: 'hello', v: H, role: 'player', joinCode: 'ZZZZZZ', name: 'x' })).first).toMatchObject({ code: 'AUTH_FAILED' });
-    // More guessing is refused with a retry hint...
-    const locked = (await hello({ t: 'hello', v: H, role: 'player', joinCode: 'ZZZZZZ', name: 'x' })).first;
-    expect(locked).toMatchObject({ t: 'error', code: 'LOCKED' });
-    expect(locked.t === 'error' && locked.retryAfter).toBeGreaterThan(0);
-    // ...and so is joining as a brand-new player (a valid code could be a lucky guess).
-    expect((await hello({ t: 'hello', v: H, role: 'player', joinCode, name: 'New' })).first).toMatchObject({ code: 'LOCKED' });
-    // Secrets always get through.
-    expect((await hello({ t: 'hello', v: H, role: 'player', joinCode, name: 'Nix', playerToken: w.playerToken })).first).toMatchObject({ t: 'welcome' });
-    expect((await hello({ t: 'hello', v: H, role: 'gm', sessionId, gmKey })).first).toMatchObject({ t: 'welcome', role: 'gm' });
-    // A wrong GM key while locked is refused as locked, not tested.
-    expect((await hello({ t: 'hello', v: H, role: 'gm', sessionId, gmKey: 'guess' })).first).toMatchObject({ code: 'LOCKED' });
-    // Thirty seconds later one more attempt is allowed.
-    t += 30_000;
-    expect((await hello({ t: 'hello', v: H, role: 'player', joinCode, name: 'New' })).first).toMatchObject({ t: 'welcome' });
+    const timed = async (m: ClientMessage) => { const t0 = Date.now(); const r = await hello(m); return { ...r, ms: Date.now() - t0 }; };
+    // The first couple of failures cost nothing.
+    for (let i = 0; i < 2; i++) {
+      const r = await timed({ t: 'hello', v: H, role: 'player', joinCode: 'ZZZZZZ', name: 'x' });
+      expect(r.first).toMatchObject({ code: 'AUTH_FAILED' });
+      expect(r.ms).toBeLessThan(90);
+    }
+    // Then each extra failure adds a little delay, capped; nothing is ever LOCKED.
+    for (let i = 0; i < 6; i++) expect((await hello({ t: 'hello', v: H, role: 'player', joinCode: 'ZZZZZZ', name: 'x' })).first).toMatchObject({ code: 'AUTH_FAILED' });
+    const slow = await timed({ t: 'hello', v: H, role: 'player', joinCode: 'ZZZZZZ', name: 'x' });
+    expect(slow.first).toMatchObject({ code: 'AUTH_FAILED' });
+    expect(slow.ms).toBeGreaterThanOrEqual(280);
+    expect(slow.ms).toBeLessThan(1500);
+    // A brand-new player on the same network still gets in (only slowed).
+    const fresh = await timed({ t: 'hello', v: H, role: 'player', joinCode, name: 'New' });
+    expect(fresh.first).toMatchObject({ t: 'welcome' });
+    // Secrets are never delayed.
+    const back = await timed({ t: 'hello', v: H, role: 'player', joinCode, name: 'Nix', playerToken: w.playerToken });
+    expect(back.first).toMatchObject({ t: 'welcome' });
+    expect(back.ms).toBeLessThan(150);
+    const gm = await timed({ t: 'hello', v: H, role: 'gm', sessionId, gmKey });
+    expect(gm.first).toMatchObject({ t: 'welcome', role: 'gm' });
+    expect(gm.ms).toBeLessThan(150);
+  });
+
+  it('caps unauthenticated sockets per address', async () => {
+    await restart({ maxPendingPerIp: 2 });
+    const a = new Client(`ws://${base}/ws`); await a.open();
+    const b = new Client(`ws://${base}/ws`); await b.open();
+    const c = new Client(`ws://${base}/ws`); await c.open();
+    expect(await c.next()).toMatchObject({ t: 'error', code: 'TOO_MANY' });
+    expect(await c.closed).toBe(4000);
+    a.ws.close(); b.ws.close();
   });
 
   it('sends a player their projected history on welcome, scrubbed like live entries (critic #6)', async () => {
@@ -605,5 +621,85 @@ describe('round 3: lockout, history, offline queue', () => {
     expect(await p.nextOf('rejected')).toMatchObject({ clientMsgId: 'a', code: 'EXPIRED' });
     expect(await p.nextOf('rejected')).toMatchObject({ clientMsgId: 'b', code: 'EXPIRED' });
     gm.ws.close(); p.ws.close();
+  });
+});
+
+describe('round 4: pre-hello hardening, rate limits, log headroom, rewind', () => {
+  async function restart(o: Partial<Parameters<typeof createRelay>[0]> = {}) {
+    await relay.close();
+    relay = createRelay({ store: new MemoryStore(), createPerHour: 100, ...o });
+    await new Promise<void>((r) => relay.server.listen(0, '127.0.0.1', () => r()));
+    base = `127.0.0.1:${(relay.server.address() as AddressInfo).port}`;
+  }
+  const H = PROTOCOL_VERSION;
+  async function gmAndPlayer(o: Partial<Parameters<typeof createRelay>[0]> = {}) {
+    await restart(o);
+    const { sessionId, gmKey, joinCode } = await createSession();
+    const gm = new Client(`ws://${base}/ws`); await gm.open();
+    gm.send({ t: 'hello', v: H, role: 'gm', sessionId, gmKey });
+    await gm.nextOf('welcome');
+    const p = new Client(`ws://${base}/ws`); await p.open();
+    p.send({ t: 'hello', v: H, role: 'player', joinCode, name: 'Ana' });
+    const w = await p.nextOf('welcome');
+    await gm.nextOf('playerJoined');
+    return { gm, p, sessionId, w };
+  }
+
+  it('closes the socket on anything but one small, well-formed hello (critic #9)', async () => {
+    for (const frame of ['x'.repeat(5000), '{not json', JSON.stringify({ t: 'intent', clientMsgId: 'a', intent: { type: 'endTurn' } }), JSON.stringify({ t: 'ping' })]) {
+      const c = new Client(`ws://${base}/ws`);
+      await c.open();
+      c.ws.send(frame);
+      expect(await c.closed).toBe(4000);
+    }
+    const health = await fetch(`http://${base}/health`);
+    expect(health.status).toBe(200);
+  });
+
+  it('rate-limits a player flood with clear rejections (critic #5)', async () => {
+    const { gm, p } = await gmAndPlayer({ playerRate: { perSecond: 0.01, burst: 3, chatPerMinute: 100 } });
+    for (let i = 0; i < 5; i++) p.send({ t: 'intent', clientMsgId: `m${i}`, intent: { type: 'chat', text: `spam ${i}` } });
+    const rejected: string[] = [];
+    for (let i = 0; i < 2; i++) { const m = await p.nextOf('rejected'); rejected.push(m.code); }
+    expect(rejected).toEqual(['RATE_LIMITED', 'RATE_LIMITED']);
+    const forwarded: string[] = [];
+    for (let i = 0; i < 3; i++) forwarded.push((await gm.nextOf('intent')).clientMsgId);
+    expect(forwarded).toEqual(['m0', 'm1', 'm2']);
+  });
+
+  it('caps chatter per minute separately', async () => {
+    const { gm, p } = await gmAndPlayer({ playerRate: { perSecond: 100, burst: 100, chatPerMinute: 2 } });
+    for (let i = 0; i < 3; i++) p.send({ t: 'intent', clientMsgId: `c${i}`, intent: { type: 'rollDice', label: 'x', dice: { count: 1, sides: 10, bonus: 0 } } });
+    p.send({ t: 'intent', clientMsgId: 'move', intent: { type: 'endTurn' } });
+    expect(await p.nextOf('rejected')).toMatchObject({ clientMsgId: 'c2', code: 'RATE_LIMITED' });
+    const got = [(await gm.nextOf('intent')).clientMsgId, (await gm.nextOf('intent')).clientMsgId, (await gm.nextOf('intent')).clientMsgId];
+    expect(got).toEqual(['c0', 'c1', 'move']);
+  });
+
+  it('pauses player chatter near the log cap so GM appends keep headroom', async () => {
+    const { gm, p, sessionId } = await gmAndPlayer({ maxLogEntries: 60 }); // reserve = 50
+    const gmA = gmAuthority(gm, sessionId);
+    for (let i = 0; i < 10; i++) gmA.act({ type: 'chat', text: `gm ${i}` });
+    await p.nextOf('entries');
+    p.send({ t: 'intent', clientMsgId: 'chat', intent: { type: 'chat', text: 'hello' } });
+    expect(await p.nextOf('rejected')).toMatchObject({ clientMsgId: 'chat', code: 'LOG_NEARLY_FULL' });
+    p.send({ t: 'intent', clientMsgId: 'turn', intent: { type: 'endTurn' } });
+    expect((await gm.nextOf('intent')).clientMsgId).toBe('turn');
+    // The GM can still append.
+    gmA.act({ type: 'chat', text: 'still here' });
+    const e = await p.nextOf('entries');
+    expect(e.entries.at(-1)?.seq).toBeGreaterThan(10);
+  });
+
+  it('tells players to drop undone entries when the GM undoes (critic #16)', async () => {
+    const { gm, p, sessionId } = await gmAndPlayer();
+    const gmA = gmAuthority(gm, sessionId);
+    for (let i = 0; i < 3; i++) gmA.act({ type: 'chat', text: `line ${i}` });
+    for (let i = 0; i < 3; i++) await p.nextOf('entries');
+    gm.send({ t: 'truncate', toSeq: 1 });
+    const rw = await p.nextOf('rewind');
+    expect(rw.toSeq).toBe(1);
+    expect(rw.view.seq).toBe(1);
+    expect(rw.history.map((h) => h.seq)).toEqual([1]);
   });
 });

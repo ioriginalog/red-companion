@@ -2,13 +2,19 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { client } from './net.js';
 import { Table } from './Table.js';
 import { GmShell } from './editors/GmShell.js';
+import { SessionMenu } from './SessionMenu.js';
+
+// End-to-end tests drive the client through this hook; it's only set when a
+// test has opted in on this device (localStorage nsc.e2e = 1).
+try { if (typeof window !== 'undefined' && localStorage.getItem('nsc.e2e') === '1') (window as unknown as { __nsc: typeof client }).__nsc = client; } catch { /* storage blocked */ }
 
 export function App() {
   const s = useSyncExternalStore(client.subscribe, client.getState);
   // A reload drops a player back into their last session (Leave forgets it).
   useEffect(() => { client.autoResume(new URLSearchParams(location.search).get('join')); }, []);
-  if (s.role === 'gm' && s.view) return <GmShell s={s} table={<Table s={s} />} />;
-  if (s.role && s.view) return <Table s={s} />;
+  const menu = s.sessionMenu && s.role ? <SessionMenu s={s} /> : null;
+  if (s.role === 'gm' && s.view) return <><GmShell s={s} table={<Table s={s} />} />{menu}</>;
+  if (s.role && s.view) return <><Table s={s} />{menu}</>;
   return <Home busy={s.status === 'connecting'} toast={s.toast?.text ?? null} lockedUntil={s.lockedUntil} />;
 }
 
@@ -24,7 +30,8 @@ function useCountdown(until: number | null): number {
 }
 
 function Home({ busy, toast, lockedUntil }: { busy: boolean; toast: string | null; lockedUntil: number | null }) {
-  const saved = client.savedGm();
+  const saved = client.savedGmSessions();
+  const [forgetting, setForgetting] = useState<string | null>(null);
   const lockLeft = useCountdown(lockedUntil);
   const importRef = useRef<HTMLInputElement>(null);
   const [code, setCode] = useState(() => new URLSearchParams(location.search).get('join') ?? '');
@@ -44,11 +51,30 @@ function Home({ busy, toast, lockedUntil }: { busy: boolean; toast: string | nul
 
         <h2>Run a Session</h2>
         <div className="stack">
-          {saved && <button className="btn yellow" disabled={busy} onClick={() => void client.resumeGm(saved)}>Resume Session {saved.joinCode}</button>}
+          {saved.length > 0 && (
+            <ul className="saved-sessions" aria-label="Your sessions on this device" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
+              {saved.map((g, i) => (
+                <li key={g.sessionId} className="row" style={{ gap: 6 }}>
+                  <button className={`btn${i === 0 ? ' yellow' : ''}`} style={{ flex: 1 }} disabled={busy} onClick={() => void client.resumeGm(g)}>
+                    Resume Session {g.joinCode}
+                  </button>
+                  {forgetting === g.sessionId ? (
+                    <>
+                      <button className="btn danger" onClick={() => { client.forgetGm(g.sessionId); setForgetting(null); }} aria-label={`Confirm forgetting session ${g.joinCode}`}>Forget</button>
+                      <button className="btn ghost" onClick={() => setForgetting(null)}>Keep</button>
+                    </>
+                  ) : (
+                    <button className="btn ghost" onClick={() => setForgetting(g.sessionId)} aria-label={`Forget session ${g.joinCode} on this device`} title="Remove this GM key from this device">Forget</button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {forgetting && <div className="dim" role="status" style={{ fontSize: 13 }}>Forgetting removes the GM key from this device. Without a GM backup you can’t run that session again.</div>}
           <button className="btn" disabled={busy} onClick={() => void client.createSession()}>Create a New Session</button>
-          <button className="btn ghost" disabled={busy} onClick={() => importRef.current?.click()} title="Restore a session export as a new session">Import Session</button>
+          <button className="btn ghost" disabled={busy} onClick={() => importRef.current?.click()} title="Open a GM backup, or restore a session export as a new session">Import Session or GM Backup</button>
           <input
-            ref={importRef} type="file" accept="application/json,.json" hidden aria-label="Session export file"
+            ref={importRef} type="file" accept="application/json,.json" hidden aria-label="Session export or GM backup file"
             onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void client.importSession(f); }}
           />
         </div>

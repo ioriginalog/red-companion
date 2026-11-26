@@ -46,14 +46,25 @@ export interface RelayOptions {
   offlineQueue?: { perSession?: number; perPlayer?: number; maxAgeMs?: number };
   /** Projected entries in a player's welcome history. Default 300. */
   historyEntries?: number;
+  /**
+   * Failed-hello tarpit (per IP). The first `free` failures cost nothing; after
+   * that each unauthenticated hello waits `msPerFailure` per extra failure, up to
+   * `maxMs`. Failures decay one per `decayMs`. Nothing is ever hard-blocked.
+   */
+  helloTarpit?: { free?: number; msPerFailure?: number; maxMs?: number; decayMs?: number };
+  /** Unauthenticated sockets allowed per IP at once. Default 8. */
+  maxPendingPerIp?: number;
+  /** Player intent limits (per player): sustained rate/s, burst, and chat-like intents per minute. */
+  playerRate?: { perSecond?: number; burst?: number; chatPerMinute?: number };
   /** Clock for tests. */
   now?: () => number;
   log?: (msg: string) => void;
 }
 
-/** Failed-hello limiter: a token bucket per IP (burst 10, one more every 30 s). */
-const HELLO_BURST = 10;
-const HELLO_REFILL_MS = 30_000;
+/** Largest hello frame; anything bigger before authentication closes the socket. */
+const MAX_HELLO_BYTES = 4096;
+/** Intents that only add chatter; refused first when the log nears its cap. */
+const CHATTY: ReadonlySet<string> = new Set(['chat', 'rollDice', 'rollCheck']);
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -75,7 +86,11 @@ interface Room {
   queue: QueuedIntent[];
   /** Deliver the queue after the reconnecting GM has fetched the log. */
   flushOnFetch: boolean;
+  /** Per-player intent limiter. */
+  rates: Map<string, PlayerRate>;
 }
+
+interface PlayerRate { tokens: number; at: number; chat: number[] }
 
 interface QueuedIntent { playerId: string; clientMsgId: string; intent: Intent; at: number }
 
@@ -112,10 +127,15 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
   const qPerPlayer = opts.offlineQueue?.perPlayer ?? 10;
   const qMaxAge = opts.offlineQueue?.maxAgeMs ?? 600_000;
   const historyN = opts.historyEntries ?? 300;
+  const tarpit = { free: 5, msPerFailure: 1000, maxMs: 5000, decayMs: 30_000, ...opts.helloTarpit };
+  const maxPending = opts.maxPendingPerIp ?? 8;
+  const rate = { perSecond: 5, burst: 20, chatPerMinute: 30, ...opts.playerRate };
+  /** Headroom kept for the GM: chat and free rolls stop this many entries short of the cap. */
+  const chatReserve = Math.max(50, Math.floor(maxLog * 0.02));
 
   const rooms = new Map<string, Room>();
   const byJoinCode = new Map<string, Room>();
-  for (const meta of store.listMeta()) indexRoom({ meta, log: null, state: null, gm: null, players: new Map(), queue: [], flushOnFetch: false });
+  for (const meta of store.listMeta()) indexRoom({ meta, log: null, state: null, gm: null, players: new Map(), queue: [], flushOnFetch: false, rates: new Map() });
 
   function indexRoom(r: Room) {
     rooms.set(r.meta.sessionId, r);
@@ -277,7 +297,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     const meta: SessionMeta = { sessionId, gmKeyHash: sha256(gmKey), joinCode, createdAt: new Date().toISOString(), players: [] };
     store.saveMeta(meta);
     if (entries.length) store.appendLog(sessionId, entries);
-    indexRoom({ meta, log: entries, state: replay(sessionId, entries), gm: null, players: new Map(), queue: [], flushOnFetch: false });
+    indexRoom({ meta, log: entries, state: replay(sessionId, entries), gm: null, players: new Map(), queue: [], flushOnFetch: false, rates: new Map() });
     log(`session ${entries.length ? `imported (${entries.length} entries)` : 'created'} ${sessionId}`);
     return { sessionId, gmKey, joinCode };
   }
@@ -359,7 +379,10 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
   });
   // ws re-emits the HTTP server's errors; the server's own listener handles them.
   wss.on('error', (e) => log(`wss error: ${e.message}`));
-  const helloBuckets = new Map<string, { tokens: number; at: number }>();
+  /** Failed-hello score per IP (decays over time). */
+  const helloFails = new Map<string, { score: number; at: number }>();
+  /** Unauthenticated sockets per IP. */
+  const pendingByIp = new Map<string, number>();
 
   const send = (ws: WebSocket, m: ServerMessage) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); };
   const fail = (c: Conn, code: string, message: string, close = false) => {
@@ -378,13 +401,26 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
       send(ws, { t: 'entries', entries: entries.map((e, i) => projectEntry(e, viewer, statesAfter[i]!, undefined, i === 0 ? start : statesAfter[i - 1])) });
     }
   }
-  function broadcastSnapshot(r: Room & { state: SessionState }) {
-    for (const [ws, playerId] of r.players) send(ws, { t: 'snapshot', view: projectState(r.state, { role: 'player', playerId }) });
+  /** After undo or a log replacement: each player's view and history, rebuilt, so undone lines disappear. */
+  function broadcastRewind(r: Room & { state: SessionState; log: LogEntry[] }) {
+    for (const [ws, playerId] of r.players) {
+      const viewer: Viewer = { role: 'player', playerId };
+      send(ws, { t: 'rewind', toSeq: r.state.seq, view: projectState(r.state, viewer), history: historyFor(r, viewer) });
+    }
   }
 
   wss.on('connection', (ws, req) => {
     const c: Conn = { ws, alive: true, ip: ipOf(req), signalTokens: SIGNAL_BURST, signalAt: Date.now() };
-    const helloTimer = setTimeout(() => { if (!c.room) ws.close(4000, 'HELLO_TIMEOUT'); }, 10_000);
+    // Bound parallel guessing: only a few unauthenticated sockets per address.
+    const pending = (pendingByIp.get(c.ip) ?? 0) + 1;
+    pendingByIp.set(c.ip, pending);
+    let counted = true;
+    const unpend = () => {
+      if (!counted) return;
+      counted = false;
+      const n = (pendingByIp.get(c.ip) ?? 1) - 1;
+      if (n > 0) pendingByIp.set(c.ip, n); else pendingByIp.delete(c.ip);
+    };
     ws.on('pong', () => { c.alive = true; });
     // Oversized or malformed frames raise here; without a listener ws would
     // rethrow and take down the whole process (every session).
@@ -393,17 +429,32 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
       try { ws.terminate(); } catch { /* already closed */ }
     });
     (ws as WebSocket & { conn?: Conn }).conn = c;
+    if (pending > maxPending) {
+      send(ws, { t: 'error', code: 'TOO_MANY', message: 'Too many connections from this network. Try again in a moment.' });
+      ws.close(4000, 'TOO_MANY');
+      unpend();
+      return;
+    }
+    const helloTimer = setTimeout(() => { if (!c.room) ws.close(4000, 'HELLO_TIMEOUT'); }, 10_000);
+    let helloSeen = false;
 
     ws.on('message', (data, isBinary) => {
+      if (!c.room) {
+        // Before authentication: exactly one small, well-formed hello, or the socket goes.
+        const size = Array.isArray(data) ? data.reduce((n, b) => n + b.length, 0) : (data as Buffer | ArrayBuffer).byteLength;
+        if (isBinary || size > MAX_HELLO_BYTES) { ws.close(4000, 'BAD_HELLO'); return; }
+        if (helloSeen) return; // a hello is being checked (tarpit); ignore anything else
+        const msg = parseClientMessage(data.toString());
+        if (!msg || msg.t !== 'hello') return fail(c, msg ? 'HELLO_FIRST' : 'BAD_MESSAGE', msg ? 'Send hello first.' : 'Malformed message.', true);
+        helloSeen = true;
+        clearTimeout(helloTimer);
+        return beginHello(c, msg, () => { helloSeen = false; }, unpend);
+      }
       if (isBinary) return fail(c, 'BAD_MESSAGE', 'Text frames only.');
       const msg = parseClientMessage(data.toString());
       if (!msg) return fail(c, 'BAD_MESSAGE', 'Malformed message.');
       if (msg.t === 'ping') return send(ws, { t: 'pong' });
-      if (!c.room) {
-        if (msg.t !== 'hello') return fail(c, 'HELLO_FIRST', 'Send hello first.', true);
-        clearTimeout(helloTimer);
-        return onHello(c, msg);
-      }
+      if (msg.t === 'hello') return fail(c, 'BAD_MESSAGE', 'Already connected.');
       if (msg.t === 'signal') return onSignal(c, c.room, msg.signal);
       if (c.role === 'gm') onGm(c, c.room, msg);
       else onPlayer(c, c.room, msg);
@@ -411,6 +462,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
 
     ws.on('close', () => {
       clearTimeout(helloTimer);
+      unpend();
       const r = c.room;
       if (!r) return;
       if (c.role === 'gm' && r.gm === ws) {
@@ -426,32 +478,50 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     });
   });
 
-  // ----- Hello limiter ------------------------------------------------------------
+  // ----- Hello tarpit -------------------------------------------------------------
   //
-  // Only failures cost anything, and secrets always get through: a correct GM
-  // key or player token can't be guessed, so it's never refused, even from an
-  // address that is out of attempts. What a locked address can't do is test
-  // more join codes or keys (or join as a brand-new player) until the bucket
-  // refills, one attempt every 30 seconds.
-  function bucket(ip: string) {
+  // Secrets always get straight through: a correct GM key or player token can't
+  // be guessed, so it's never delayed. Everything else from an address that has
+  // been failing waits a little: nothing for the first few failures, then about
+  // a second per extra failure, capped at a few seconds. Join codes are 6 of 31
+  // characters (~887 million); with at most a handful of sockets per address and
+  // a few seconds per try, guessing is hopeless, while a household that mistypes
+  // a code (or shares an address with someone who does) is only ever slowed,
+  // never locked out.
+  function failScore(ip: string) {
     const t = now();
-    const b = helloBuckets.get(ip) ?? { tokens: HELLO_BURST, at: t };
-    b.tokens = Math.min(HELLO_BURST, b.tokens + (t - b.at) / HELLO_REFILL_MS);
-    b.at = t;
-    helloBuckets.set(ip, b);
-    return b;
+    const f = helloFails.get(ip) ?? { score: 0, at: t };
+    f.score = Math.max(0, f.score - (t - f.at) / tarpit.decayMs);
+    f.at = t;
+    if (f.score > 0) helloFails.set(ip, f); else helloFails.delete(ip);
+    return f;
   }
-  const retryAfter = (ip: string) => Math.max(1, Math.ceil((1 - bucket(ip).tokens) * HELLO_REFILL_MS / 1000));
-  function locked(c: Conn) { return bucket(c.ip).tokens < 1; }
-  function refuseLocked(c: Conn) {
-    const secs = retryAfter(c.ip);
-    send(c.ws, { t: 'error', code: 'LOCKED', message: `Too many failed attempts from this network. Try again in ${secs} seconds.`, retryAfter: secs });
-    c.ws.close(4000, 'LOCKED');
-  }
+  const tarpitMs = (ip: string) => Math.min(tarpit.maxMs, Math.max(0, Math.ceil(failScore(ip).score - tarpit.free)) * tarpit.msPerFailure);
   function helloFailed(c: Conn, message: string) {
-    if (locked(c)) return refuseLocked(c);
-    bucket(c.ip).tokens -= 1;
+    const f = failScore(c.ip);
+    f.score += 1;
+    helloFails.set(c.ip, f);
     fail(c, 'AUTH_FAILED', message, true);
+  }
+
+  /** True when the hello carries a secret that checks out (never tarpitted). */
+  function hasValidSecret(msg: Extract<ClientMessage, { t: 'hello' }>): boolean {
+    if (msg.role === 'gm') {
+      const r = rooms.get(msg.sessionId);
+      return !!r && sameHash(sha256(msg.gmKey), r.meta.gmKeyHash);
+    }
+    const r = byJoinCode.get(msg.joinCode.toUpperCase());
+    return !!r && !!msg.playerToken && r.meta.players.some((p) => sameHash(p.tokenHash, sha256(msg.playerToken!)));
+  }
+
+  function beginHello(c: Conn, msg: Extract<ClientMessage, { t: 'hello' }>, reset: () => void, unpend: () => void) {
+    const delay = hasValidSecret(msg) ? 0 : tarpitMs(c.ip);
+    const go = () => {
+      if (c.ws.readyState !== WebSocket.OPEN) return;
+      onHello(c, msg);
+      if (c.room) unpend(); else reset();
+    };
+    if (delay > 0) setTimeout(go, delay); else go();
   }
 
   function onHello(c: Conn, msg: Extract<ClientMessage, { t: 'hello' }>) {
@@ -471,7 +541,6 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     }
     const r = byJoinCode.get(msg.joinCode.toUpperCase());
     let rec = r && msg.playerToken ? r.meta.players.find((p) => sameHash(p.tokenHash, sha256(msg.playerToken!))) : undefined;
-    if (!rec && locked(c)) return refuseLocked(c);
     if (!r) return helloFailed(c, 'Unknown join code.');
     ensureLoaded(r);
     let token = msg.playerToken;
@@ -561,7 +630,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
         r.log = r.log.slice(0, msg.toSeq);
         r.state = replay(r.meta.sessionId, r.log);
         store.replaceLog(r.meta.sessionId, r.log);
-        broadcastSnapshot(r);
+        broadcastRewind(r);
         return;
       }
       case 'replaceLog': {
@@ -571,7 +640,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
         r.log = msg.entries;
         r.state = state;
         store.replaceLog(r.meta.sessionId, r.log);
-        broadcastSnapshot(r);
+        broadcastRewind(r);
         return;
       }
       case 'fetchLog':
@@ -597,8 +666,32 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     for (const p of r.players.keys()) if (p !== c.ws) send(p, out);
   }
 
+  /** Per-player limiter: a token bucket for all intents, plus a per-minute cap on chatter. */
+  function rateCheck(r: Room, playerId: string, intent: Intent): string | null {
+    const t = now();
+    const b = r.rates.get(playerId) ?? { tokens: rate.burst, at: t, chat: [] };
+    b.tokens = Math.min(rate.burst, b.tokens + ((t - b.at) / 1000) * rate.perSecond);
+    b.at = t;
+    r.rates.set(playerId, b);
+    if (b.tokens < 1) return 'Slow down: too many actions at once.';
+    if (CHATTY.has(intent.type)) {
+      b.chat = b.chat.filter((x) => t - x < 60_000);
+      if (b.chat.length >= rate.chatPerMinute) return 'Slow down: too many messages and rolls this minute.';
+      b.chat.push(t);
+    }
+    b.tokens -= 1;
+    return null;
+  }
+
   function onPlayer(c: Conn, r: Room, msg: ClientMessage) {
     if (msg.t !== 'intent') return fail(c, 'NOT_ALLOWED', `Players can't send ${msg.t}.`);
+    ensureLoaded(r);
+    // Keep headroom for the GM: chatter stops before the log fills up.
+    if (CHATTY.has(msg.intent.type) && r.log.length >= maxLog - chatReserve) {
+      return send(c.ws, { t: 'rejected', clientMsgId: msg.clientMsgId, code: 'LOG_NEARLY_FULL', message: 'This session’s log is nearly full, so chat and free rolls are paused. The GM can export it and start a fresh session.' });
+    }
+    const limited = rateCheck(r, c.playerId!, msg.intent);
+    if (limited) return send(c.ws, { t: 'rejected', clientMsgId: msg.clientMsgId, code: 'RATE_LIMITED', message: limited });
     const t = now();
     // While the GM is away (or still catching up), hold the intent; bounded and short-lived.
     if (!r.gm || r.flushOnFetch) {
@@ -615,7 +708,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
 
   // Heartbeat: drop dead connections every 30 s.
   const beat = setInterval(() => {
-    for (const [ip, b] of helloBuckets) if (b.tokens + (now() - b.at) / HELLO_REFILL_MS >= HELLO_BURST) helloBuckets.delete(ip);
+    for (const ip of [...helloFails.keys()]) failScore(ip);
     for (const ws of wss.clients) {
       const c = (ws as WebSocket & { conn?: Conn }).conn;
       if (!c) continue;

@@ -6,6 +6,7 @@ const port = Number(process.env.PORT ?? 8080);
 const dataDir = process.env.DATA_DIR;
 const origins = process.env.ALLOWED_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean);
 const hops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+const maxLog = Number(process.env.MAX_LOG_ENTRIES ?? 20_000);
 
 const store = dataDir ? new FileStore(dataDir) : new MemoryStore();
 if (!dataDir) console.warn('DATA_DIR not set: sessions are kept in memory and lost on restart.');
@@ -15,6 +16,7 @@ const { server, close } = createRelay({
   // Unset = same-origin only. '*' must be explicit.
   allowedOrigins: !origins || origins.length === 0 ? 'same-origin' : origins.length === 1 && origins[0] === '*' ? '*' : origins,
   trustProxyHops: Number.isInteger(hops) && hops > 0 ? hops : 0,
+  maxLogEntries: Number.isInteger(maxLog) && maxLog >= 1000 ? maxLog : 20_000,
   webDir: process.env.WEB_DIR ?? fileURLToPath(new URL('../../web/dist', import.meta.url)),
   log: (m) => console.log(m),
 });

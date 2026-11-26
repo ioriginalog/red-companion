@@ -15,7 +15,8 @@
     "build": "npm run build -w @cprc/rules-core && npm run build -w @cprc/session && npm run build -w @cprc/web && npm run build -w @cprc/relay",
     "test": "npm run build && npm test --workspaces",
     "typecheck": "npm run typecheck --workspaces",
-    "start": "node apps/relay/dist/server.js"
+    "start": "node apps/relay/dist/server.js",
+    "e2e": "npm run build && python3 apps/web/e2e/run.py"
   },
   "devDependencies": {
     "@types/node": "^26.6.10",
