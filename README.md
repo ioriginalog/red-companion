@@ -19,6 +19,7 @@ See [`docs/ADR-001-architecture.md`](docs/ADR-001-architecture.md) for the stack
 npm ci
 npm test            # builds all packages, then runs every test suite
 npm run build && PORT=8080 DATA_DIR=./.data npm start   # relay + web client on http://localhost:8080
+npm run e2e   # browser end-to-end suite: real relay + headless Chrome (needs Python Playwright and /usr/bin/google-chrome or CHROME=...)
 npm run dev -w @cprc/web   # hot-reload client on :5173 (proxies to the relay on :8080)
 ```
 
