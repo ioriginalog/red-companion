@@ -165,6 +165,10 @@ function authorize(state: SessionState, intent: Intent, by: Viewer) {
       if (!state.encounter.active) throw new SessionError('INVALID', 'No encounter is running.');
       const cur = currentActorId(state);
       if (by.role !== 'gm' && (!cur || getActor(state, cur).controller !== by.playerId)) throw new SessionError('NOT_YOUR_TURN', 'It isn’t your Turn.');
+      // A Mortally Wounded character can't skip the Death Save by ending the Turn (the GM may, as referee).
+      if (by.role !== 'gm' && cur && state.encounter.deathSaveRequiredFor === cur) {
+        throw new SessionError('DEATH_SAVE_FIRST', `${getActor(state, cur).combatant.name} must roll a Death Save first.`);
+      }
       break;
     }
     default:

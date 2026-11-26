@@ -202,7 +202,8 @@ export function Table({ s }: { s: ClientState }) {
   }, [currentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ----- Keyboard shortcuts -----
-  const canEndTurn = enc.active && (isGm || mine(currentId)) && !view.pending;
+  const owesDeathSave = !!currentId && enc.deathSaveRequiredFor === currentId;
+  const canEndTurn = enc.active && (isGm || (mine(currentId) && !owesDeathSave)) && !view.pending;
   const keyState = { canAct, usage, attack, weapon, canEndTurn, mapMode };
   const keys = useRef(keyState);
   keys.current = keyState;

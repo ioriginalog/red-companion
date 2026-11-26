@@ -214,3 +214,15 @@ describe('map setup', () => {
     expect(t.state.map!.tokens.ganger).toBeUndefined();
   });
 });
+
+describe('Death Save before ending the Turn', () => {
+  it('a player can’t end a Turn that owes a Death Save; the GM can', () => {
+    const t = setup();
+    t.send({ type: 'endTurn' }, GM);
+    expect(t.send({ type: 'adjustHp', actorId: 'solo', delta: -45 }, GM).ok).toBe(true);
+    t.send({ type: 'endTurn' }, GM);
+    expect(t.state.encounter.deathSaveRequiredFor).toBe('solo');
+    expect(t.send({ type: 'endTurn' }, P1)).toMatchObject({ ok: false, code: 'DEATH_SAVE_FIRST' });
+    expect(t.send({ type: 'endTurn' }, GM).ok).toBe(true);
+  });
+});
