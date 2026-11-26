@@ -35,6 +35,8 @@ export interface TurnHooks {
   settleTurn: (enc: Encounter, actors: Record<string, Actor>) => Encounter;
   /** Start-of-Turn upkeep for whoever is now current (e.g. On Fire). */
   onTurnStart: (state: SessionState, enc: Encounter) => { events: CombatEvent[]; actors: Record<string, Actor> };
+  /** Round 4 R4: full Turn-start upkeep (On Fire, lost Actions, reminders, new-Round prompts). */
+  turnUpkeep?: (state: SessionState, enc: Encounter, prevRound: number) => { events: CombatEvent[]; actors: Record<string, Actor>; encounter: Encounter };
 }
 
 // ----- Validation -------------------------------------------------------------------------
@@ -147,8 +149,13 @@ function removeFromInitiative(state: SessionState, actorId: string, hooks: TurnH
     ...enc, order, turnIndex, round, active: enc.active && order.length > 0, initiative,
     ...(wasCurrent ? { usage: undefined, deathSaveRequiredFor: null } : {}),
   };
-  const encounter = hooks.settleTurn(base, state.actors);
-  return { events: [{ type: 'leftInitiative', visibility: 'public', combatantId: actorId }], patch: { encounter } };
+  const settled = hooks.settleTurn(base, state.actors);
+  // Round 4 R4: the next actor's Turn starts if the current one left.
+  if (!wasCurrent || !hooks.turnUpkeep) return { events: [{ type: 'leftInitiative', visibility: 'public', combatantId: actorId }], patch: { encounter: settled } };
+  const up = hooks.turnUpkeep(state, settled, enc.round);
+  const patch: StatePatch = { encounter: up.encounter };
+  if (Object.keys(up.actors).length) patch.actors = up.actors;
+  return { events: [{ type: 'leftInitiative', visibility: 'public', combatantId: actorId }, ...up.events], patch };
 }
 
 function delayTurn(state: SessionState, after: string | undefined, hooks: TurnHooks): Result {
@@ -169,9 +176,11 @@ function delayTurn(state: SessionState, after: string | undefined, hooks: TurnHo
   const initiative = { ...totals, [cur]: after !== undefined ? (totals[after] ?? lowest) : lowest - 1 };
 
   // The next actor's Turn starts now (same index, new occupant).
-  const encounter = hooks.settleTurn({ ...enc, order, initiative, usage: undefined, deathSaveRequiredFor: null }, state.actors);
+  const settled = hooks.settleTurn({ ...enc, order, initiative, usage: undefined, deathSaveRequiredFor: null }, state.actors);
+  // Round 4 R4: full upkeep when the authority provides it.
+  const upkeep = hooks.turnUpkeep ? hooks.turnUpkeep(state, settled, enc.round) : { ...hooks.onTurnStart(state, settled), encounter: settled };
+  const encounter = upkeep.encounter;
   const patch: StatePatch = { encounter };
-  const upkeep = hooks.onTurnStart(state, encounter);
   if (Object.keys(upkeep.actors).length) patch.actors = upkeep.actors;
   const next = encounter.order[encounter.turnIndex];
   if (state.map && next && state.map.watches[next]) {

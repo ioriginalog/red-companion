@@ -15,6 +15,7 @@
  *     one more Critical Injury, and Death Save Penalty +1.
  * 10. Emit Wound State change.
  */
+import { onInjuryGained } from './injury-effects.js'; // Round 4 R4
 import { CRIT_BONUS_DAMAGE } from './data/core.js';
 import { CRIT_TABLES, type CriticalInjuryDef, getInjury } from './data/critical-injuries.js';
 import type { Dice } from './dice.js';
@@ -144,11 +145,11 @@ function inflictRandom(t: Combatant, table: CritTable, cause: 'damageDice' | 'mo
 }
 
 function inflict(t: Combatant, def: CriticalInjuryDef, cause: 'damageDice' | 'mortallyWounded' | 'aimedLeg', rolls: [number, number][], events: CombatEvent[]): Combatant {
-  const next: Combatant = {
+  const next: Combatant = onInjuryGained({ // Round 4 R4: queue next-Turn effects (Spinal Injury)
     ...t,
     hp: { ...t.hp, current: t.hp.current - CRIT_BONUS_DAMAGE },
     criticalInjuries: [...t.criticalInjuries, { injuryId: def.id, table: def.table, quickFixed: false }],
-  };
+  }, def);
   events.push({ type: 'criticalInjury', visibility: 'public', targetId: t.id, injuryId: def.id, table: def.table, cause, rolls, bonusDamage: CRIT_BONUS_DAMAGE, hpAfter: next.hp.current });
   if (def.effect.dropsHeldItem) events.push({ type: 'heldItemDropped', visibility: 'public', targetId: t.id, reason: 'criticalInjury' });
   return next;

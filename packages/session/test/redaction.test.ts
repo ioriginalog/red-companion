@@ -125,6 +125,12 @@ const FIXTURES: { [K in CombatEvent['type']]: Fixture<K> } = {
   damageDeflected: (s) => ({ type: 'damageDeflected', visibility: P, targetId: s, amount: S }),
   spotWeakness: (s) => ({ type: 'spotWeakness', visibility: P, combatantId: s, bonus: S }),
   areaDodgeRequested: (s) => ({ type: 'areaDodgeRequested', visibility: P, combatantId: s, attackTotal: 18 }),
+  // --- Round 4 R4 ---
+  injuryEffect: (s) => ({ type: 'injuryEffect', visibility: P, targetId: s, injuryId: 'brokenRibs', effect: 'rebleed', damage: 5 }),
+  turnReminders: (s) => ({ type: 'turnReminders', visibility: P, combatantId: s, items: [{ key: 'prone', text: 'Prone: get up before moving.' }] }),
+  speedwareChanged: (s) => ({ type: 'speedwareChanged', visibility: P, combatantId: s, state: 'expired' }),
+  netThreat: (s, o) => ({ type: 'netThreat', visibility: 'gm', audience: ['gm'], combatantId: o, ice: [{ floorId: 'f1', index: 0, name: 'Tripwire' }], demon: { floorId: 'f1', name: 'Gatekeeper', netActions: S } }),
+  // --- end Round 4 R4 ---
 };
 
 function entryOf(events: CombatEvent[], seq = 1): LogEntry {

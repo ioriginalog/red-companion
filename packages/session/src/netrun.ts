@@ -155,6 +155,8 @@ export function parseNetOp(v: unknown): NetOp {
     case 'revealAccess': return { op: 'revealAccess', archId: id(v.archId, 'Architecture'), found: bool(v.found, 'Found') };
     case 'iceAttack': return { op: 'iceAttack', actorId: actorId(), index: int(v.index, 0, 2, 'ICE') };
     case 'forceJackOut': return { op: 'forceJackOut', actorId: actorId() };
+    case 'iceTurn': return { op: 'iceTurn', actorId: actorId() }; // Round 4 R4
+    case 'demonZap': return { op: 'demonZap', actorId: actorId(), count: int(v.count, 1, 6, 'Zaps') }; // Round 4 R4
     case 'jackIn': return { op: 'jackIn', actorId: actorId(), archId: id(v.archId, 'Architecture') };
     case 'jackOut': return { op: 'jackOut', actorId: actorId() };
     case 'move': return { op: 'move', actorId: actorId(), toFloorId: id(v.toFloorId, 'Floor') };
@@ -454,6 +456,40 @@ export function executeNet(state: SessionState, rawOp: unknown, by: Viewer, dice
       jackOut(c, getActor(state, op.actorId), true);
       break;
     }
+    // --- Round 4 R4 ---
+    case 'iceTurn': {
+      gmOnly(by);
+      const a = getActor(state, op.actorId);
+      const { run, arch } = getRun(c, a);
+      const live = liveIce(run, run.floorId);
+      if (!live.length) throw new SessionError('INVALID', `No live Black ICE on ${a.combatant.name}’s floor.`);
+      const floor = arch.floors[run.floorId]!;
+      for (const i of live) {
+        if (!c.net.runs[a.id] || (c.actors[a.id]?.combatant.conditions.dead ?? true)) break; // jacked out or flatlined mid-turn
+        iceAttacks(c, c.actors[a.id]!, floor, i);
+      }
+      break;
+    }
+    case 'demonZap': {
+      gmOnly(by);
+      const a = getActor(state, op.actorId);
+      const { run, arch } = getRun(c, a);
+      const floor = arch.floors[run.floorId]!;
+      const demon = floor.demon;
+      if (!demon || (run.demonRez[floor.id] ?? 0) <= 0) throw new SessionError('INVALID', `No live Demon on ${a.combatant.name}’s floor.`);
+      if (op.count > demon.netActions) throw new SessionError('INVALID', `${demon.name} has ${demon.netActions} NET Actions.`);
+      const rig = withRoleInterface(a, c.net.rigs[a.id]!);
+      for (let n = 0; n < op.count; n++) {
+        if (c.actors[a.id]?.combatant.conditions.dead) break;
+        const atk = statCheck(`${demon.name} Interface`, demon.interface, c.dice);
+        const def = netCheck(rig, 'zap', c.dice);
+        const hit = atk.total > def.total; // ties to the defending runner
+        say(c, c.actors[a.id]!, 'demonZap', `${demon.name} Zaps ${a.combatant.name}: ${atk.total} vs ${def.total}. ${hit ? 'Hit.' : 'Miss.'}`, { check: atk, vs: def, success: hit });
+        if (hit) damageRunner(c, c.actors[a.id]!, rollNetDice({ count: 1, sides: 6 }, c.dice).reduce((s, d) => s + d, 0), `${demon.name}’s Zap`);
+      }
+      break;
+    }
+    // --- end Round 4 R4 ---
 
     // ----- Runner -----
     case 'jackIn': {
@@ -732,3 +768,27 @@ export function projectNet(state: SessionState, viewer: Viewer): NetView | undef
     .map((a) => ({ id: a.id, name: a.name, access: a.access }));
   return { quickhacks2070s: net.quickhacks2070s, rigs, runs, jackable, ...(viewer.role === 'gm' ? { full: net } : {}) };
 }
+
+// --- Round 4 R4 ---
+/**
+ * Who has Black ICE or a Demon to answer to this Round (GM prompt).
+ * Black ICE that engages a runner acts at the top of every Round, one attack each,
+ * until Derezzed or Slid away from (Secondary: community Player Handbook). Demons
+ * spend their NET Actions on Control Nodes, then Zap (Secondary; the Control part
+ * stays a GM call).
+ */
+export function netThreats(state: SessionState): { runnerId: string; ice: { floorId: string; index: number; name: string }[]; demon?: { floorId: string; name: string; netActions: number } }[] {
+  const net = state.netrun;
+  if (!net) return [];
+  const out: ReturnType<typeof netThreats> = [];
+  for (const [runnerId, run] of Object.entries(net.runs)) {
+    const arch = net.architectures[run.archId];
+    const floor = arch?.floors[run.floorId];
+    if (!floor || state.actors[runnerId]?.combatant.conditions.dead) continue;
+    const ice = liveIce(run, floor.id).map((index) => ({ floorId: floor.id, index, name: floor.ice![index]!.name }));
+    const demon = floor.demon && (run.demonRez[floor.id] ?? 0) > 0 ? { floorId: floor.id, name: floor.demon.name, netActions: floor.demon.netActions } : undefined;
+    if (ice.length || demon) out.push({ runnerId, ice, ...(demon ? { demon } : {}) });
+  }
+  return out;
+}
+// --- end Round 4 R4 ---

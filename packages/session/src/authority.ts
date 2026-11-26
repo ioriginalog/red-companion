@@ -27,6 +27,8 @@ import { executeNet } from './netrun.js';
 // --- end Track N ---
 import { doAreaAttack, doSuppressiveFire } from './grid-area.js';
 import { validateIntent } from './validate.js';
+import { endTurnUpkeep, turnUpkeep } from './upkeep.js'; // Round 4 R4
+import { attackAvailability } from './availability.js'; // Round 4 R4
 import { executeExtra, extrasAdjust, extrasGate, trackExtras } from './extras.js'; // Round 3 X
 // --- Track K ---
 import { authorizeSystems, beforeDamage, executeSystems, isSystemsIntent, onTurnStart, SYSTEMS_GM_ONLY, SYSTEMS_WHILE_PENDING, wieldCheck } from './systems.js';
@@ -108,6 +110,16 @@ function authorize(state: SessionState, intent: Intent, by: Viewer) {
     case 'meleeAttack':
       requireActing(state, by, intent.attackerId, isWatchShot);
       getActor(state, intent.defenderId);
+      { // Round 4 R4: the same availability rule the client preview uses
+        const att = state.actors[intent.attackerId]!;
+        const w = intent.type === 'rangedAttack'
+          ? att.weapons.find((x) => x.id === intent.weaponId)
+          : intent.with.kind === 'weapon' ? att.weapons.find((x) => x.id === (intent.with as { weaponId: string }).weaponId) : 'brawling' as const;
+        if (w) {
+          const av = attackAvailability(state, intent.attackerId, w, intent.defenderId);
+          if (!av.ok) throw new SessionError('INVALID', av.reason ?? 'That attack isn’t possible now.');
+        }
+      }
       if (intent.type === 'rangedAttack' && intent.ignoreLineOfSight && by.role !== 'gm') throw new SessionError('FORBIDDEN', 'Only the GM can rule a target visible.');
       break;
     case 'moveToken':
@@ -220,9 +232,11 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
         initiative: Object.fromEntries(order.map((e) => [e.combatantId, e.total])),
         ...(state.encounter.delayAllowed !== undefined ? { delayAllowed: state.encounter.delayAllowed } : {}),
       }, state.actors);
-      const patch: StatePatch = { encounter, pending: null };
+      const up = turnUpkeep(state, encounter, encounter.round); // Round 4 R4: first Turn's upkeep (no Round tick)
+      const patch: StatePatch = { encounter: up.encounter, pending: null };
+      if (Object.keys(up.actors).length) patch.actors = up.actors;
       if (state.map && Object.keys(state.map.watches).length) patch.map = { ...state.map, watches: {} };
-      return { events, patch };
+      return { events: [...events, ...up.events], patch };
     }
     case 'endEncounter':
       return { events: [], patch: { encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null, ...(state.encounter.delayAllowed !== undefined ? { delayAllowed: state.encounter.delayAllowed } : {}) /* Round 3 P */ }, pending: null } };
@@ -230,17 +244,23 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       if (!state.pending) throw new SessionError('NO_PENDING', 'Nothing to cancel.');
       return { events: [], patch: { pending: null } };
     case 'endTurn': {
-      const encounter = settleTurn({ ...advance(state.encounter), usage: undefined }, state.actors);
+      // Round 4 R4: end-of-Turn injuries (re-bleed, ear), then the next Turn's upkeep
+      // (On Fire, lost Actions, reminders) and new-Round prompts (speedware, Black ICE).
+      const end = endTurnUpkeep(state);
+      const after: SessionState = { ...state, actors: { ...state.actors, ...end.actors } };
+      const settled = settleTurn({ ...advance(state.encounter), usage: undefined }, after.actors);
+      const up = turnUpkeep(after, settled, state.encounter.round);
+      const encounter = up.encounter;
       const patch: StatePatch = { encounter };
-      const burn = onTurnStart(state, encounter); // Track K: On Fire
-      if (Object.keys(burn.actors).length) patch.actors = burn.actors;
+      const touched = { ...end.actors, ...up.actors };
+      if (Object.keys(touched).length) patch.actors = touched;
       // A watch lasts until the watcher's next Turn.
       const next = encounter.order[encounter.turnIndex];
       if (state.map && next && state.map.watches[next]) {
         const { [next]: _ended, ...watches } = state.map.watches;
         patch.map = { ...state.map, watches };
       }
-      return { events: burn.events, patch };
+      return { events: [...end.events, ...up.events], patch };
     }
 
     case 'rangedAttack': {
@@ -376,7 +396,7 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       return executeHandout(state, intent, by);
     // --- Round 3 P ---
     case 'addToInitiative': case 'removeFromInitiative': case 'delayTurn': case 'setDelayRule': case 'placeScatter':
-      return executePlayLoop(state, intent, by, dice, newId, { settleTurn, onTurnStart });
+      return executePlayLoop(state, intent, by, dice, newId, { settleTurn, onTurnStart, turnUpkeep }); // Round 4 R4: turnUpkeep
     // --- end Round 3 P ---
     // --- Track N ---
     case 'net':

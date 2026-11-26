@@ -74,7 +74,8 @@ export type CombatEvent = Base & (
   | { type: 'awarenessSet'; combatantId: string; allocation: Partial<Record<AwarenessKey, number>> }
   | { type: 'rested'; targetId: string; days: number; care: string; healed: number; hpAfter: number; blocked?: string }
   | { type: 'coverDamaged'; at: Cell; material: string; hpBefore: number; hpAfter: number; destroyed: boolean; byId?: string }
-  | { type: 'burning'; targetId: string; damage: number; hpAfter: number }
+  /** Round 4 R4: `hpAfter` only for friendly targets (no NPC HP in payloads). */
+  | { type: 'burning'; targetId: string; damage: number; hpAfter?: number }
   | { type: 'ignited'; targetId: string; perTurn: number }
   | { type: 'extinguished'; targetId: string }
   | { type: 'ammoLoaded'; combatantId: string; weaponId: string; ammoType: AmmoTypeId }
@@ -83,6 +84,21 @@ export type CombatEvent = Base & (
   | { type: 'spotWeakness'; combatantId: string; bonus: number }
   | { type: 'areaDodgeRequested'; combatantId: string; attackTotal: number }
   // --- end Track K ---
+  // --- Round 4 R4 ---
+  /** A Critical Injury's automated effect: re-bleed damage, a lost Action or a lost Move Action. No HP figures. */
+  | { type: 'injuryEffect'; targetId: string; injuryId: string; effect: 'rebleed' | 'lostAction' | 'noMove'; damage?: number }
+  /** What the acting character (or the GM) should handle at the start of the Turn. */
+  | { type: 'turnReminders'; combatantId: string; items: TurnReminder[] }
+  | { type: 'speedwareChanged'; combatantId: string; state: 'activated' | 'expired' | 'recharged'; initiative?: number }
+  /** GM prompt: Black ICE (and a Demon) on a runner's floor can act this Round. */
+  | { type: 'netThreat'; combatantId: string; ice: { floorId: string; index: number; name: string }[]; demon?: { floorId: string; name: string; netActions: number } }
+  // --- end Round 4 R4 ---
 );
 
 export type { D10Roll };
+
+/** Round 4 R4: a Turn-start checklist item (our words). */
+export interface TurnReminder {
+  key: 'deathSave' | 'prone' | 'lostAction' | 'noMove' | 'onFire' | 'grappled' | 'speedware' | 'injury';
+  text: string;
+}
