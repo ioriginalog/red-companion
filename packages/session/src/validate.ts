@@ -10,7 +10,10 @@
  * Unknown intent types pass through untouched: modules that own them
  * (Netrunning, systems) validate their own payloads.
  */
-import { WEAPON_TYPES } from '@cprc/rules-core';
+import {
+  AMMO_TYPES, ammoProblem, cyberwareProblem, roleProblem, smartWeaponProblem, WEAPON_TYPES,
+  type AmmoTypeId, type CyberwareItem, type RoleState, type Weapon,
+} from '@cprc/rules-core';
 import { SessionError } from './helpers.js';
 import type { SessionState, Viewer } from './types.js';
 
@@ -77,12 +80,82 @@ export function validateModifiers(v: unknown, what: string, limit = 20) {
 
 const STAT_KEYS = ['INT', 'REF', 'DEX', 'TECH', 'COOL', 'WILL', 'LUCK', 'MOVE', 'BODY', 'EMP'] as const;
 const WEAPON_TYPE_KEYS = Object.keys(WEAPON_TYPES);
-const ASSET_URL = /^(\/[A-Za-z0-9_./-]{1,280}|data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+)$/;
+/** Uploaded assets (/u/...), bundled art (/assets/...), or an inline image. No `..`, no other paths or schemes. */
+const ASSET_URL = /^(\/(u|assets)\/[A-Za-z0-9_-][A-Za-z0-9_./-]{0,279}|data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+)$/;
 const MAX_INLINE_IMAGE = 6_000_000;
 
 function imageUrl(v: unknown, what: string) {
   if (v === undefined) return;
-  if (typeof v !== 'string' || v.length > MAX_INLINE_IMAGE || !ASSET_URL.test(v)) bad(`${what} must be an uploaded image path or an inline image.`);
+  if (typeof v !== 'string' || v.length > MAX_INLINE_IMAGE || !ASSET_URL.test(v) || v.includes('..')) bad(`${what} must be an uploaded image path or an inline image.`);
+}
+
+const AMMO_IDS = AMMO_TYPES.map((a) => a.id);
+/** Without an inline portrait, one actor's JSON stays well under this. */
+const MAX_ACTOR_JSON = 200_000;
+
+function problem(p: string | null, what: string) {
+  if (p) bad(`${what}: ${p}`);
+}
+
+function validateWeapon(w: unknown) {
+  const o = obj(w, 'Weapon');
+  str(o.id, 'Weapon id', 64); str(o.name, 'Weapon name', 60);
+  oneOf(o.type, 'Weapon type', WEAPON_TYPE_KEYS);
+  if (o.ammo !== undefined) {
+    const am = obj(o.ammo, 'Ammo');
+    const cap = int(am.capacity, 'Magazine', 0, 999)!;
+    int(am.loaded, 'Loaded ammo', 0, cap);
+  }
+  int(o.damageDiceOverride, 'Damage dice', 1, 20, true);
+  if (o.rofOverride !== undefined && o.rofOverride !== 1 && o.rofOverride !== 2) bad('ROF must be 1 or 2.');
+  const ammoType = oneOf(o.ammoType, 'Ammo type', AMMO_IDS, true) as AmmoTypeId | undefined;
+  bool(o.smartgunLink, 'Smartgun Link');
+  oneOf(o.smart, 'Smart Weapon', ['built', 'rebuild'] as const, true);
+  oneOf(o.tech2070s, '2070s class', ['power', 'tech'] as const, true);
+  const weapon = o as unknown as Weapon;
+  problem(smartWeaponProblem(weapon), weapon.name);
+  if (ammoType && ammoType !== 'basic') problem(ammoProblem(weapon, ammoType), weapon.name);
+}
+
+/**
+ * Derived modifiers (recomputed by the engine, but stored on the actor):
+ * nested objects of small numbers and booleans only, so future modifier
+ * kinds pass while junk (strings, huge values, deep nesting) doesn't.
+ */
+function validateMods(v: unknown, what = 'Modifiers', depth = 0) {
+  if (depth > 2) bad(`${what} are nested too deeply.`);
+  const m = obj(v, what);
+  if (Object.keys(m).length > 80) bad(`${what} has too many entries.`);
+  for (const [k, x] of Object.entries(m)) {
+    str(k, `${what} key`, 60);
+    if (typeof x === 'boolean') continue;
+    if (isObj(x)) validateMods(x, `${what} ${k}`, depth + 1);
+    else num(x, `${what} ${k}`, -50, 50);
+  }
+}
+
+function validateCombatantExtras(c: Obj) {
+  if (c.role !== undefined) problem(roleProblem(obj(c.role, 'Role') as unknown as RoleState), 'Role');
+  if (c.humanity !== undefined) {
+    const h = obj(c.humanity, 'Humanity');
+    const max = int(h.max, 'Max Humanity', 0, 200)!;
+    int(h.current, 'Humanity', -200, max);
+    int(h.base, 'Starting Humanity', 0, 200, true);
+  }
+  for (const g of arr(c.gear, 'Gear', 100, true) ?? []) {
+    const o = obj(g, 'Gear item');
+    str(o.name, 'Gear name', 80); int(o.qty, 'Quantity', 0, 9999);
+    str(o.notes, 'Gear notes', 500, { optional: true, min: 0 });
+  }
+  for (const cw of arr(c.cyberware, 'Cyberware', 40, true) ?? []) problem(cyberwareProblem(obj(cw, 'Cyberware') as unknown as CyberwareItem), 'Cyberware');
+  if (c.mods !== undefined) validateMods(c.mods);
+  if (c.perRound !== undefined) {
+    const pr = obj(c.perRound, 'Per-Round abilities');
+    int(pr.round, 'Round', 0, 100_000); bool(pr.deflected, 'deflected'); bool(pr.spotWeakness, 'spotWeakness');
+  }
+  int(c.onFire, 'On Fire', 0, 50, true);
+  int(c.reputation, 'Reputation', 0, 10, true);
+  if (c.flags !== undefined) for (const [k, x] of Object.entries(obj(c.flags, 'Flags'))) bool(x, `Flag ${k}`, false);
 }
 
 export function validateActor(v: unknown) {
@@ -92,6 +165,9 @@ export function validateActor(v: unknown) {
   oneOf(a.allegiance, 'Allegiance', ['party', 'ally', 'neutral', 'hostile'] as const, true);
   imageUrl(a.portrait, 'Portrait');
   str(a.notes, 'Notes', 8000, { optional: true, min: 0 });
+  str(a.gmNotes, 'GM notes', 8000, { optional: true, min: 0 });
+  const { portrait: _p, ...rest } = a;
+  if (JSON.stringify(rest).length > MAX_ACTOR_JSON) bad('That character sheet is too large.');
   const c = obj(a.combatant, 'Combatant');
   if (c.id !== a.id) bad('actor.id must equal combatant.id.');
   str(c.name, 'Name', 60);
@@ -120,19 +196,8 @@ export function validateActor(v: unknown) {
   int(obj(c.deathSave, 'Death Save').accumulatedPenalty, 'Death Save penalty', 0, 99);
   const cond = obj(c.conditions, 'Conditions');
   for (const k of ['prone', 'unconscious', 'dead', 'stabilized']) bool(cond[k], k, false);
-  if (c.flags !== undefined) obj(c.flags, 'Flags');
-  for (const w of arr(a.weapons, 'Weapons', 24)!) {
-    const o = obj(w, 'Weapon');
-    str(o.id, 'Weapon id', 64); str(o.name, 'Weapon name', 60);
-    oneOf(o.type, 'Weapon type', WEAPON_TYPE_KEYS);
-    if (o.ammo !== undefined) {
-      const am = obj(o.ammo, 'Ammo');
-      const cap = int(am.capacity, 'Magazine', 0, 999)!;
-      int(am.loaded, 'Loaded ammo', 0, cap);
-    }
-    int(o.damageDiceOverride, 'Damage dice', 1, 20, true);
-    if (o.rofOverride !== undefined && o.rofOverride !== 1 && o.rofOverride !== 2) bad('ROF must be 1 or 2.');
-  }
+  validateCombatantExtras(c);
+  for (const w of arr(a.weapons, 'Weapons', 24)!) validateWeapon(w);
 }
 
 export function validateMap(v: unknown) {
