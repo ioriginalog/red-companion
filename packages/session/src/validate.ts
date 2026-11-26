@@ -155,6 +155,16 @@ function validateCombatantExtras(c: Obj) {
   }
   int(c.onFire, 'On Fire', 0, 50, true);
   int(c.reputation, 'Reputation', 0, 10, true);
+  // --- Round 4 R4 --- Critical Injury Turn flags and activated speedware state.
+  if (c.turnFlags !== undefined) {
+    const f = obj(c.turnFlags, 'Turn flags');
+    bool(f.loseAction, 'Lost Action flag'); bool(f.noMove, 'Lost Move flag');
+  }
+  if (c.speedware !== undefined) {
+    const sw = obj(c.speedware, 'Speedware');
+    bool(sw.active, 'Speedware on', false); int(sw.roundsLeft, 'Speedware Rounds left', 0, 100); bool(sw.spent, 'Speedware spent', false);
+  }
+  // --- end Round 4 R4 ---
   if (c.flags !== undefined) for (const [k, x] of Object.entries(obj(c.flags, 'Flags'))) bool(x, `Flag ${k}`, false);
 }
 

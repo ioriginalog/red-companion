@@ -25,6 +25,8 @@ export interface InjuryEffect {
   loseActionNextTurn?: boolean;
   /** Re-suffer the 5 bonus damage at end of any Turn moving > 4 m/yds on foot. */
   rebleedOnMove?: boolean;
+  /** No Move Action next Turn after a Turn moving > 4 m/yds on foot (ear injuries). */
+  noMoveAfterMove?: boolean;
   /** Effects the engine can't auto-apply; shown to the GM. */
   situational?: string[];
 }
@@ -71,9 +73,9 @@ export const HEAD_CRITS: CriticalInjuryDef[] = [
   { id: 'foreignObjectHead', table: 'head', roll: 7, name: 'Foreign Object', summary: 'Moving over 4 m/yds on foot re-inflicts the bonus damage.', effect: { rebleedOnMove: true }, quickFix: [{ skill: 'First Aid', dv: 13 }, { skill: 'Paramedic', dv: 13 }], treatment: 'quickFixIsPermanent', source: HEAD_SRC },
   { id: 'whiplash', table: 'head', roll: 8, name: 'Whiplash', summary: 'Raises Base Death Save Penalty.', effect: { deathSavePenalty: 1 }, quickFix: [{ skill: 'Paramedic', dv: 13 }], treatment: [{ skill: 'Paramedic', dv: 13 }, { skill: 'Surgery', dv: 13 }], source: HEAD_SRC },
   { id: 'crackedSkull', table: 'head', roll: 9, name: 'Cracked Skull', summary: 'Aimed headshots against you multiply through-damage by 3.', effect: { headshotMultiplier: 3, deathSavePenalty: 1 }, quickFix: [{ skill: 'Paramedic', dv: 15 }], treatment: [{ skill: 'Paramedic', dv: 15 }, { skill: 'Surgery', dv: 15 }], source: HEAD_SRC },
-  { id: 'damagedEar', table: 'head', roll: 10, name: 'Damaged Ear', summary: 'After moving over 4 m/yds, no Move Action next Turn; −2 hearing Perception.', effect: { situational: ['No Move Action next Turn after moving > 4 m/yds on foot', '−2 to Perception using hearing'] }, quickFix: [{ skill: 'Paramedic', dv: 13 }], treatment: [{ skill: 'Surgery', dv: 13 }], source: HEAD_SRC },
+  { id: 'damagedEar', table: 'head', roll: 10, name: 'Damaged Ear', summary: 'After moving over 4 m/yds, no Move Action next Turn; −2 hearing Perception.', effect: { noMoveAfterMove: true, situational: ['−2 to Perception using hearing'] }, quickFix: [{ skill: 'Paramedic', dv: 13 }], treatment: [{ skill: 'Surgery', dv: 13 }], source: HEAD_SRC },
   { id: 'crushedWindpipe', table: 'head', roll: 11, name: 'Crushed Windpipe', summary: 'Can’t speak.', effect: { deathSavePenalty: 1, situational: ['Cannot speak'] }, quickFix: null, treatment: [{ skill: 'Surgery', dv: 15 }], source: HEAD_SRC },
-  { id: 'lostEar', table: 'head', roll: 12, name: 'Lost Ear', summary: 'After moving over 4 m/yds, no Move Action next Turn; −4 hearing Perception.', effect: { deathSavePenalty: 1, situational: ['No Move Action next Turn after moving > 4 m/yds on foot', '−4 to Perception using hearing'] }, quickFix: null, treatment: [{ skill: 'Surgery', dv: 17 }], source: HEAD_SRC },
+  { id: 'lostEar', table: 'head', roll: 12, name: 'Lost Ear', summary: 'After moving over 4 m/yds, no Move Action next Turn; −4 hearing Perception.', effect: { deathSavePenalty: 1, noMoveAfterMove: true, situational: ['−4 to Perception using hearing'] }, quickFix: null, treatment: [{ skill: 'Surgery', dv: 17 }], source: HEAD_SRC },
 ];
 
 export const CRIT_TABLES: Record<CritTable, CriticalInjuryDef[]> = { body: BODY_CRITS, head: HEAD_CRITS };

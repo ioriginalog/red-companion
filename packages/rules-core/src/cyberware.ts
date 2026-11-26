@@ -55,11 +55,21 @@ function mergeMods(a: CombatMods, b: CombatMods): CombatMods {
   return out;
 }
 
+/** Round 4 R4: true if the item is speedware (only one piece may be installed). */
+export const isSpeedware = (item: CyberwareItem) => item.effects.some((e) => e.kind === 'speedware');
+
 export function cyberwareMods(items: CyberwareItem[] | undefined): CombatMods {
   let m: CombatMods = {};
+  let speedwareSeen = false; // Round 4 R4: speedware never stacks; only the first piece counts
   for (const item of items ?? []) {
     for (const e of item.effects) {
       switch (e.kind) {
+        case 'speedware':
+          if (speedwareSeen) break;
+          speedwareSeen = true;
+          if (e.mode === 'passive') m = mergeMods(m, { initiative: e.initiative });
+          else m.activatedSpeedware = e.initiative;
+          break;
         case 'stat': m = mergeMods(m, { statBonuses: { [e.stat]: e.value } }); break;
         case 'skill': m = mergeMods(m, { skillBonuses: { [e.skill]: e.value } }); break;
         case 'initiative': m = mergeMods(m, { initiative: e.value }); break;
@@ -132,6 +142,7 @@ function effectProblem(e: CyberwareEffect): string | null {
     case 'armor': return (e.location === 'body' || e.location === 'head') && small(e.sp, 1, 30) ? null : 'An armor effect needs head or body and SP 1–30.';
     case 'initiative': return small(e.value, -5, 5) ? null : 'An Initiative effect needs a value from −5 to 5.';
     case 'healingMultiplier': return small(e.value, 1, 4) ? null : 'A healing multiplier must be 1–4.';
+    case 'speedware': return (e.mode === 'passive' || e.mode === 'activated') && small(e.initiative, 1, 5) ? null : 'Speedware needs passive or activated and an Initiative bonus from 1 to 5.';
     case 'smartLink': case 'targetingScope': case 'neuralLink': case 'subdermalGrip':
     case 'interfacePlugs': case 'ignoreSeriouslyWounded': return null;
     default: return 'Unknown cyberware effect.';

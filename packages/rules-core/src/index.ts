@@ -32,3 +32,4 @@ export * from './roles-extra.js';
 // --- Round 3 D ---
 export * from './data/packs.js';
 // --- end Round 3 D ---
+export * from './injury-effects.js'; // Round 4 R4
