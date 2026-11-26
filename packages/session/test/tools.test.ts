@@ -266,7 +266,7 @@ describe('areaAttack', () => {
     const t = setup();
     t.send({ type: 'areaAttack', attackerId: 'solo', weaponId: 'gl', kind: 'launcher', at: { x: 6, y: 3 } }, P1, scriptedDice({ d10: [1, 5] }));
     const types = t.last().events.map((e) => e.type);
-    expect(types).toContain('explosiveMissed'); // Round 3 P: the GM places it (placeScatter)
+    expect(types).toContain('explosiveMissed'); // The GM places it (placeScatter)
     expect(types).not.toContain('damageRolled');
     expect(t.state.pending).toMatchObject({ kind: 'awaitingScatter' });
   });
@@ -282,7 +282,7 @@ describe('areaAttack', () => {
     expect(t.state.actors.ganger!.combatant.hp.current).toBe(t.state.actors.ganger!.combatant.hp.max - 6);
   });
 
-  it('eligible targets choose to dodge before damage is rolled (Track K)', () => {
+  it('eligible targets choose to dodge before damage is rolled', () => {
     const t = setup();
     t.send({ type: 'replaceActor', actor: actor('ganger', 'npc', 'gm', { REF: 8, DEX: 9 }) }, GM);
     t.send({ type: 'areaAttack', attackerId: 'solo', weaponId: 'gl', kind: 'launcher', at: { x: 6, y: 3 } }, P1, scriptedDice({ d10: [5] }));

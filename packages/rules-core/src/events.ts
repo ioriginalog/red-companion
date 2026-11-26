@@ -46,16 +46,12 @@ export type CombatEvent = Base & (
   | { type: 'hpAdjusted'; targetId: string; delta: number; hpAfter: number; reason?: string }
   | { type: 'conditionSet'; targetId: string; condition: string; value: boolean }
   | { type: 'sceneChanged'; mapId: string; name: string }
-  // --- Track U ---
   | { type: 'handoutShared'; id: string; title: string }
-  // --- Track N ---
   /** Netrunning: one line per NET Action, with its check(s). `text` is ready to narrate (sentence case). */
   | { type: 'netAction'; combatantId: string; action: string; text: string; check?: CheckResult; vs?: CheckResult; dv?: number; success?: boolean; dice?: number[]; amount?: number }
-  // --- end Track N ---
-  // --- Round 3 X --- Grapples, Martial Arts moves, Facedowns, Role Abilities. `text` is a ready narration line.
+  // Grapples, Martial Arts moves, Facedowns, Role Abilities. `text` is a ready narration line.
   | { type: 'extraResolved'; combatantId: string; targetId?: string; move: string; text: string; success?: boolean; rolls?: { label: string; total: number; natural?: number }[] }
   | { type: 'areaResolved'; attackerId: string; kind: string; at: Cell; targetIds: string[] }
-  // --- Round 3 P ---
   /** A missed explosive is waiting for the GM to place it. */
   | { type: 'explosiveMissed'; attackerId: string; at: Cell }
   /** Where a missed explosive landed (`rolled` = random square, else GM placed). */
@@ -64,8 +60,6 @@ export type CombatEvent = Base & (
   | { type: 'noEffect'; targetId: string }
   | { type: 'turnDelayed'; combatantId: string; after: string | null }
   | { type: 'leftInitiative'; combatantId: string }
-  // --- end Round 3 P ---
-  // --- Track K ---
   | { type: 'injuryTreated'; medicId: string; targetId: string; injuryId: string; kind: 'quickFix' | 'treatment'; skill: string; check: CheckResult; dv: number; outcome: 'quickFixed' | 'removed' | 'failed' }
   | { type: 'humanityChanged'; combatantId: string; from: number; to: number; empFrom: number; empTo: number; reason: 'cyberware' | 'removal' | 'therapy' | 'gm' }
   | { type: 'cyberwareInstalled'; combatantId: string; itemId: string; name: string; humanityLoss: number; rolled?: number[]; lossMode?: 'roll' | 'fixed' | 'none'; maxFrom?: number; maxTo?: number }
@@ -74,7 +68,7 @@ export type CombatEvent = Base & (
   | { type: 'awarenessSet'; combatantId: string; allocation: Partial<Record<AwarenessKey, number>> }
   | { type: 'rested'; targetId: string; days: number; care: string; healed: number; hpAfter: number; blocked?: string }
   | { type: 'coverDamaged'; at: Cell; material: string; hpBefore: number; hpAfter: number; destroyed: boolean; byId?: string }
-  /** Round 4 R4: `hpAfter` only for friendly targets (no NPC HP in payloads). */
+  /** `hpAfter` only for friendly targets (no NPC HP in payloads). */
   | { type: 'burning'; targetId: string; damage: number; hpAfter?: number }
   | { type: 'ignited'; targetId: string; perTurn: number }
   | { type: 'extinguished'; targetId: string }
@@ -83,8 +77,6 @@ export type CombatEvent = Base & (
   | { type: 'damageDeflected'; targetId: string; amount: number }
   | { type: 'spotWeakness'; combatantId: string; bonus: number }
   | { type: 'areaDodgeRequested'; combatantId: string; attackTotal: number }
-  // --- end Track K ---
-  // --- Round 4 R4 ---
   /** A Critical Injury's automated effect: re-bleed damage, a lost Action or a lost Move Action. No HP figures. */
   | { type: 'injuryEffect'; targetId: string; injuryId: string; effect: 'rebleed' | 'lostAction' | 'noMove'; damage?: number }
   /** What the acting character (or the GM) should handle at the start of the Turn. */
@@ -92,12 +84,11 @@ export type CombatEvent = Base & (
   | { type: 'speedwareChanged'; combatantId: string; state: 'activated' | 'expired' | 'recharged'; initiative?: number }
   /** GM prompt: Black ICE (and a Demon) on a runner's floor can act this Round. */
   | { type: 'netThreat'; combatantId: string; ice: { floorId: string; index: number; name: string }[]; demon?: { floorId: string; name: string; netActions: number } }
-  // --- end Round 4 R4 ---
 );
 
 export type { D10Roll };
 
-/** Round 4 R4: a Turn-start checklist item (our words). */
+/** A Turn-start checklist item (our words). */
 export interface TurnReminder {
   key: 'deathSave' | 'prone' | 'lostAction' | 'noMove' | 'onFire' | 'grappled' | 'speedware' | 'injury';
   text: string;

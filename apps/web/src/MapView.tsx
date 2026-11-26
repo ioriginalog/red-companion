@@ -56,7 +56,7 @@ interface Props {
   bottomInset?: number;
   /** Blast template without line-of-sight coloring (GM placing where a missed explosive lands). */
   neutralTemplate?: boolean;
-  /** Round 3 P: a short label for the hovered square (e.g. cover HP for the GM). */
+  /** A short label for the hovered square (e.g. cover HP for the GM). */
   hoverInfo?: (c: Cell) => string | null;
   /** Aimed square awaiting confirmation: the template stays here instead of following the pointer. */
   areaLock?: Cell | null;
@@ -725,7 +725,7 @@ export function MapView(p: Props) {
         </g>
 
         {hover && mode !== 'watch' && mode !== 'area' && <rect x={hover.x * S} y={hover.y * S} width={S} height={S} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={2} pointerEvents="none" />}
-        {/* Round 3 P: hover readout (cover state) */}
+        {/* Hover readout (cover state) */}
         {hover && p.hoverInfo && (() => {
           const label = p.hoverInfo!(hover);
           if (!label) return null;

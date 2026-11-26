@@ -1,4 +1,4 @@
-/* Round 3 X: grapples, Martial Arts, Facedowns and Role Abilities. Reuses the table's card/btn/warn language. */
+/* Grapples, Martial Arts, Facedowns and Role Abilities. Reuses the table's card/btn/warn language. */
 .ex-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .ex-grid .btn { width: 100%; }
 .ex-status { display: grid; gap: 4px; margin-bottom: 8px; font-size: 13px; }

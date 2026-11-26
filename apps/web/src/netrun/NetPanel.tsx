@@ -107,7 +107,7 @@ export function NetPanel({ view, actorId, isGm, canAct, act, feed }: NetPanelPro
               <div className="net-sub">Floor {here.depth}: {KIND[here.kind].label}{here.label ? ` · ${here.label}` : ''}</div>
               {here.note && <p className="net-note">{here.note}</p>}
               <div className="net-actions">
-                {/* Round 3 P: go down without Pathfinder; the floor reveals itself on arrival. */}
+                {/* Go down without Pathfinder; the floor reveals itself on arrival. */}
                 {(here.exitsDown ?? 0) > 0 && !run.engaged && Array.from({ length: here.exitsDown! }, (_, b) => (
                   <Act key={`down-${b}`} label={here.exitsDown! > 1 ? `Go Down: Branch ${b + 1}` : 'Go Down a Floor'} p={null}
                     on={() => send({ op: 'descend', actorId: actor.id, branch: b })}

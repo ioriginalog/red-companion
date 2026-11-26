@@ -1,4 +1,4 @@
-/* Prep tools (Track B). Same neon language as styles.css: navy panels,
+/* Prep tools. Same neon language as styles.css: navy panels,
    cyan / yellow / magenta, `///` slashes, condensed uppercase headings. */
 
 /* ---------- GM shell ---------- */
@@ -114,7 +114,7 @@ details.skg[open] > summary > span:first-child::before { content: '▾'; }
 .crop-box { position: absolute; border: 2px solid var(--yellow); box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6); }
 .crop-out { width: 96px; height: 96px; border: 2px solid var(--cyan); background: #000; }
 
-/* ----- Track K: Role, cyberware, Humanity ----- */
+/* ----- Role, cyberware, Humanity ----- */
 .aw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
 .fld.aw small { font-size: 11px; line-height: 1.3; }
 .fld.aw.bad input { border-color: var(--magenta); }

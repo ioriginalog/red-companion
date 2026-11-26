@@ -29,14 +29,14 @@ interface Props {
   /** This player's characters, for picking one when no Turn is active. */
   ownIds?: string[];
   onSelectOwn?: (id: string) => void;
-  /** Track M: what to tell the viewer when no target is picked (depends on layout and line of sight). */
+  /** What to tell the viewer when no target is picked (depends on layout and line of sight). */
   targetHint?: string;
-  /** Round 3 P: picking a cover square to shoot. */
+  /** Picking a cover square to shoot. */
   coverPick?: boolean;
   setCoverPick?: (on: boolean) => void;
 }
 
-/** Round 3 P (#11): attack modes a weapon can actually use against a person. */
+/** Attack modes a weapon can actually use against a person. */
 export function directModes(weapon: Weapon): [AttackMode, string][] {
   if (areaKindFor(weapon) === 'blast') return []; // launchers and grenades only fire at squares
   const prof = profileOf(weapon);

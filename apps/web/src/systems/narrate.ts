@@ -1,4 +1,4 @@
-/** Combat log lines for Track K events (sentence case). Merge into narrate.ts's switch via `narrateSystems`. */
+/** Combat log lines for events (sentence case). Merge into narrate.ts's switch via `narrateSystems`. */
 import { AMMO_TYPES, getInjury, type CombatEvent } from '@cprc/rules-core';
 
 type Tone = 'hit' | 'miss' | 'info' | 'bad' | 'good';
@@ -51,6 +51,6 @@ export function narrateSystems(e: CombatEvent, name: (id: string) => string): Sy
     case 'areaDodgeRequested':
       return { text: `${name(e.combatantId)} can try to dodge the blast.`, tone: 'info' };
     default:
-      return undefined; // not a Track K event
+      return undefined; // Not a event
   }
 }

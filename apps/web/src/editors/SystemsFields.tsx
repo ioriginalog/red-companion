@@ -1,5 +1,5 @@
 /**
- * Character builder sections for Track K systems: Role and Role Ability,
+ * Character builder sections for systems: Role and Role Ability,
  * cyberware with Humanity, and the ammunition picker.
  */
 import { useRef, useState } from 'react';

@@ -1,4 +1,4 @@
-/** Combat log line for Round 3 X events: the authority already wrote the sentence. */
+/** Combat log line for events: the authority already wrote the sentence. */
 import type { CombatEvent } from '@cprc/rules-core';
 
 export function narrateExtras(e: CombatEvent): { text: string; tone: 'hit' | 'miss' | 'info' | 'bad' | 'good' } | null {

@@ -1,5 +1,5 @@
 /**
- * Round 3 Track P: Turn-order tools and explosive scatter.
+ * Turn-order tools and explosive scatter.
  *
  *   - addToInitiative / removeFromInitiative (GM): late arrivals roll REF + 1d10
  *     (via the engine) and slot in by total; ties with an existing slot go to a
@@ -35,7 +35,7 @@ export interface TurnHooks {
   settleTurn: (enc: Encounter, actors: Record<string, Actor>) => Encounter;
   /** Start-of-Turn upkeep for whoever is now current (e.g. On Fire). */
   onTurnStart: (state: SessionState, enc: Encounter) => { events: CombatEvent[]; actors: Record<string, Actor> };
-  /** Round 4 R4: full Turn-start upkeep (On Fire, lost Actions, reminders, new-Round prompts). */
+  /** Full Turn-start upkeep (On Fire, lost Actions, reminders, new-Round prompts). */
   turnUpkeep?: (state: SessionState, enc: Encounter, prevRound: number) => { events: CombatEvent[]; actors: Record<string, Actor>; encounter: Encounter };
 }
 
@@ -150,7 +150,7 @@ function removeFromInitiative(state: SessionState, actorId: string, hooks: TurnH
     ...(wasCurrent ? { usage: undefined, deathSaveRequiredFor: null } : {}),
   };
   const settled = hooks.settleTurn(base, state.actors);
-  // Round 4 R4: the next actor's Turn starts if the current one left.
+  // The next actor's Turn starts if the current one left.
   if (!wasCurrent || !hooks.turnUpkeep) return { events: [{ type: 'leftInitiative', visibility: 'public', combatantId: actorId }], patch: { encounter: settled } };
   const up = hooks.turnUpkeep(state, settled, enc.round);
   const patch: StatePatch = { encounter: up.encounter };
@@ -177,7 +177,7 @@ function delayTurn(state: SessionState, after: string | undefined, hooks: TurnHo
 
   // The next actor's Turn starts now (same index, new occupant).
   const settled = hooks.settleTurn({ ...enc, order, initiative, usage: undefined, deathSaveRequiredFor: null }, state.actors);
-  // Round 4 R4: full upkeep when the authority provides it.
+  // Full upkeep when the authority provides it.
   const upkeep = hooks.turnUpkeep ? hooks.turnUpkeep(state, settled, enc.round) : { ...hooks.onTurnStart(state, settled), encounter: settled };
   const encounter = upkeep.encounter;
   const patch: StatePatch = { encounter };

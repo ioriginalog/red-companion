@@ -15,7 +15,7 @@
  * Netrunner: Interface rank = role rank (read by Netrunning via `interfaceRank`).
  */
 import type { AwarenessKey, CombatMods, Combatant, RoleId, RoleState } from './types.js';
-import { MOTO_SKILLS, roleExtraProblem } from './roles-extra.js'; // Round 3 X
+import { MOTO_SKILLS, roleExtraProblem } from './roles-extra.js';
 
 export const ROLES: { id: RoleId; name: string; ability: string }[] = [
   { id: 'rockerboy', name: 'Rockerboy', ability: 'Charismatic Impact' },
@@ -59,7 +59,7 @@ export function roleProblem(role: RoleState): string | null {
     if (surgery + pharmaceuticals + cryosystem > role.rank) return `Medicine points can’t exceed rank ${role.rank}.`;
   }
   if (role.notes !== undefined && (typeof role.notes !== 'string' || role.notes.length > 2000)) return 'Role notes are too long.';
-  return roleExtraProblem(role); // Round 3 X: Maker, Teamwork, Moto
+  return roleExtraProblem(role); // Maker, Teamwork, Moto
 }
 
 export function awarenessProblem(alloc: Partial<Record<AwarenessKey, number>>, rank: number): string | null {
@@ -91,7 +91,7 @@ export function roleMods(role: RoleState | undefined): CombatMods {
     const { surgery, pharmaceuticals, cryosystem } = role.medicine;
     m.skillBonuses = { Surgery: Math.min(10, surgery * 2), 'Medical Tech': pharmaceuticals + cryosystem };
   }
-  // --- Round 3 X --- Nomad Moto: Rank adds to driving, piloting and vehicle-tech checks.
+  // Nomad Moto: Rank adds to driving, piloting and vehicle-tech checks.
   if (role.id === 'nomad') m.skillBonuses = Object.fromEntries(MOTO_SKILLS.map((s) => [s, role.rank]));
   return m;
 }

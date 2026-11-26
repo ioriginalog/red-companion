@@ -10,9 +10,7 @@
  * Clients never re-run the rules engine; they apply patches. That keeps replay
  * trivially deterministic and lets the relay redact patches per viewer.
  */
-// --- Track N ---
 import type { NetOp, NetState, NetView } from './netrun-types.js';
-// --- end Track N ---
 import type { AimTarget, AmmoTypeId, AwarenessKey, Care, Cell, CheckResult, CombatEvent, Combatant, CoverMaterialId, CyberwareItem, DamageSpec, GearItem, GridMap, Modifier, Weapon, WoundState } from '@cprc/rules-core';
 
 export type Viewer = { role: 'gm' } | { role: 'player'; playerId: string };
@@ -47,14 +45,12 @@ export interface Encounter {
   deathSaveRequiredFor: string | null;
   /** What the current actor has spent this Turn. Absent outside encounters. */
   usage?: TurnUsage;
-  /** Player views only: an actor the party hasn't seen holds the current Turn (Round 3 Track R). */
+  /** Player views only: an actor the party hasn't seen holds the current Turn. */
   hiddenActing?: boolean;
-  // --- Round 3 P ---
   /** Initiative totals by actor id, kept so late arrivals can be slotted in. */
   initiative?: Record<string, number>;
   /** House rule: may the current actor Delay? Default on. Survives across encounters. */
   delayAllowed?: boolean;
-  // --- end Round 3 P ---
 }
 
 /**
@@ -70,7 +66,7 @@ export interface TurnUsage {
   attacks: number;
   /** Weapon (or 'brawling' / 'martialArts') that used the Action, for ROF follow-ups. */
   attackWith: string | null;
-  /** Round 4 R4: squares of `moveUsed` that were blocked, not walked (an ear injury took the Move Action). */
+  /** Squares of `moveUsed` that were blocked, not walked (an ear injury took the Move Action). */
   moveBlocked?: number;
 }
 
@@ -99,14 +95,12 @@ export interface TacticalMap extends GridMap {
   watches: Record<string, Watch>;
   /** NPC actor ids the party has seen at least once (names revealed). */
   spotted: string[];
-  /** Round 4 U4: squares the party has ever seen, row-major '0'/'1' of length width × height. Absent = nothing recorded yet. */
+  /** Squares the party has ever seen, row-major '0'/'1' of length width × height. Absent = nothing recorded yet. */
   explored?: string;
   /** GM lighting overrides. `revealed` squares are always visible to players. */
   lighting?: { revealAll?: boolean; revealed?: string[] };
-  // --- Track K ---
   /** Cover squares ('c') with a material and current HP, keyed "x,y". Missing = default material at full HP. */
   cover?: Record<string, { material: CoverMaterialId; hp: number }>;
-  // --- end Track K ---
 }
 
 /** GM-only prep library (never projected to players). */
@@ -125,7 +119,6 @@ export type Pending =
   | { kind: 'awaitingDamage'; id: string; attackerId: string; targetId: string; spec: DamageSpec }
   /** A watch (house rule) triggered: the watcher may attack the mover now, out of Turn. */
   | { kind: 'awaitingWatch'; id: string; watcherId: string; targetId: string }
-  // --- Track K ---
   /** An area attack hit: each eligible defender (REF 8+) decides whether to dodge before damage is rolled. */
   | {
     kind: 'awaitingAreaDodge'; id: string; attackerId: string; areaKind: 'shotgunShell' | 'launcher' | 'thrownGrenade'; at: Cell;
@@ -135,19 +128,16 @@ export type Pending =
     /** Eligible defenders: null until they decide. */
     decisions: Record<string, boolean | null>;
   }
-  // --- end Track K ---
-  // --- Round 3 P ---
   /** A missed explosive: the GM places where it lands (or rolls), then the blast resolves there. */
   | {
     kind: 'awaitingScatter'; id: string; attackerId: string; areaKind: 'launcher' | 'thrownGrenade'; at: Cell;
     attack: CheckResult; damageDice: number;
   };
-  // --- end Round 3 P ---
 
 /** What a player sees of a pending step: NPC damage dice are withheld. */
 export type ProjectedPending =
   | Exclude<Pending, { kind: 'awaitingDamage' | 'awaitingDodge' }>
-  // Round 4 U4 (#15): a defender sees the gun pointed at them, so players get its type (not its stats).
+  // A defender sees the gun pointed at them, so players get its type (not its stats).
   | (Omit<Extract<Pending, { kind: 'awaitingDodge' }>, 'attack'> & { attack: Extract<Pending, { kind: 'awaitingDodge' }>['attack'] & { weaponType?: Weapon['type'] } })
   | (Omit<Extract<Pending, { kind: 'awaitingDamage' }>, 'spec'> & { spec?: DamageSpec });
 
@@ -161,18 +151,13 @@ export interface SessionState {
   map: TacticalMap | null;
   /** GM prep: saved maps (scenes) and NPC templates. Stripped from player views. */
   library: Library;
-  // --- Track U ---
   /** Handouts and GM journal pages, filtered by audience in projections. */
   handouts: Record<string, Handout>;
-  // --- Track N ---
   netrun?: NetState;
-  // --- end Track N ---
-  // --- Round 3 X ---
   extras?: ExtrasState;
-  // --- end Round 3 X ---
 }
 
-// --- Round 3 X --- Grapples, Facedowns and per-Round attack history for Special Move triggers.
+// Grapples, Facedowns and per-Round attack history for Special Move triggers.
 export interface Grapple { holderId: string; heldId: string; chokes: number; lastChokeRound: number | null; ironGrip: boolean }
 export interface Facedown { id: string; winnerId: string; loserId: string; status: 'choosing' | 'fighting' }
 export interface RoundHit { round: number; turnIndex: number; attackerId: string; defenderId: string; with: 'ranged' | 'weapon' | 'brawling' | 'martialArts'; hit: boolean }
@@ -206,9 +191,7 @@ export type ExtraOp =
   | { kind: 'recruit'; actorId: string; name: string; memberKind: 'bodyguard' | 'covertOperative' | 'driver' | 'netrunner' | 'technician' }
   | { kind: 'loyalty'; actorId: string; member: number; order?: string }
   | { kind: 'setRoleExtras'; actorId: string; maker?: { field: number; upgrade: number; fabrication: number; invention: number }; team?: { name: string; kind: 'bodyguard' | 'covertOperative' | 'driver' | 'netrunner' | 'technician'; loyalty: number }[]; moto?: { vehicles: string[]; upgrades: string[] } };
-// --- end Round 3 X ---
 
-// --- Track U ---
 /** Shared text (optional image). audience: everyone, GM only (journal), or listed player ids. */
 export interface Handout { id: string; title: string; body: string; imageUrl?: string; audience: 'all' | 'gm' | string[]; updatedAt?: string }
 
@@ -222,12 +205,10 @@ export interface StatePatch {
   map?: TacticalMap | null;
   /** Replace the whole library. GM only; never projected. */
   library?: Library;
-  /** Track U: replace all handouts. */
+  /** Replace all handouts. */
   handouts?: Record<string, Handout>;
-  // --- Track N ---
   netrun?: NetState;
-  // --- end Track N ---
-  extras?: ExtrasState; // Round 3 X
+  extras?: ExtrasState;
 }
 
 export interface LogEntry {
@@ -305,7 +286,6 @@ export type Intent =
   // Area attacks on the grid
   | { type: 'areaAttack'; attackerId: string; weaponId: string; kind: 'shotgunShell' | 'launcher' | 'thrownGrenade'; at: Cell }
   | { type: 'suppressiveFire'; attackerId: string; weaponId: string }
-  // --- Track K ---
   | { type: 'respondAreaDodge'; pendingId: string; actorId: string; dodge: boolean }
   /** GM: everyone who hasn't decided dodges (if able), then damage resolves. */
   | { type: 'resolveAreaDodges'; pendingId: string }
@@ -316,7 +296,7 @@ export type Intent =
   | { type: 'setAwareness'; actorId: string; allocation: Partial<Record<AwarenessKey, number>> }
   /** GM. `rollLoss` rolls that many d6 (+ bonus) for Humanity Loss instead of item.humanityLoss. */
   | { type: 'installCyberware'; actorId: string; item: CyberwareItem; rollLoss?: { count: number; bonus: number }
-    // --- Round 3 D --- roll the item's hlDice, take its fixed value, or no loss (GM option).
+    // Roll the item's hlDice, take its fixed value, or no loss (GM option).
     lossMode?: 'roll' | 'fixed' | 'none' }
   | { type: 'removeCyberware'; actorId: string; itemId: string }
   /** GM. The therapist's STAT + skill total; DV and eligibility from the therapy kind. */
@@ -324,17 +304,11 @@ export type Intent =
   | { type: 'treatInjury'; medicId: string; targetId: string; injuryIndex: number; kind: 'quickFix' | 'treatment'; skill: string }
   /** GM. Advance downtime: natural healing for these actors (default: everyone not dead). */
   | { type: 'rest'; days: number; care: Care; actorIds?: string[] }
-  // --- end Track K ---
-  // --- Round 4 R4 ---
   /** Turn on activated speedware (Sandevistan type). Uses the Action in an encounter; recharges on rest. */
   | { type: 'activateSpeedware'; actorId: string }
-  // --- end Round 4 R4 ---
-  // --- Track U ---
   | { type: 'setHandout'; id: string; title: string; body: string; imageUrl?: string; audience: 'all' | 'gm' | string[] }
-  // --- Round 4 U4 ---
   | { type: 'editOwnSheet'; actorId: string; notes?: string; gear?: GearItem[] }
   | { type: 'removeHandout'; id: string }
-  // --- Round 3 P ---
   /** GM: put a late arrival into the Turn order (rolled, or a given total). */
   | { type: 'addToInitiative'; actorId: string; roll?: 'roll' | number }
   | { type: 'removeFromInitiative'; actorId: string }
@@ -343,11 +317,8 @@ export type Intent =
   | { type: 'setDelayRule'; allowed: boolean }
   /** GM: where a missed explosive lands (omit `at` to roll it within the blast area). */
   | { type: 'placeScatter'; pendingId: string; at?: Cell }
-  // --- end Round 3 P ---
-  // --- Track N ---
   | { type: 'net'; op: NetOp }
-  // --- end Track N ---
-  | { type: 'extra'; op: ExtraOp }; // Round 3 X
+  | { type: 'extra'; op: ExtraOp };
 
 export type StatKeyName = 'INT' | 'REF' | 'DEX' | 'TECH' | 'COOL' | 'WILL' | 'LUCK' | 'MOVE' | 'BODY' | 'EMP';
 
@@ -391,12 +362,10 @@ export interface ViewState {
   map: TacticalMap | null;
   /** GM view only. */
   library?: Library;
-  /** Track U: handouts this viewer may read. */
+  /** Handouts this viewer may read. */
   handouts?: Record<string, Handout>;
-  // --- Track N ---
   netrun?: NetView;
-  // --- end Track N ---
-  extras?: ExtrasState; // Round 3 X (players: only grapples and Facedowns between known characters)
+  extras?: ExtrasState; // (players: only grapples and Facedowns between known characters)
 }
 
 export interface ProjectedEntry {
@@ -406,5 +375,5 @@ export interface ProjectedEntry {
   by: AuthorId;
   intentType: IntentType;
   events: CombatEvent[];
-  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: ProjectedPending | null; map?: TacticalMap | null; library?: Library; handouts?: Record<string, Handout>; /* Track N */ netrun?: NetView; /* Round 3 X */ extras?: ExtrasState };
+  patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: ProjectedPending | null; map?: TacticalMap | null; library?: Library; handouts?: Record<string, Handout>; /* */ netrun?: NetView; /* */ extras?: ExtrasState };
 }

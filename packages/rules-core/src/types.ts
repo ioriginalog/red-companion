@@ -81,13 +81,12 @@ export interface Combatant {
     /** e.g. Pain Editor chipware. */
     ignoreSeriouslyWoundedPenalty?: boolean;
   };
-  // --- Track K ---
   /** Role and rank. A Netrunner's rank is their Interface rank (see `interfaceRank`). */
   role?: RoleState;
   /** Humanity; current EMP = floor(current / 10). */
   /** `base` = EMP × 10 at creation; `max` = base − 2 per cyberware with Humanity Loss (4 for borgware). */
   humanity?: { current: number; max: number; base?: number };
-  /** Round 3 D: carried gear. */
+  /** Carried gear. */
   gear?: GearItem[];
   cyberware?: CyberwareItem[];
   /** Derived by `applySystems` from role and cyberware. The engine reads only this. */
@@ -96,20 +95,14 @@ export interface Combatant {
   perRound?: { round: number; deflected?: boolean; spotWeakness?: boolean };
   /** On Fire: HP lost at the start of each of this character's Turns until put out. */
   onFire?: number;
-  // --- end Track K ---
-  // --- Round 4 R4 ---
   /** One-Turn effects waiting for this character's next Turn (from Critical Injuries). */
   turnFlags?: { loseAction?: boolean; noMove?: boolean };
   /** Activated speedware (Sandevistan type): on for `roundsLeft` Rounds; `spent` until the next rest. */
   speedware?: { active: boolean; roundsLeft: number; spent: boolean };
-  // --- end Round 4 R4 ---
-  // --- Round 3 X ---
   /** Reputation level 0–10 (Facedowns). */
   reputation?: number;
-  // --- end Round 3 X ---
 }
 
-// --- Track K ---
 export type RoleId = 'rockerboy' | 'solo' | 'netrunner' | 'tech' | 'medtech' | 'media' | 'exec' | 'lawman' | 'fixer' | 'nomad';
 export type AwarenessKey = 'damageDeflection' | 'fumbleRecovery' | 'initiativeReaction' | 'precisionAttack' | 'spotWeakness' | 'threatDetection';
 export interface RoleState {
@@ -120,20 +113,16 @@ export interface RoleState {
   awareness?: Partial<Record<AwarenessKey, number>>;
   /** Medtech: Medicine specialty points (total ≤ rank). */
   medicine?: { surgery: number; pharmaceuticals: number; cryosystem: number };
-  // --- Round 3 X ---
   /** Tech: Maker specialty ranks (2 points per Role rank, each specialty ≤ rank). */
   maker?: { field: number; upgrade: number; fabrication: number; invention: number };
   /** Exec: Teamwork members (gained at ranks 3, 5 and 9). */
   team?: TeamMember[];
   /** Nomad: Family vehicles and upgrades chosen with Moto (names only). */
   moto?: { vehicles: string[]; upgrades: string[] };
-  // --- end Round 3 X ---
   notes?: string;
 }
-// --- Round 3 X ---
 export type TeamMemberKind = 'bodyguard' | 'covertOperative' | 'driver' | 'netrunner' | 'technician';
 export interface TeamMember { name: string; kind: TeamMemberKind; loyalty: number }
-// --- end Round 3 X ---
 export type CyberwareEffect =
   | { kind: 'stat'; stat: StatKey; value: number }
   | { kind: 'skill'; skill: string; value: number }
@@ -150,7 +139,7 @@ export type CyberwareEffect =
   | { kind: 'interfacePlugs' }
   | { kind: 'healingMultiplier'; value: number }
   | { kind: 'ignoreSeriouslyWounded' }
-  /** Round 4 R4: speedware. Passive (Kerenzikov type) always adds; activated (Sandevistan type) adds while on. One piece only. */
+  /** Speedware. Passive (Kerenzikov type) always adds; activated (Sandevistan type) adds while on. One piece only. */
   | { kind: 'speedware'; mode: 'passive' | 'activated'; initiative: number };
 export interface CyberwareItem {
   id: string;
@@ -161,7 +150,6 @@ export interface CyberwareItem {
   humanityLoss: number;
   effects: CyberwareEffect[];
   notes?: string;
-  // --- Round 3 D ---
   /** Humanity Loss dice as written, e.g. "2d6", "1d6/2", "0". */
   hlDice?: string;
   /** Fixed Humanity Loss taken at character creation. */
@@ -170,10 +158,9 @@ export interface CyberwareItem {
   borgware?: boolean;
   install?: 'mall' | 'clinic' | 'hospital' | 'none';
   costEb?: number;
-  // --- end Round 3 D ---
 }
 
-/** A gear entry on a character sheet (Round 3 D). */
+/** A gear entry on a character sheet. */
 export interface GearItem { name: string; qty: number; notes?: string }
 export interface CombatMods {
   statBonuses?: Partial<Record<StatKey, number>>;
@@ -185,19 +172,18 @@ export interface CombatMods {
   damageDeflection?: number;
   spotWeakness?: number;
   fumbleRecovery?: boolean;
-  /** Round 3 D: Targeting Scope (Smart ammo tracking, +1 ranged Aimed Shots). */
+  /** Targeting Scope (Smart ammo tracking, +1 ranged Aimed Shots). */
   targetingScope?: boolean;
   neuralLink?: boolean;
   subdermalGrip?: boolean;
   interfacePlugs?: boolean;
   healingMultiplier?: number;
   ignoreSeriouslyWounded?: boolean;
-  /** Round 4 R4: Initiative bonus of installed activated speedware while it's on. */
+  /** Initiative bonus of installed activated speedware while it's on. */
   activatedSpeedware?: number;
 }
 export type AmmoTypeId = 'basic' | 'armorPiercing' | 'expansive' | 'incendiary' | 'rubber' | 'smart' | 'improvedSmart'
   | 'emp' | 'smoke' | 'teargas' | 'flashbang' | 'biotoxin' | 'poison' | 'sleep';
-// --- end Track K ---
 
 // ---------------------------------------------------------------------------
 // Weapons
@@ -209,7 +195,7 @@ export type WeaponType =
   | 'shotgun' | 'assaultRifle' | 'sniperRifle'
   | 'bowsAndCrossbows' | 'grenadeLauncher' | 'rocketLauncher'
   | 'lightMelee' | 'mediumMelee' | 'heavyMelee' | 'veryHeavyMelee'
-  // --- Round 3 D --- thrown grenades (DEX + Athletics, area attack only)
+  // Thrown grenades (DEX + Athletics, area attack only)
   | 'grenade';
 
 export type RangeRow =
@@ -239,18 +225,14 @@ export interface Weapon {
   /** Overrides for Exotic weapons, quality, homebrew. */
   damageDiceOverride?: number;
   rofOverride?: 1 | 2;
-  // --- Track K ---
   /** Loaded ammunition type. Missing = Basic. */
   ammoType?: AmmoTypeId;
-  // --- end Track K ---
-  // --- Round 3 D ---
   /** Smartgun Link attachment: +1 to ranged attacks with this weapon when wired in (Neural Link + Interface Plugs or Subdermal Grip). */
   smartgunLink?: boolean;
   /** 2070s Smart Weapon: built smart, or a Smart Rebuild (non-Power, non-Tech gun; uses 2 of 3 attachment slots). */
   smart?: 'built' | 'rebuild';
   /** 2070s weapon class. Power and Tech weapons can't be given a Smart Rebuild. */
   tech2070s?: 'power' | 'tech';
-  // --- end Round 3 D ---
 }
 
 // ---------------------------------------------------------------------------
@@ -302,7 +284,6 @@ export interface DamageSpec {
   /** SP lost per armor piece when damage gets through. */
   ablation: number;
   critTable: CritTable;
-  // --- Track K ---
   /** Rubber ammo: no Critical Injuries, no ablation, can't drop the target below 1 HP. */
   nonLethal?: boolean;
   /** Incendiary: sets On Fire (HP per Turn) when damage gets through armor. */
@@ -311,7 +292,6 @@ export interface DamageSpec {
   bonusDamage?: number;
   /** Encounter Round, for once-per-Round defenses (Damage Deflection). */
   round?: number;
-  // --- end Track K ---
 }
 
 export interface DamageRoll {

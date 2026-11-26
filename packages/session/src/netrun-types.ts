@@ -1,4 +1,4 @@
-/** Netrunning session types (Track N). Engine types live in @cprc/rules-core (net/). */
+/** Netrunning session types. Engine types live in @cprc/rules-core (net/). */
 import type { Cell, InterfaceAbility, NetArchitecture, NetFloorKind, NetRig, NetRun, Program } from '@cprc/rules-core';
 
 /** Everything netrunning, GM-authoritative. Players get a NetView instead. */
@@ -29,17 +29,15 @@ export type NetOp =
   | { op: 'iceAttack'; actorId: string; index: number }
   /** GM: rip the runner out (unsafe): every live ICE they met bites. */
   | { op: 'forceJackOut'; actorId: string }
-  // --- Round 4 R4 ---
   /** GM: the Black ICE's Turn: every live ICE on the runner's floor attacks once. */
   | { op: 'iceTurn'; actorId: string }
   /** GM: the Demon on the runner's floor spends `count` NET Actions on Zap (Control Nodes stay a GM call). */
   | { op: 'demonZap'; actorId: string; count: number }
-  // --- end Round 4 R4 ---
   // Runner
   | { op: 'jackIn'; actorId: string; archId: string }
   | { op: 'jackOut'; actorId: string }
   | { op: 'move'; actorId: string; toFloorId: string }
-  /** Round 3 P: step down into the `branch`-th way down from here (revealed or not). No Pathfinder needed. */
+  /** Step down into the `branch`-th way down from here (revealed or not). No Pathfinder needed. */
   | { op: 'descend'; actorId: string; branch: number }
   | { op: 'ability'; actorId: string; ability: NetAbilityName; index?: number; toFloorId?: string }
   | { op: 'program'; actorId: string; programId: string; index: number }
@@ -63,7 +61,7 @@ export interface NetFloorView {
   controlled: boolean;
   ice?: { name: string; kind: 'antiPersonnel' | 'antiProgram'; rez: number; maxRez: number }[];
   demon?: { name: string; rez: number; maxRez: number };
-  /** Round 3 P: on the runner's own floor, how many ways lead down (revealed or not). */
+  /** On the runner's own floor, how many ways lead down (revealed or not). */
   exitsDown?: number;
 }
 

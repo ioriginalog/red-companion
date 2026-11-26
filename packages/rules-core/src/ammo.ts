@@ -87,7 +87,7 @@ export function applyAmmo(spec: DamageSpec, ammo: AmmoTypeId | undefined): Damag
   }
 }
 
-// ----- Smart targeting (Round 3 D) ------------------------------------------------------
+// ----- Smart targeting ------------------------------------------------------
 
 /** A Smartgun Link only works wired in: Neural Link plus Interface Plugs or a Subdermal Grip. */
 export function smartgunLinked(c: Combatant): boolean {

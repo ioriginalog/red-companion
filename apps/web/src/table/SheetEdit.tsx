@@ -1,4 +1,4 @@
-/** Round 4 U4: players edit their own character's notes and gear (validated by the authority). */
+/** Players edit their own character's notes and gear (validated by the authority). */
 import { useState } from 'react';
 import type { GearItem } from '@cprc/rules-core';
 import type { ProjectedActor } from '@cprc/session';

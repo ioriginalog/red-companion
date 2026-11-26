@@ -116,7 +116,7 @@ export function doAreaAttack(state: SessionState, intent: AreaIntent, by: Viewer
   if (!hasLineOfSight(map, from, at)) throw new SessionError('NO_LINE_OF_SIGHT', 'That square is out of sight.');
   const distance = Math.max(1, metersBetween(from, at));
 
-  // Round 3 D: a Thrown Grenade weapon is always thrown (DEX + Athletics), whatever kind the client sent.
+  // A Thrown Grenade weapon is always thrown (DEX + Athletics), whatever kind the client sent.
   const kind: AreaIntent['kind'] = weapon.type === 'grenade' ? 'thrownGrenade' : intent.kind;
   if (weapon.type === 'grenade' && intent.kind === 'shotgunShell') throw new SessionError('INVALID', `${weapon.name} is thrown, not fired as a shell.`);
   let area: AreaKind;
@@ -142,7 +142,7 @@ export function doAreaAttack(state: SessionState, intent: AreaIntent, by: Viewer
   const patch: StatePatch = { actors };
   if (encounter) patch.encounter = encounter;
   if (out.scattered) {
-    // Round 3 P: the GM places (or rolls) where it lands, then the blast resolves there (placeScatter).
+    // The GM places (or rolls) where it lands, then the blast resolves there (placeScatter).
     events.push({ type: 'explosiveMissed', visibility: 'public', attackerId: attacker.id, at });
     const areaKind = kind === 'launcher' ? 'launcher' : 'thrownGrenade';
     patch.pending = { kind: 'awaitingScatter', id: newId(), attackerId: attacker.id, areaKind, at, attack: out.attack, damageDice: out.damageDice };
@@ -185,7 +185,7 @@ export function finishArea(state: SessionState, p: AreaPendingT, dice: Dice): { 
       events.push({ type: 'checkRolled', visibility: 'public', by: base.controller, combatantId: r.targetId, label: 'Dodge', check: r.dodge, dv: p.attack.total, success: r.avoided });
     }
     events.push(...r.events);
-    // Round 3 P: players learn the hit did nothing, without SP numbers.
+    // Players learn the hit did nothing, without SP numbers.
     if (!r.avoided && factionOf(base) !== 'friendly' && base.combatant.hp.current === r.target.hp.current) {
       events.push({ type: 'noEffect', visibility: 'public', targetId: r.targetId });
     }

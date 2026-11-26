@@ -9,8 +9,8 @@ import { linkedStat } from './skills.js';
 import { NotesAndGear } from './SheetEdit.js';
 import { ALLEGIANCE, WOUND, type TableCtx } from './ctx.js';
 import { Portrait } from './panels.js';
-import { SystemsSheet } from '../systems/index.js'; // Track K
-import { RoleAbilityPanel } from '../extras/index.js'; // Round 3 X
+import { SystemsSheet } from '../systems/index.js';
+import { RoleAbilityPanel } from '../extras/index.js';
 
 const STAT_NAMES: Record<StatKeyName, string> = {
   INT: 'Intelligence', REF: 'Reflexes', DEX: 'Dexterity', TECH: 'Technique', COOL: 'Cool', WILL: 'Willpower',
@@ -171,7 +171,7 @@ export function SheetPanel({ c, preferId }: { c: TableCtx; preferId: string | nu
         )}
       </section>
       <SystemsSheet c={c} actorId={a.id} />
-      <RoleAbilityPanel c={c} actorId={a.id} />{/* Round 3 X */}
+      <RoleAbilityPanel c={c} actorId={a.id} />{/* */}
     </>
   );
 }

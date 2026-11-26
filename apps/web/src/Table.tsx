@@ -7,11 +7,11 @@ import { aimOf, isFriendly, previewAttack, type AttackMode } from './tactics.js'
 import { demoIntents } from './demo.js';
 import type { TableCtx } from './table/ctx.js';
 import { HelpOverlay, InitiativeStrip, Prompts, TopBar } from './table/panels.js';
-import { coverAt, coverLabel } from './table/cover.js'; // Round 3 P
+import { coverAt, coverLabel } from './table/cover.js';
 import { CombatPanel, fireBlocked } from './table/CombatPanel.js';
 import { SheetPanel } from './table/SheetPanel.js';
-import { AreaDodgePrompt, GmSystemsPanel } from './systems/index.js'; // Track K
-import { CombatExtrasPanel } from './extras/index.js'; // Round 3 X
+import { AreaDodgePrompt, GmSystemsPanel } from './systems/index.js';
+import { CombatExtrasPanel } from './extras/index.js';
 import { ChatPanel } from './table/ChatPanel.js';
 import { Inspector, ScenePanel } from './table/GmPanels.js';
 import { NotesPanel } from './table/NotesPanel.js';
@@ -52,11 +52,10 @@ export function Table({ s }: { s: ClientState }) {
   const [weaponId, setWeaponId] = useState<string | null>(null);
   const [mode, setMode] = useState<AttackMode>('single');
   const [mapMode, setMapMode] = useState<MapMode>('move');
-  // --- Round 3 P --- one-shot map picks: a cover square to shoot, or where a missed explosive lands.
+  // One-shot map picks: a cover square to shoot, or where a missed explosive lands.
   const [coverPick, setCoverPick] = useState(false);
   const [scatterPick, setScatterPick] = useState(false);
   const [delayOpen, setDelayOpen] = useState<DOMRect | null>(null);
-  // --- end Round 3 P ---
   const [partyFog, setPartyFog] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string[]>([]);
@@ -99,7 +98,6 @@ export function Table({ s }: { s: ClientState }) {
     if (targetId === actingId || !t || t.placeholder || (acting && isFriendly(t) === isFriendly(acting))) setTargetId(null);
   }, [actingId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (mapMode === 'area' && !areaKind) setMapMode('move'); }, [areaKind, mapMode]);
-  // --- Round 3 P ---
   const scatter = view.pending?.kind === 'awaitingScatter' ? view.pending : null;
   useEffect(() => { if (!scatter) setScatterPick(false); }, [scatter?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setCoverPick(false); setDelayOpen(null); }, [actingId, weapon?.id]);
@@ -120,11 +118,10 @@ export function Table({ s }: { s: ClientState }) {
   useEffect(() => { setAreaAim(null); }, [effMode, actingId, weapon?.id, scatter?.id]);
   const confirmArea = () => {
     if (!areaAim) return;
-    if (scatterPick && scatter) { if (c.act({ type: 'placeScatter', pendingId: scatter.id, at: areaAim })) { setScatterPick(false); setAreaAim(null); } return; } // Round 3 P
+    if (scatterPick && scatter) { if (c.act({ type: 'placeScatter', pendingId: scatter.id, at: areaAim })) { setScatterPick(false); setAreaAim(null); } return; }
     if (!actingId || !weapon || !areaKind) return;
     if (c.act({ type: 'areaAttack', attackerId: actingId, weaponId: weapon.id, kind: areaKind === 'blast' ? 'launcher' : 'shotgunShell', at: areaAim })) { setMapMode('move'); setAreaAim(null); }
   };
-  // --- end Round 3 P ---
 
   const attack = useMemo(
     () => (actingId && targetId && weapon && canAct ? previewAttack(view, actingId, targetId, weapon, mode) : null),
@@ -264,9 +261,9 @@ export function Table({ s }: { s: ClientState }) {
   const bannerTitle = currentId && view.actors[currentId] && !view.actors[currentId]!.placeholder && mine(currentId) && (!isGm || view.actors[currentId]!.controller === 'gm')
     ? (isGm ? `${name(currentId)}’s Turn` : 'Your Turn') : null;
   const turnKey = enc.active && currentId ? `${enc.round}:${enc.turnIndex}:${currentId}` : null;
-  // Round 3 P: Delay (house rule), shown in both the desktop bar and the phone dock.
+  // Delay (house rule), shown in both the desktop bar and the phone dock.
   const delaySlot: React.ReactNode = (() => {
-    // Round 3 P: Delay (house rule): act later this Round, before moving or acting.
+    // Delay (house rule): act later this Round, before moving or acting.
     if (!enc.active || !canAct || !currentId || actingId !== currentId || enc.delayAllowed === false) return null;
     const fresh = !usage || (usage.moveUsed === 0 && !usage.actionUsed);
     const later = enc.order.slice(enc.turnIndex + 1).filter((id) => view.actors[id] && !view.actors[id]!.placeholder);
@@ -302,14 +299,14 @@ export function Table({ s }: { s: ClientState }) {
             followKey={`${turnKey ?? 'free'}|${actingId ?? ''}|${targetId ?? ''}|${sheet}`}
             showMini={showMini} onToggleMini={() => { const v = !showMini; setShowMini(v); store.set('nsc.minimap', v ? '1' : '0'); }}
             mode={effMode} areaKind={scatterPick ? 'blast' : areaKind} partyFog={partyFog} neutralTemplate={!!scatterPick}
-            hoverInfo={(cell) => { const ci = view.map ? coverAt(view.map, cell) : null; return ci ? coverLabel(ci, isGm) : null; } /* Round 3 P */} focusId={isGm ? focusId : null} highlight={highlight}
+            hoverInfo={(cell) => { const ci = view.map ? coverAt(view.map, cell) : null; return ci ? coverLabel(ci, isGm) : null; } /* */} focusId={isGm ? focusId : null} highlight={highlight}
             shareCursor={!isGm || gmCursor}
             signals={s.signals} effects={effects} nameOf={(f) => client.nameOf(f)}
             canDrag={(id) => isGm || (mine(id) && (!enc.active || currentId === id))}
             onToken={pickToken}
             onTokenContext={(id) => { if (isGm) { setFocusId(id); openTab('combat'); } else pickToken(id); }}
             onCell={(cell, { run }) => {
-              if (coverPick) { // Round 3 P
+              if (coverPick) {
                 if (actingId && weapon && c.act({ type: 'attackCover', attackerId: actingId, weaponId: weapon.id, at: cell })) setCoverPick(false);
                 return;
               }
@@ -411,7 +408,7 @@ export function Table({ s }: { s: ClientState }) {
                 setHighlight={setHighlight} onFire={fire} coverPick={coverPick} setCoverPick={setCoverPick}
                 ownIds={ownIds} onSelectOwn={(id) => setSelected(id)} targetHint={targetHint}
               />
-              <CombatExtrasPanel c={c} actingId={actingId} targetId={targetId} canAct={canAct} />{/* Round 3 X */}
+              <CombatExtrasPanel c={c} actingId={actingId} targetId={targetId} canAct={canAct} />{/* */}
             </>
           )}
           {tab === 'sheet' && <SheetPanel c={c} preferId={isGm ? (focusId ?? actingId) : actingId} />}

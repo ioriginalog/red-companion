@@ -277,7 +277,7 @@ describe('2070s and Netrunning bridges', () => {
     const t = setup();
     expect(t.send({ type: 'setAmmoType', actorId: 'solo', weaponId: 'pistol', ammoType: 'improvedSmart' }, GM)).toMatchObject({ code: 'INVALID' });
     expect(t.send({ type: 'net', op: { op: 'setOptions', quickhacks2070s: true } }, GM).ok).toBe(true);
-    // Round 3 D: it also needs a Smart Weapon.
+    // It also needs a Smart Weapon.
     const r = t.send({ type: 'setAmmoType', actorId: 'solo', weaponId: 'pistol', ammoType: 'improvedSmart' }, GM);
     expect(r).toMatchObject({ code: 'INVALID' });
     expect(!r.ok && r.message).toMatch(/Smart Weapon/);
@@ -294,7 +294,7 @@ describe('2070s and Netrunning bridges', () => {
   });
 });
 
-describe('thrown grenades (Round 3 D)', () => {
+describe('thrown grenades', () => {
   it('a Thrown Grenade weapon is thrown with DEX + Athletics and spends one', () => {
     const t = setup();
     const solo = t.state.actors.solo!;

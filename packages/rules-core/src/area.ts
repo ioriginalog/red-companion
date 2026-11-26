@@ -77,7 +77,7 @@ export function resolveAreaAttack(attacker: Combatant, area: AreaKind, dice: Dic
     [{ label: stat, value: effectiveStat(attacker, stat) }, { label: skill, value: skillLevel(attacker, skill) }],
     [...standingModifiers(attacker, 'rangedAttack'), ...situational],
     dice,
-  )); // Track K: Fumble Recovery
+  )); // Fumble Recovery
   const hit = beats(attack.total, dv);
   const scattered = source === 'explosive' && !hit;
   return { attack, dv, hit, scattered, ammoSpent, damageDice, source, events: [] };

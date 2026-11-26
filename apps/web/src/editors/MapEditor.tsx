@@ -480,7 +480,7 @@ function PaintCanvas({ map, tool, terrain, size, outline, zoom, actors, onPaint,
   );
 }
 
-// ----- Track K: cover materials -------------------------------------------------
+// Cover materials -------------------------------------------------
 
 /** Cover record for the painted cells: keep existing entries on cover squares, new cover gets `mat` at full HP. */
 function coverFor(cells: string, width: number, prev: TacticalMap['cover'], mat: CoverMaterialId): NonNullable<TacticalMap['cover']> {

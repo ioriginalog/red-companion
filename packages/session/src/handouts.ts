@@ -1,5 +1,5 @@
 /**
- * Handouts and the GM journal (Track U). A handout is shared text (and an
+ * Handouts and the GM journal. A handout is shared text (and an
  * optional image) the GM reveals to everyone or to chosen players; audience
  * 'gm' keeps it as a private journal page. Projection filters by audience.
  */

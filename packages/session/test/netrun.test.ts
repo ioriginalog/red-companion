@@ -317,7 +317,7 @@ describe('netrunning: Scanner, Virus and 2070s Quickhacks', () => {
   });
 });
 
-describe('netrunning: descending without Pathfinder (Round 3 P)', () => {
+describe('netrunning: descending without Pathfinder', () => {
   it('steps down into an unrevealed floor, revealing it on arrival, and tells the runner how many ways lead down', () => {
     const t = setup();
     t.net({ op: 'revealAccess', archId: 'lab', found: true }, GM);

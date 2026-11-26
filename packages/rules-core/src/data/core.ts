@@ -72,7 +72,7 @@ export const WEAPON_TYPES: Record<WeaponType, WeaponTypeProfile> = {
   mediumMelee:      W({ type: 'mediumMelee', displayName: 'Medium Melee Weapon', skill: 'Melee Weapon', damageDice: 2, rof: 2, melee: true }),
   heavyMelee:       W({ type: 'heavyMelee', displayName: 'Heavy Melee Weapon', skill: 'Melee Weapon', damageDice: 3, rof: 2, melee: true }, { book: 'CPR Easy Mode', verification: 'easy-mode' }),
   veryHeavyMelee:   W({ type: 'veryHeavyMelee', displayName: 'Very Heavy Melee Weapon', skill: 'Melee Weapon', damageDice: 4, rof: 1, melee: true }),
-  // Round 3 D: thrown grenades. Area attack only; DEX + Athletics vs the Grenade Launcher row (Interpretation).
+  // Thrown grenades. Area attack only; DEX + Athletics vs the Grenade Launcher row (Interpretation).
   grenade:          W({ type: 'grenade', displayName: 'Thrown Grenade', skill: 'Athletics', damageDice: 6, rof: 1, melee: false, rangeRow: 'grenadeLauncher' }),
 };
 

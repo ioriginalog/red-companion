@@ -20,22 +20,16 @@ import {
   checkAttackAction, checkOtherAction, controls, currentActorId, freshUsage, getActor, getWeapon, requireMap, SessionError, usageFor, visibilityFor,
 } from './helpers.js';
 import { executeTool, TOOL_GM_ONLY, TOOL_WHILE_PENDING } from './tools.js';
-import { executeHandout } from './handouts.js'; // Track U
-import { executePlayerEdit } from './player-edits.js'; // Round 4 U4
-// --- Track N ---
+import { executeHandout } from './handouts.js';
+import { executePlayerEdit } from './player-edits.js';
 import { executeNet } from './netrun.js';
-// --- end Track N ---
 import { doAreaAttack, doSuppressiveFire } from './grid-area.js';
 import { validateIntent } from './validate.js';
-import { endTurnUpkeep, turnUpkeep } from './upkeep.js'; // Round 4 R4
-import { attackAvailability } from './availability.js'; // Round 4 R4
-import { executeExtra, extrasAdjust, extrasGate, trackExtras } from './extras.js'; // Round 3 X
-// --- Track K ---
+import { endTurnUpkeep, turnUpkeep } from './upkeep.js';
+import { attackAvailability } from './availability.js';
+import { executeExtra, extrasAdjust, extrasGate, trackExtras } from './extras.js';
 import { authorizeSystems, beforeDamage, executeSystems, isSystemsIntent, onTurnStart, SYSTEMS_GM_ONLY, SYSTEMS_WHILE_PENDING, wieldCheck } from './systems.js';
-// --- end Track K ---
-// --- Round 3 P ---
 import { authorizePlayLoop, executePlayLoop, isPlayLoopIntent, PLAYLOOP_WHILE_PENDING } from './playloop.js';
-// --- end Round 3 P ---
 
 export { SessionError, currentActorId };
 import type {
@@ -52,9 +46,9 @@ export interface AuthorityContext {
 const GM_ONLY: ReadonlySet<IntentType> = new Set([
   'addActor', 'replaceActor', 'removeActor', 'assignController', 'startEncounter', 'endEncounter', 'cancelPending', 'setMap', 'placeToken',
   ...TOOL_GM_ONLY,
-  'setHandout', 'removeHandout', // Track U
+  'setHandout', 'removeHandout',
 ]);
-const ALLOWED_WHILE_PENDING: ReadonlySet<IntentType> = new Set(['respondDodge', 'rollDamage', 'cancelPending', 'declineWatch', ...TOOL_WHILE_PENDING, 'setHandout', 'removeHandout', 'editOwnSheet' /* Round 4 U4 */, ...SYSTEMS_WHILE_PENDING /* Track K */, ...(PLAYLOOP_WHILE_PENDING as ReadonlySet<IntentType>) /* Round 3 P */]);
+const ALLOWED_WHILE_PENDING: ReadonlySet<IntentType> = new Set(['respondDodge', 'rollDamage', 'cancelPending', 'declineWatch', ...TOOL_WHILE_PENDING, 'setHandout', 'removeHandout', 'editOwnSheet' /* */, ...SYSTEMS_WHILE_PENDING /* */, ...(PLAYLOOP_WHILE_PENDING as ReadonlySet<IntentType>) /* */]);
 
 export function authorId(v: Viewer): AuthorId {
   return v.role === 'gm' ? 'gm' : `player:${v.playerId}`;
@@ -64,9 +58,9 @@ export function handleIntent(state: SessionState, intent: Intent, by: Viewer, ct
   const newId = ctx.newId ?? (() => globalThis.crypto.randomUUID());
   try {
     validateIntent(state, intent, by);
-    const effective = extrasAdjust(state, intent); // Round 3 X: Grapple and Facedown penalties
+    const effective = extrasAdjust(state, intent); // Grapple and Facedown penalties
     authorize(state, effective, by);
-    const { events, patch } = trackExtras(state, effective, execute(state, effective, by, ctx.dice, newId)); // Round 3 X
+    const { events, patch } = trackExtras(state, effective, execute(state, effective, by, ctx.dice, newId));
     const entry: LogEntry = {
       seq: state.seq + 1,
       id: newId(),
@@ -95,7 +89,7 @@ function requireActing(state: SessionState, by: Viewer, actorId: string, outOfTu
 
 function authorize(state: SessionState, intent: Intent, by: Viewer) {
   if (GM_ONLY.has(intent.type) && by.role !== 'gm') throw new SessionError('FORBIDDEN', 'Only the GM can do that.');
-  if (SYSTEMS_GM_ONLY.has(intent.type) && by.role !== 'gm') throw new SessionError('FORBIDDEN', 'Only the GM can do that.'); // Track K
+  if (SYSTEMS_GM_ONLY.has(intent.type) && by.role !== 'gm') throw new SessionError('FORBIDDEN', 'Only the GM can do that.');
   const watch = state.pending?.kind === 'awaitingWatch' ? state.pending : null;
   const isWatchShot = !!watch && (intent.type === 'rangedAttack' || intent.type === 'meleeAttack')
     && intent.attackerId === watch.watcherId && intent.defenderId === watch.targetId;
@@ -103,14 +97,14 @@ function authorize(state: SessionState, intent: Intent, by: Viewer) {
     throw new SessionError('PENDING', watch ? 'Resolve the watch first.' : 'Finish the current attack first.');
   }
 
-  wieldCheck(state, intent); // Track K: arm injuries limit weapons
-  extrasGate(state, intent); // Round 3 X: what a grapple forbids
+  wieldCheck(state, intent); // Arm injuries limit weapons
+  extrasGate(state, intent); // What a grapple forbids
   switch (intent.type) {
     case 'rangedAttack':
     case 'meleeAttack':
       requireActing(state, by, intent.attackerId, isWatchShot);
       getActor(state, intent.defenderId);
-      { // Round 4 R4: the same availability rule the client preview uses
+      { // The same availability rule the client preview uses
         const att = state.actors[intent.attackerId]!;
         const w = intent.type === 'rangedAttack'
           ? att.weapons.find((x) => x.id === intent.weaponId)
@@ -174,8 +168,8 @@ function authorize(state: SessionState, intent: Intent, by: Viewer) {
       break;
     }
     default:
-      if (isPlayLoopIntent(intent)) { authorizePlayLoop(state, intent, by); break; } // Round 3 P
-      authorizeSystems(state, intent, by); // Track K
+      if (isPlayLoopIntent(intent)) { authorizePlayLoop(state, intent, by); break; }
+      authorizeSystems(state, intent, by);
       break;
   }
 }
@@ -228,23 +222,23 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       const { order, events } = rollInitiative(parts, dice);
       const encounter = settleTurn({
         active: true, round: 1, order: order.map((e) => e.combatantId), turnIndex: 0, deathSaveRequiredFor: null,
-        // Round 3 P: keep totals for late arrivals; the Delay house rule setting carries over.
+        // Keep totals for late arrivals; the Delay house rule setting carries over.
         initiative: Object.fromEntries(order.map((e) => [e.combatantId, e.total])),
         ...(state.encounter.delayAllowed !== undefined ? { delayAllowed: state.encounter.delayAllowed } : {}),
       }, state.actors);
-      const up = turnUpkeep(state, encounter, encounter.round); // Round 4 R4: first Turn's upkeep (no Round tick)
+      const up = turnUpkeep(state, encounter, encounter.round); // First Turn's upkeep (no Round tick)
       const patch: StatePatch = { encounter: up.encounter, pending: null };
       if (Object.keys(up.actors).length) patch.actors = up.actors;
       if (state.map && Object.keys(state.map.watches).length) patch.map = { ...state.map, watches: {} };
       return { events: [...events, ...up.events], patch };
     }
     case 'endEncounter':
-      return { events: [], patch: { encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null, ...(state.encounter.delayAllowed !== undefined ? { delayAllowed: state.encounter.delayAllowed } : {}) /* Round 3 P */ }, pending: null } };
+      return { events: [], patch: { encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null, ...(state.encounter.delayAllowed !== undefined ? { delayAllowed: state.encounter.delayAllowed } : {}) /* */ }, pending: null } };
     case 'cancelPending':
       if (!state.pending) throw new SessionError('NO_PENDING', 'Nothing to cancel.');
       return { events: [], patch: { pending: null } };
     case 'endTurn': {
-      // Round 4 R4: end-of-Turn injuries (re-bleed, ear), then the next Turn's upkeep
+      // End-of-Turn injuries (re-bleed, ear), then the next Turn's upkeep
       // (On Fire, lost Actions, reminders) and new-Round prompts (speedware, Black ICE).
       const end = endTurnUpkeep(state);
       const after: SessionState = { ...state, actors: { ...state.actors, ...end.actors } };
@@ -304,7 +298,7 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
     case 'rollDamage': {
       const p = state.pending as Extract<Pending, { kind: 'awaitingDamage' }>;
       const target = getActor(state, p.targetId);
-      const k = beforeDamage(state, p); // Track K: Round stamp (Damage Deflection), Spot Weakness
+      const k = beforeDamage(state, p); // Round stamp (Damage Deflection), Spot Weakness
       const roll = rollDamage(k.spec, dice);
       const r = applyDamage(target.combatant, k.spec, roll, dice);
       const events: CombatEvent[] = [
@@ -312,7 +306,7 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
         { type: 'damageRolled', visibility: 'public', dice: roll.dice, multiplier: roll.multiplier, total: roll.total, critTriggered: roll.critTriggered },
         ...r.events,
       ];
-      // Round 3 P: players see "no effect" when armor stopped it (no SP numbers).
+      // Players see "no effect" when armor stopped it (no SP numbers).
       if (r.hpLost === 0 && factionOf(target) !== 'friendly') events.push({ type: 'noEffect', visibility: 'public', targetId: target.id });
       return { events, patch: { actors: { ...k.actors, [target.id]: { ...target, combatant: r.target } }, pending: null } };
     }
@@ -391,21 +385,17 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       return doAreaAttack(state, intent, by, dice, newId);
     case 'suppressiveFire':
       return doSuppressiveFire(state, intent, by, dice);
-    case 'editOwnSheet': return executePlayerEdit(state, intent, by); // Round 4 U4
-    case 'setHandout': case 'removeHandout': // Track U
+    case 'editOwnSheet': return executePlayerEdit(state, intent, by);
+    case 'setHandout': case 'removeHandout':
       return executeHandout(state, intent, by);
-    // --- Round 3 P ---
     case 'addToInitiative': case 'removeFromInitiative': case 'delayTurn': case 'setDelayRule': case 'placeScatter':
-      return executePlayLoop(state, intent, by, dice, newId, { settleTurn, onTurnStart, turnUpkeep }); // Round 4 R4: turnUpkeep
-    // --- end Round 3 P ---
-    // --- Track N ---
+      return executePlayLoop(state, intent, by, dice, newId, { settleTurn, onTurnStart, turnUpkeep });
     case 'net':
       return executeNet(state, (intent as { op: unknown }).op, by, dice);
-    // --- end Track N ---
-    case 'extra': // Round 3 X
+    case 'extra':
       return executeExtra(state, (intent as { op: unknown }).op, by, dice, newId);
     default:
-      if (isSystemsIntent(intent)) return executeSystems(state, intent, by, dice, newId); // Track K
+      if (isSystemsIntent(intent)) return executeSystems(state, intent, by, dice, newId);
       return executeTool(state, intent, by, dice);
   }
 }

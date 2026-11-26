@@ -50,7 +50,7 @@ export function TopBar({ c, onHelp }: { c: TableCtx; onHelp: () => void }) {
       </span>
       <button className="btn ghost icon" onClick={() => { setMuted(!muted); setM(!muted); }} aria-pressed={!muted} aria-label={muted ? 'Sound Off' : 'Sound On'} title={muted ? 'Sound Off' : 'Sound On'}>{muted ? 'Muted' : 'Sound'}</button>
       <button className="btn ghost icon" onClick={onHelp} title="Help, Shortcuts and About (?)" aria-label="Help and About">?</button>
-      {/* Round 4 H1: the session menu holds Leave (with confirmation), the GM key, backup and export. */}
+      {/* The session menu holds Leave (with confirmation), the GM key, backup and export. */}
       <button className="btn ghost hide-sm" onClick={() => client.openSessionMenu()}>{isGm ? 'Session' : 'Leave'}</button>
     </header>
   );
@@ -77,7 +77,7 @@ export function InitiativeStrip({ c, onPick }: { c: TableCtx; onPick: (id: strin
         if (id === '|') return <div className="round-div" key="div">Round {enc.round + 1}</div>;
         const a = view.actors[id];
         if (!a || a.placeholder) {
-          // Round 3 Track R: unseen hostiles never appear in the order; one opaque
+          // Unseen hostiles never appear in the order; one opaque
           // slot stands in only while one of them holds the Turn.
           return (
             <div key={`${id}-${i}`} className={`init-card unknown${i === 0 ? ' active' : ''}`} title="Unknown Contact Acting" aria-label="Unknown Contact Acting">
@@ -104,7 +104,6 @@ export function Prompts({ c, onPickScatter, scatterPicking }: { c: TableCtx; onP
   const pending = view.pending;
   const enc = view.encounter;
   const out: React.ReactNode[] = [];
-  // --- Round 3 P ---
   const [dismissed, setDismissed] = useState<string[]>([]);
   if (pending?.kind === 'awaitingScatter' && isGm) {
     out.push(
@@ -138,8 +137,7 @@ export function Prompts({ c, onPickScatter, scatterPicking }: { c: TableCtx; onP
       );
     }
   }
-  // --- end Round 3 P ---
-  // --- Round 4 U4: R4 automation hooks ---
+  // R4 automation hooks ---
   // Turn-start reminders for whoever is acting now (from the entry that started this Turn).
   const currentId = enc.active ? enc.order[enc.turnIndex] ?? null : null;
   const feed = c.s.feed;
@@ -181,7 +179,6 @@ export function Prompts({ c, onPickScatter, scatterPicking }: { c: TableCtx; onP
       );
     }
   }
-  // --- end Round 4 U4 ---
   if (pending?.kind === 'awaitingDodge' && mine(pending.defenderId)) {
     out.push(<DodgePrompt key="dodge" c={c} pending={pending} />);
   }

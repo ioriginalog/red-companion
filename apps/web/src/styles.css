@@ -343,7 +343,7 @@ kbd, code { font: 600 12px ui-monospace, monospace; background: #071030; border:
 }
 .chip.warn-chip { border-color: var(--yellow); color: var(--yellow); }
 
-/* ---------- Round 3 (Track M): layout, phone-first combat ---------- */
+/* ----- Layout, phone-first combat ----- */
 .table { --side-w: 380px; grid-template-columns: minmax(0, 1fr) var(--side-w); overflow: hidden; }
 .topbar { min-width: 0; overflow: hidden; }
 @media (max-width: 1280px) and (min-width: 1001px) { .table { --side-w: 340px; } .tab { font-size: 13px; letter-spacing: 0.06em; } }
@@ -463,16 +463,15 @@ kbd, code { font: 600 12px ui-monospace, monospace; background: #071030; border:
   .tchip-pf { width: 30px; height: 30px; }
   .toast { bottom: 64px; }
 }
-/* --- Round 3 P: Delay menu --- */
+/* ----- Delay menu ----- */
 .menu-wrap { position: relative; display: inline-flex; }
 .menu { position: fixed; z-index: 40; display: grid; min-width: 200px; background: var(--panel); border: 1px solid var(--cyan); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6); }
 .menu button { text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--line); padding: 9px 12px; font: 700 14px var(--head); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text); }
 .menu button:hover, .menu button:focus-visible { background: #0a1a45; color: var(--cyan); }
-/* --- end Round 3 P --- */
 .table.compact .zoom .btn { background: rgba(8, 14, 40, 0.72); }
 .table.compact .zoom:hover .btn, .table.compact .zoom:focus-within .btn { background: rgba(8, 14, 40, 0.95); }
 
-/* Round 4 U4: area-attack confirm (#13) */
+/* Area-attack confirm (#13) */
 .area-confirm { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 6; background: rgba(5, 8, 22, 0.95); border: 1px solid var(--yellow); box-shadow: 0 0 18px rgba(255, 212, 0, 0.25); padding: 10px 14px; min-width: 260px; max-width: min(92vw, 460px); display: grid; gap: 4px; }
 .area-confirm .ttl-sm { color: var(--yellow); font-size: 16px; letter-spacing: 0.08em; }
 .warn-txt { color: #ff8aa0; }
@@ -484,5 +483,5 @@ kbd, code { font: 600 12px ui-monospace, monospace; background: #071030; border:
 @media (max-width: 600px) { .gear-row { grid-template-columns: 1fr 64px; } .gear-row input:nth-child(3) { grid-column: 1 / -1; } }
 .sheet-edit textarea { width: 100%; }
 
-/* Round 4 U4: turn-start reminders */
+/* Turn-start reminders */
 .reminders { margin: 0; padding-left: 18px; font-size: 13px; display: grid; gap: 2px; }

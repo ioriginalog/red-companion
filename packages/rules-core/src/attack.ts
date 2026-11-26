@@ -75,7 +75,7 @@ function evasionCheck(defender: Combatant, dice: Dice): CheckResult {
   );
 }
 
-// --- Track K --- Solo Fumble Recovery: a natural 1 on an attack is just a 1.
+// Solo Fumble Recovery: a natural 1 on an attack is just a 1.
 export function withFumbleRecovery(attacker: Combatant, check: CheckResult): CheckResult {
   if (!attacker.mods?.fumbleRecovery || check.roll.kind !== 'critFailure') return check;
   const roll = { natural: check.roll.natural, kind: 'normal' as const, value: check.roll.natural };
@@ -88,7 +88,6 @@ function refuseDirectFire(weapon: Weapon, p: WeaponTypeProfile) {
     throw new RulesError('ILLEGAL_MODE', `${weapon.name} fires at an area. Use an area attack.`);
   }
 }
-// --- end Track K ---
 
 function checkAmmo(weapon: Weapon, need: number) {
   if (weapon.ammo && weapon.ammo.loaded < need) {
@@ -147,7 +146,7 @@ export function resolveRangedAttack(input: RangedAttackInput, dice: Dice): Attac
 
   const attack = withFumbleRecovery(attacker, makeCheck(
     [{ label: 'REF', value: effectiveStat(attacker, 'REF') }, { label: skill, value: skillLevel(attacker, skill) }],
-    [...standingModifiers(attacker, 'rangedAttack'), ...aimMods(aimTarget), ...smartAttackMods(attacker, weapon, aimTarget) /* Round 3 D */, ...(input.situational ?? [])],
+    [...standingModifiers(attacker, 'rangedAttack'), ...aimMods(aimTarget), ...smartAttackMods(attacker, weapon, aimTarget) /* */, ...(input.situational ?? [])],
     dice,
   ));
 
@@ -168,13 +167,12 @@ export function resolveRangedAttack(input: RangedAttackInput, dice: Dice): Attac
     },
     { type: 'ammoSpent', visibility: 'public', combatantId: attacker.id, weaponId: weapon.id, rounds: ammo },
   ];
-  // --- Round 3 D --- Smart / Improved Smart ammo second attempt (rules in ammo.ts).
+  // Smart / Improved Smart ammo second attempt (rules in ammo.ts).
   const retry = hit ? null : smartRetry({
     attacker, defender, weapon, mode, attack, defense, defenseValue,
     redodge: () => evasionCheck(defender, dice),
   }, dice);
   if (retry) { hit = retry.hit; events.push(...retry.events); }
-  // --- end Round 3 D ---
 
   let damage: DamageSpec | undefined;
   if (hit) {
@@ -185,7 +183,7 @@ export function resolveRangedAttack(input: RangedAttackInput, dice: Dice): Attac
           location: aimTarget === 'head' ? 'head' : 'body', halveSP: false, aimTarget, ablation: 1,
           critTable: aimTarget === 'head' ? 'head' : 'body',
         };
-    damage = applyAmmo(damage, weapon.ammoType); // Track K
+    damage = applyAmmo(damage, weapon.ammoType);
   }
   return { attack, defenseValue, defense, hit, margin, ammoSpent: ammo, damage, events };
 }
@@ -326,7 +324,7 @@ export function previewRangedAttack(input: Omit<RangedAttackInput, 'defenderDodg
     : null;
   return {
     base: effectiveStat(attacker, 'REF') + skillLevel(attacker, skill),
-    modifiers: [...standingModifiers(attacker, 'rangedAttack'), ...aimMods(aimTarget), ...smartAttackMods(attacker, weapon, aimTarget) /* Round 3 D */, ...(input.situational ?? [])],
+    modifiers: [...standingModifiers(attacker, 'rangedAttack'), ...aimMods(aimTarget), ...smartAttackMods(attacker, weapon, aimTarget) /* */, ...(input.situational ?? [])],
     dv,
     ammo,
     dodgeBase,

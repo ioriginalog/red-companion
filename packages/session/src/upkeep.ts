@@ -1,9 +1,9 @@
 /**
- * Round 4 R4: Turn and Round upkeep the authority runs automatically.
+ * Turn and Round upkeep the authority runs automatically.
  *
  * End of a Turn: re-bleeding Critical Injuries and the ear injuries' lost Move
  * Action (from how far the character moved this Turn).
- * Start of a Turn: On Fire (Track K's `onTurnStart`), a Spinal Injury's lost
+ * Start of a Turn: On Fire (`onTurnStart`), a Spinal Injury's lost
  * Action, an ear injury's lost Move Action, and a checklist of reminders.
  * Start of a Round: speedware counts down, and the GM is prompted for Black ICE
  * and Demons that can act (they act at the top of the Round).
@@ -35,7 +35,7 @@ export function endTurnUpkeep(state: SessionState): { events: CombatEvent[]; act
   return { events: as(a, r.events), actors: { [a.id]: withC(a, r.combatant) } };
 }
 
-/** What a grapple means for this character at Turn start (Round 3 X state). */
+/** What a grapple means for this character at Turn start. */
 function grappleReminders(state: SessionState, a: Actor): TurnReminder[] {
   const g = state.extras?.grapples.find((x) => x.holderId === a.id || x.heldId === a.id);
   if (!g) return [];
@@ -78,7 +78,7 @@ export function turnUpkeep(state: SessionState, encounter: Encounter, prevRound:
   const a0 = id ? cur(id) : undefined;
   if (!a0 || a0.combatant.conditions.dead) return { events, actors, encounter };
 
-  // On Fire (Track K), against the latest copy of the actor.
+  // On Fire, against the latest copy of the actor.
   const burn = onTurnStart({ ...state, actors: { ...state.actors, ...actors } }, encounter);
   Object.assign(actors, burn.actors);
   events.push(...burn.events);

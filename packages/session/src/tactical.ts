@@ -57,15 +57,14 @@ export function withSpotted(map: TacticalMap, actors: Record<string, Actor>): Ta
       return a && factionOf(a) !== 'friendly' && !known.has(id) && vision.has(cellKey(at));
     })
     .map(([id]) => id);
-  // --- Round 4 U4: exploration fog ---
+  // Exploration fog ---
   // Squares the party has ever seen, as a w×h string of '0'/'1' (compact enough to ride in every map patch).
   const explored = mergeExplored(map, vision);
   if (!added.length && explored === map.explored) return map;
   return { ...map, ...(added.length ? { spotted: [...map.spotted, ...added] } : {}), ...(explored !== undefined ? { explored } : {}) };
-  // --- end Round 4 U4 ---
 }
 
-/** Adds `vision` to the map's explored bitmap; returns the same string when nothing new was seen. Round 4 U4. */
+/** Adds `vision` to the map's explored bitmap; returns the same string when nothing new was seen. */
 export function mergeExplored(map: TacticalMap, vision: Set<string>): string | undefined {
   const n = map.width * map.height;
   const prev = map.explored && map.explored.length === n ? map.explored : null;

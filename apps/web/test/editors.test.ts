@@ -97,7 +97,7 @@ describe('actors', () => {
   it('round-trips an actor through the draft', () => {
     const vex = demoActors()[0]!;
     const back = actorFromDraft(draftFromActor(vex), { previous: vex });
-    // The builder gives every character a Humanity track (EMP × 10) — Track K.
+    // The builder gives every character a Humanity track (EMP × 10).
     const h = vex.combatant.stats.EMP * 10;
     expect(back.combatant).toEqual({ ...vex.combatant, humanity: { current: h, max: h, base: h } });
     expect(back.weapons).toEqual(vex.weapons);
@@ -171,14 +171,14 @@ describe('freeSquares', async () => {
 });
 
 
-describe('Track K: role, cyberware and ammo in the builder', async () => {
+describe('Role, cyberware and ammo in the builder', async () => {
   const { actorFromDraft, emptyDraft, draftFromActor, humanityFor, validateDraft } = await import('../src/editors/actorModel.js');
   it('builds Humanity from starting EMP and cyberware, and derives mods', () => {
     const d = { ...emptyDraft(), id: 'a-1', name: 'Vex', stats: { ...emptyDraft().stats, EMP: 6 },
       role: { id: 'solo' as const, rank: 4, awareness: { precisionAttack: 3 } },
       cyberware: [{ id: 'cw-1', name: 'Subdermal Armor', humanityLoss: 14, effects: [{ kind: 'armor' as const, location: 'body' as const, sp: 11 }] }] };
     const a = actorFromDraft(d);
-    // Round 3 D: each item with Humanity Loss also lowers maximum Humanity by 2.
+    // Each item with Humanity Loss also lowers maximum Humanity by 2.
     expect(a.combatant.humanity).toEqual({ base: 60, max: 58, current: 46 });
     expect(a.combatant.stats.EMP).toBe(4);
     expect(a.combatant.mods?.attack).toBe(1);
@@ -201,7 +201,7 @@ describe('Track K: role, cyberware and ammo in the builder', async () => {
   });
 });
 
-describe('Round 3 D: smart weapons, gear and rules packs in the builder', () => {
+describe('Smart weapons, gear and rules packs in the builder', () => {
   it('round-trips weapon smart options and gear', async () => {
     const { actorFromDraft, draftFromActor, emptyDraft } = await import('../src/editors/actorModel.js');
     const d = { ...emptyDraft(), id: 'a-2', name: 'S', gear: [{ name: 'Medkit', qty: 2 }],

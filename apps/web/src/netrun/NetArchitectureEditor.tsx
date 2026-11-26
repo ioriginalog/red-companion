@@ -10,7 +10,7 @@ import {
 } from '@cprc/rules-core';
 import type { Intent, NetOp, ViewState } from '@cprc/session';
 import './netrun.css';
-import { programCatalog, usePacks } from '../data/catalog.js'; // Round 3 D
+import { programCatalog, usePacks } from '../data/catalog.js';
 
 export interface NetArchitectureEditorProps {
   view: ViewState;
@@ -264,7 +264,7 @@ function RigRow({ actorId, name, rig, send }: { actorId: string; name: string; r
   const [draft, setDraft] = useState<NetRig | null>(rig ?? null);
   useEffect(() => setDraft(rig ?? null), [rig]);
   const chosen = useMemo(() => new Set(draft?.programs.map((p) => p.id)), [draft]);
-  const catalog = programCatalog(usePacks()); // Round 3 D: original starters + the GM's imported Programs
+  const catalog = programCatalog(usePacks()); // Original starters + the GM's imported Programs
   if (!draft) {
     return (
       <div className="row net-row">

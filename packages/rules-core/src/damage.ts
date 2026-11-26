@@ -15,7 +15,7 @@
  *     one more Critical Injury, and Death Save Penalty +1.
  * 10. Emit Wound State change.
  */
-import { onInjuryGained } from './injury-effects.js'; // Round 4 R4
+import { onInjuryGained } from './injury-effects.js';
 import { CRIT_BONUS_DAMAGE } from './data/core.js';
 import { CRIT_TABLES, type CriticalInjuryDef, getInjury } from './data/critical-injuries.js';
 import type { Dice } from './dice.js';
@@ -48,14 +48,14 @@ export function applyDamage(target: Combatant, spec: DamageSpec, roll: DamageRol
   const wasMortal = wsBefore === 'mortally';
 
   // Steps 2–5
-  const raw = roll.total + (spec.bonusDamage ?? 0); // Track K: Spot Weakness
+  const raw = roll.total + (spec.bonusDamage ?? 0); // Spot Weakness
   const spBefore = effectiveSP(target, spec.location);
   const spCounted = spec.halveSP ? Math.ceil(spBefore / 2) : spBefore;
   const penetrating = Math.max(0, raw - spCounted);
   const locationMultiplier = spec.aimTarget === 'head' ? headshotMultiplier(target) : 1;
   let through = penetrating * locationMultiplier;
 
-  // --- Track K --- Damage Deflection: the first damage that gets through each Round is reduced.
+  // Damage Deflection: the first damage that gets through each Round is reduced.
   // @interpretation "damage you take" = HP damage after armor; armor stopping everything doesn't use it up.
   let pre: Combatant = target;
   const deflect = target.mods?.damageDeflection ?? 0;
@@ -68,7 +68,6 @@ export function applyDamage(target: Combatant, spec: DamageSpec, roll: DamageRol
   }
   // Rubber: can't take the target below 1 HP.
   if (spec.nonLethal) through = Math.max(0, Math.min(through, target.hp.current - 1));
-  // --- end Track K ---
 
   let t: Combatant = { ...pre, hp: { ...target.hp, current: target.hp.current - through } };
   events.push({
@@ -77,7 +76,7 @@ export function applyDamage(target: Combatant, spec: DamageSpec, roll: DamageRol
     hpBefore: startHp, hpAfter: t.hp.current,
   });
 
-  // Track K: Incendiary sets the target On Fire when damage gets through.
+  // Incendiary sets the target On Fire when damage gets through.
   if (penetrating > 0 && spec.ignite) {
     t = { ...t, onFire: Math.max(t.onFire ?? 0, spec.ignite) };
     events.push({ type: 'ignited', visibility: 'public', targetId: t.id, perTurn: spec.ignite });
@@ -100,7 +99,7 @@ export function applyDamage(target: Combatant, spec: DamageSpec, roll: DamageRol
   }
 
   // Step 8
-  if (roll.critTriggered && !spec.nonLethal) t = inflictRandom(t, spec.critTable, 'damageDice', dice, events); // Track K: Rubber never crits
+  if (roll.critTriggered && !spec.nonLethal) t = inflictRandom(t, spec.critTable, 'damageDice', dice, events); // Rubber never crits
 
   // Step 9 — @interpretation "damaged" = lost any HP to this attack (crit bonus included);
   // the state is checked BEFORE the attack, so the hit that drops you doesn't trigger it.
@@ -145,7 +144,7 @@ function inflictRandom(t: Combatant, table: CritTable, cause: 'damageDice' | 'mo
 }
 
 function inflict(t: Combatant, def: CriticalInjuryDef, cause: 'damageDice' | 'mortallyWounded' | 'aimedLeg', rolls: [number, number][], events: CombatEvent[]): Combatant {
-  const next: Combatant = onInjuryGained({ // Round 4 R4: queue next-Turn effects (Spinal Injury)
+  const next: Combatant = onInjuryGained({ // Queue next-Turn effects (Spinal Injury)
     ...t,
     hp: { ...t.hp, current: t.hp.current - CRIT_BONUS_DAMAGE },
     criticalInjuries: [...t.criticalInjuries, { injuryId: def.id, table: def.table, quickFixed: false }],

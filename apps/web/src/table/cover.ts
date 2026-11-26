@@ -1,4 +1,4 @@
-/** Round 3 P: what a cover square looks like to the viewer (display only). */
+/** What a cover square looks like to the viewer (display only). */
 import { cellKey, coverMaterial, DEFAULT_COVER_MATERIAL, terrainAt, type Cell } from '@cprc/rules-core';
 import type { TacticalMap } from '@cprc/session';
 

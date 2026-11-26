@@ -155,7 +155,7 @@ function validateCombatantExtras(c: Obj) {
   }
   int(c.onFire, 'On Fire', 0, 50, true);
   int(c.reputation, 'Reputation', 0, 10, true);
-  // --- Round 4 R4 --- Critical Injury Turn flags and activated speedware state.
+  // Critical Injury Turn flags and activated speedware state.
   if (c.turnFlags !== undefined) {
     const f = obj(c.turnFlags, 'Turn flags');
     bool(f.loseAction, 'Lost Action flag'); bool(f.noMove, 'Lost Move flag');
@@ -164,7 +164,6 @@ function validateCombatantExtras(c: Obj) {
     const sw = obj(c.speedware, 'Speedware');
     bool(sw.active, 'Speedware on', false); int(sw.roundsLeft, 'Speedware Rounds left', 0, 100); bool(sw.spent, 'Speedware spent', false);
   }
-  // --- end Round 4 R4 ---
   if (c.flags !== undefined) for (const [k, x] of Object.entries(obj(c.flags, 'Flags'))) bool(x, `Flag ${k}`, false);
 }
 
@@ -232,7 +231,7 @@ export function validateMap(v: unknown) {
   }
   for (const s of arr(m.spotted, 'Spotted', 500)!) str(s, 'Spotted id', 64);
   if (m.lighting !== undefined) validateLighting(m.lighting);
-  // Round 4 U4: exploration bitmap.
+  // Exploration bitmap.
   if (m.explored !== undefined && (typeof m.explored !== 'string' || m.explored.length !== w * h || !/^[01]*$/.test(m.explored))) {
     bad('Explored squares must be a width × height string of 0 and 1.');
   }

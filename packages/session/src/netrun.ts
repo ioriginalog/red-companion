@@ -155,12 +155,12 @@ export function parseNetOp(v: unknown): NetOp {
     case 'revealAccess': return { op: 'revealAccess', archId: id(v.archId, 'Architecture'), found: bool(v.found, 'Found') };
     case 'iceAttack': return { op: 'iceAttack', actorId: actorId(), index: int(v.index, 0, 2, 'ICE') };
     case 'forceJackOut': return { op: 'forceJackOut', actorId: actorId() };
-    case 'iceTurn': return { op: 'iceTurn', actorId: actorId() }; // Round 4 R4
-    case 'demonZap': return { op: 'demonZap', actorId: actorId(), count: int(v.count, 1, 6, 'Zaps') }; // Round 4 R4
+    case 'iceTurn': return { op: 'iceTurn', actorId: actorId() };
+    case 'demonZap': return { op: 'demonZap', actorId: actorId(), count: int(v.count, 1, 6, 'Zaps') };
     case 'jackIn': return { op: 'jackIn', actorId: actorId(), archId: id(v.archId, 'Architecture') };
     case 'jackOut': return { op: 'jackOut', actorId: actorId() };
     case 'move': return { op: 'move', actorId: actorId(), toFloorId: id(v.toFloorId, 'Floor') };
-    case 'descend': return { op: 'descend', actorId: actorId(), branch: int(v.branch, 0, 9, 'Branch') }; // Round 3 P
+    case 'descend': return { op: 'descend', actorId: actorId(), branch: int(v.branch, 0, 9, 'Branch') };
     case 'ability': {
       const ability = oneOf(v.ability, ABILITIES, 'Ability');
       return {
@@ -200,13 +200,12 @@ function say(c: Ctx, a: Actor, action: string, text: string, extra: Partial<Extr
   c.events.push({ type: 'netAction', visibility: visibilityFor(a), combatantId: a.id, action, text, ...extra });
 }
 
-// --- Track K --- The Netrunner Role rank is the source of truth for Interface.
+// The Netrunner Role rank is the source of truth for Interface.
 // The rig's own Interface is the fallback for characters without the Netrunner Role.
 export function withRoleInterface(a: Actor | undefined, rig: NetRig): NetRig {
   const rank = a ? interfaceRank(a.combatant) : 0;
   return rank > 0 && rank !== rig.interface ? { ...rig, interface: rank } : rig;
 }
-// --- end Track K ---
 
 /** The runner must be yours and, in an encounter, it must be their Turn. */
 function requireRunner(c: Ctx, actorId: string): { a: Actor; rig: NetRig } {
@@ -220,7 +219,7 @@ function requireRunner(c: Ctx, actorId: string): { a: Actor; rig: NetRig } {
   if (cond.dead || cond.unconscious) throw new SessionError('INVALID', `${a.combatant.name} can’t run the NET right now.`);
   const rig = c.net.rigs[actorId];
   if (!rig) throw new SessionError('INVALID', `${a.combatant.name} has no cyberdeck set up.`);
-  return { a, rig: withRoleInterface(a, rig) }; // Track K
+  return { a, rig: withRoleInterface(a, rig) };
 }
 
 /**
@@ -312,7 +311,7 @@ function iceBites(c: Ctx, a: Actor, ice: IceStats) {
 function iceAttacks(c: Ctx, a: Actor, floor: NetFloor, index: number) {
   const ice = floor.ice![index]!;
   const atk = statCheck(`${ice.name} ATK`, ice.atk, c.dice);
-  const def = statCheck('Interface', withRoleInterface(a, c.net.rigs[a.id]!).interface, c.dice); // Track K
+  const def = statCheck('Interface', withRoleInterface(a, c.net.rigs[a.id]!).interface, c.dice);
   const hit = atk.total > def.total;
   say(c, a, 'iceAttack', `${ice.name} attacks ${a.combatant.name}: ${atk.total} vs ${def.total}. ${hit ? 'Hit.' : 'Miss.'}`, { check: atk, vs: def, success: hit });
   if (hit) iceBites(c, a, ice);
@@ -328,7 +327,7 @@ function arrive(c: Ctx, a: Actor, arch: NetArchitecture, run: NetRun, floorId: s
   say(c, a, 'arrive', `${a.combatant.name} reaches floor ${depthOf(arch, floorId)}: ${floorTitle(floor)}.`);
   for (const i of live) {
     const ice = floor.ice![i]!;
-    const me = netCheck(withRoleInterface(a, c.net.rigs[a.id]!), 'speed', c.dice); // Track K
+    const me = netCheck(withRoleInterface(a, c.net.rigs[a.id]!), 'speed', c.dice);
     const it = statCheck(`${ice.name} SPD`, ice.spd, c.dice);
     const iceFirst = it.total >= me.total;
     say(c, a, 'speedCheck', `Speed Check against ${ice.name}: ${me.total} vs ${it.total}. ${iceFirst ? `${ice.name} strikes first.` : `${a.combatant.name} is faster.`}`, { check: me, vs: it, success: !iceFirst });
@@ -456,7 +455,6 @@ export function executeNet(state: SessionState, rawOp: unknown, by: Viewer, dice
       jackOut(c, getActor(state, op.actorId), true);
       break;
     }
-    // --- Round 4 R4 ---
     case 'iceTurn': {
       gmOnly(by);
       const a = getActor(state, op.actorId);
@@ -489,7 +487,6 @@ export function executeNet(state: SessionState, rawOp: unknown, by: Viewer, dice
       }
       break;
     }
-    // --- end Round 4 R4 ---
 
     // ----- Runner -----
     case 'jackIn': {
@@ -521,7 +518,7 @@ export function executeNet(state: SessionState, rawOp: unknown, by: Viewer, dice
       arrive(c, a, arch, run, op.toFloorId);
       break;
     }
-    // Round 3 P: RED doesn't need Pathfinder to go down; the next floor reveals itself on arrival.
+    // RED doesn't need Pathfinder to go down; the next floor reveals itself on arrival.
     case 'descend': {
       const { a, rig } = requireRunner(c, op.actorId);
       const { run, arch } = getRun(c, a);
@@ -736,7 +733,7 @@ function runView(state: SessionState, net: NetState, actorId: string, run: NetRu
       passed, identified, controlled,
       ...(f.ice ? { ice: f.ice.map((i, n) => ({ name: i.name, kind: i.kind, rez: run.ice[fid]?.[n] ?? 0, maxRez: i.rez })) } : {}),
       ...(f.demon ? { demon: { name: f.demon.name, rez: run.demonRez[fid] ?? 0, maxRez: f.demon.rez } } : {}),
-      ...(fid === run.floorId ? { exitsDown: (arch.children[fid] ?? []).length } : {}), // Round 3 P
+      ...(fid === run.floorId ? { exitsDown: (arch.children[fid] ?? []).length } : {}),
     };
   }
   const rig = net.rigs[actorId];
@@ -745,7 +742,7 @@ function runView(state: SessionState, net: NetState, actorId: string, run: NetRu
   const isCurrent = state.encounter.active && currentActorId(state) === actorId;
   return {
     actorId, archId: arch.id, archName: arch.name, floorId: run.floorId, floors, rootId: arch.rootId,
-    actionsLeft: isCurrent && rig ? netActionsFor(withRoleInterface(state.actors[actorId], rig).interface) - (t && t.turn === key ? t.used : 0) : null, // Track K
+    actionsLeft: isCurrent && rig ? netActionsFor(withRoleInterface(state.actors[actorId], rig).interface) - (t && t.turn === key ? t.used : 0) : null,
     engaged: isEngaged(run), cloakDv: run.cloakDv, virusPlaced: run.virusDv !== null,
     canSlide: isEngaged(run) && !(key !== 'free' && run.slidTurn === key),
   };
@@ -769,7 +766,6 @@ export function projectNet(state: SessionState, viewer: Viewer): NetView | undef
   return { quickhacks2070s: net.quickhacks2070s, rigs, runs, jackable, ...(viewer.role === 'gm' ? { full: net } : {}) };
 }
 
-// --- Round 4 R4 ---
 /**
  * Who has Black ICE or a Demon to answer to this Round (GM prompt).
  * Black ICE that engages a runner acts at the top of every Round, one attack each,
@@ -791,4 +787,3 @@ export function netThreats(state: SessionState): { runnerId: string; ice: { floo
   }
   return out;
 }
-// --- end Round 4 R4 ---

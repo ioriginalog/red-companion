@@ -1,5 +1,5 @@
 /**
- * Round 4 U4: players edit their own character's notes and gear (never stats,
+ * Players edit their own character's notes and gear (never stats,
  * skills, HP, weapons or cyberware). The GM may use it too. Payloads are
  * validated here; the shared validator passes this intent type through.
  */

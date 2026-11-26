@@ -24,7 +24,7 @@ function setup(): SessionState {
 }
 const send = (s: SessionState, i: unknown, by: Viewer) => handleIntent(s, i as Intent, by, { dice: scriptedDice({}) });
 
-describe('editOwnSheet (Round 4 U4)', () => {
+describe('editOwnSheet', () => {
   it('lets a player change their own notes and gear, and nothing else', () => {
     const s = setup();
     const r = send(s, { type: 'editOwnSheet', actorId: 'vex', notes: ' New notes ', gear: [{ name: 'Agent', qty: 1 }, { name: 'Flashlight', qty: 2, notes: 'Taped' }] }, P1);

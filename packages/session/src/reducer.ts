@@ -9,7 +9,7 @@ export function emptySession(sessionId: string): SessionState {
     pending: null,
     map: null,
     library: { maps: {}, actors: {} },
-    handouts: {}, // Track U
+    handouts: {},
   };
 }
 
@@ -31,11 +31,9 @@ export function applyEntry(state: SessionState, entry: LogEntry): SessionState {
     pending: 'pending' in entry.patch ? (entry.patch.pending ?? null) : state.pending,
     map: 'map' in entry.patch ? (entry.patch.map ?? null) : state.map,
     library: entry.patch.library ?? state.library,
-    handouts: entry.patch.handouts ?? state.handouts ?? {}, // Track U
-    // --- Track N ---
+    handouts: entry.patch.handouts ?? state.handouts ?? {},
     ...(entry.patch.netrun ? { netrun: entry.patch.netrun } : {}),
-    // --- end Track N ---
-    ...(entry.patch.extras ? { extras: entry.patch.extras } : {}), // Round 3 X
+    ...(entry.patch.extras ? { extras: entry.patch.extras } : {}),
   };
 }
 

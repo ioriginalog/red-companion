@@ -55,12 +55,12 @@ function mergeMods(a: CombatMods, b: CombatMods): CombatMods {
   return out;
 }
 
-/** Round 4 R4: true if the item is speedware (only one piece may be installed). */
+/** True if the item is speedware (only one piece may be installed). */
 export const isSpeedware = (item: CyberwareItem) => item.effects.some((e) => e.kind === 'speedware');
 
 export function cyberwareMods(items: CyberwareItem[] | undefined): CombatMods {
   let m: CombatMods = {};
-  let speedwareSeen = false; // Round 4 R4: speedware never stacks; only the first piece counts
+  let speedwareSeen = false; // Speedware never stacks; only the first piece counts
   for (const item of items ?? []) {
     for (const e of item.effects) {
       switch (e.kind) {

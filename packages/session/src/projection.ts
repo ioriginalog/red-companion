@@ -6,13 +6,11 @@
  * Everything else: name, side, Wound State, conditions, injury names.
  */
 import { getInjury, woundState, type CheckResult, type CombatEvent, type Weapon } from '@cprc/rules-core';
-import { projectPendingForPlayer } from './systems.js'; // Track K
+import { projectPendingForPlayer } from './systems.js';
 import { allegianceOf, factionOf, projectMap } from './tactical.js';
-import { visibleHandouts } from './handouts.js'; // Track U
-import { projectExtras } from './extras.js'; // Round 3 X
-// --- Track N ---
+import { visibleHandouts } from './handouts.js';
+import { projectExtras } from './extras.js';
 import { projectNet } from './netrun.js';
-// --- end Track N ---
 import type { Actor, Encounter, LogEntry, Pending, ProjectedActor, ProjectedEntry, ProjectedPending, SessionState, TacticalMap, Viewer, ViewState } from './types.js';
 
 export interface ProjectionOptions {
@@ -119,7 +117,7 @@ function projectEncounter(enc: Encounter, kn: Knowledge): Encounter {
     if (current) turnIndex = order.length;
     order.push(id);
   });
-  // Round 3 P: initiative totals name every combatant; players don't get them.
+  // Initiative totals name every combatant; players don't get them.
   const { usage, hiddenActing: _h, initiative: _totals, ...rest } = enc;
   return {
     ...rest,
@@ -148,7 +146,7 @@ function projectPending(p: Pending | null, viewer: Viewer, state: SessionState, 
           type: 'rangedAttack', attackerId: kn.aliasOf(a.attackerId), defenderId: kn.aliasOf(a.defenderId),
           weaponId: full(a.attackerId) ? a.weaponId : 'unknown', distance: a.distance,
           ...(a.mode ? { mode: a.mode } : {}), ...(a.aimTarget ? { aimTarget: a.aimTarget } : {}),
-          // Round 4 U4 (#15): the type of a known attacker's weapon (the defender can see it), for the real range DV.
+          // The type of a known attacker's weapon (the defender can see it), for the real range DV.
           ...(kn.known.has(a.attackerId) ? weaponTypeOf(state, a.attackerId, a.weaponId) : {}),
         },
       };
@@ -160,7 +158,6 @@ function projectPending(p: Pending | null, viewer: Viewer, state: SessionState, 
       };
     case 'awaitingWatch':
       return { kind: p.kind, id: p.id, watcherId: kn.aliasOf(p.watcherId), targetId: kn.aliasOf(p.targetId) };
-    // --- Track K ---
     case 'awaitingAreaDodge': {
       const f = projectPendingForPlayer(p, state) as typeof p;
       return {
@@ -170,11 +167,9 @@ function projectPending(p: Pending | null, viewer: Viewer, state: SessionState, 
         decisions: Object.fromEntries(Object.entries(f.decisions).filter(([k]) => kn.known.has(k))),
       };
     }
-    // --- end Track K ---
-    // --- Round 3 P --- (NPC damage dice are stats)
+    // (NPC damage dice are stats)
     case 'awaitingScatter':
       return { ...p, attackerId: kn.aliasOf(p.attackerId), damageDice: full(p.attackerId) ? p.damageDice : 0 };
-    // --- end Round 3 P ---
   }
 }
 
@@ -192,11 +187,9 @@ export function projectState(state: SessionState, viewer: Viewer, opts?: Project
       sessionId: state.sessionId, seq: state.seq,
       actors: Object.fromEntries(Object.values(state.actors).map((a) => [a.id, projectActor(a, viewer, opts, state.map)])),
       encounter: state.encounter, pending: state.pending, map: state.map, library: state.library,
-      handouts: state.handouts ?? {}, // Track U
-      // --- Track N ---
+      handouts: state.handouts ?? {},
       ...(state.netrun ? { netrun: projectNet(state, viewer) } : {}),
-      // --- end Track N ---
-      ...(state.extras ? { extras: state.extras } : {}), // Round 3 X
+      ...(state.extras ? { extras: state.extras } : {}),
     };
   }
   const kn = knowledge(state);
@@ -207,11 +200,9 @@ export function projectState(state: SessionState, viewer: Viewer, opts?: Project
     encounter: projectEncounter(state.encounter, kn),
     pending: projectPending(state.pending, viewer, state, kn, opts),
     map: viewMap(state, viewer),
-    handouts: visibleHandouts(state.handouts ?? {}, viewer), // Track U
-    // --- Track N ---
+    handouts: visibleHandouts(state.handouts ?? {}, viewer),
     ...(state.netrun ? { netrun: projectNet(state, viewer) } : {}),
-    // --- end Track N ---
-    ...(state.extras ? { extras: projectExtras(state, viewer) } : {}), // Round 3 X
+    ...(state.extras ? { extras: projectExtras(state, viewer) } : {}),
   };
 }
 
@@ -333,11 +324,9 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
     if (entry.patch.encounter) patch.encounter = entry.patch.encounter;
     if ('pending' in entry.patch) patch.pending = entry.patch.pending ?? null;
     if (entry.patch.library) patch.library = entry.patch.library;
-    if (entry.patch.handouts) patch.handouts = entry.patch.handouts; // Track U
-    // --- Track N ---
+    if (entry.patch.handouts) patch.handouts = entry.patch.handouts;
     if (entry.patch.netrun) patch.netrun = projectNet(after, viewer);
-    // --- end Track N ---
-    if (entry.patch.extras) patch.extras = entry.patch.extras; // Round 3 X
+    if (entry.patch.extras) patch.extras = entry.patch.extras;
     return { ...base, events: entry.events, patch };
   }
 
@@ -389,11 +378,10 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
   }
   if ('map' in entry.patch || (entry.patch.actors && after.map)) patch.map = viewMap(after, viewer);
   if ('pending' in entry.patch) patch.pending = projectPending(entry.patch.pending ?? null, viewer, after, kn, opts);
-  if (entry.patch.handouts) patch.handouts = visibleHandouts(entry.patch.handouts, viewer); // Track U
-  // --- Track N --- (Turn changes move NET Actions left; controller changes move ownership.)
+  if (entry.patch.handouts) patch.handouts = visibleHandouts(entry.patch.handouts, viewer);
+  // (Turn changes move NET Actions left; controller changes move ownership.)
   if (after.netrun && (entry.patch.netrun || entry.patch.actors || entry.patch.encounter)) patch.netrun = projectNet(after, viewer);
-  // --- end Track N ---
-  if (after.extras && (entry.patch.extras || entry.patch.actors || 'map' in entry.patch)) patch.extras = projectExtras(after, viewer); // Round 3 X
+  if (after.extras && (entry.patch.extras || entry.patch.actors || 'map' in entry.patch)) patch.extras = projectExtras(after, viewer);
   return { ...base, events, patch };
 }
 
@@ -490,7 +478,7 @@ export function redactEvent(e: CombatEvent, visible: (id: string | undefined) =>
 }
 
 export function emptyView(sessionId: string): ViewState {
-  return { sessionId, seq: 0, actors: {}, encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null }, pending: null, map: null, handouts: {} /* Track U */ };
+  return { sessionId, seq: 0, actors: {}, encounter: { active: false, round: 0, order: [], turnIndex: 0, deathSaveRequiredFor: null }, pending: null, map: null, handouts: {} /* */ };
 }
 
 /** Client-side reducer for projected entries. */
@@ -509,10 +497,8 @@ export function applyProjectedEntry(view: ViewState, entry: ProjectedEntry): Vie
     pending: 'pending' in entry.patch ? (entry.patch.pending ?? null) : view.pending,
     map: 'map' in entry.patch ? (entry.patch.map ?? null) : view.map,
     ...(entry.patch.library ? { library: entry.patch.library } : {}),
-    ...(entry.patch.handouts ? { handouts: entry.patch.handouts } : {}), // Track U
-    // --- Track N ---
+    ...(entry.patch.handouts ? { handouts: entry.patch.handouts } : {}),
     ...(entry.patch.netrun ? { netrun: entry.patch.netrun } : {}),
-    ...(entry.patch.extras ? { extras: entry.patch.extras } : {}), // Round 3 X
-    // --- end Track N ---
+    ...(entry.patch.extras ? { extras: entry.patch.extras } : {}),
   };
 }

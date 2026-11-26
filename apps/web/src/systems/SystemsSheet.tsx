@@ -1,5 +1,5 @@
 /**
- * Character-sheet sections for Track K systems. Mount `SystemsSheet` inside
+ * Character-sheet sections for systems. Mount `SystemsSheet` inside
  * the Table's SheetPanel, under the existing sheet, for the selected actor.
  */
 import { useState } from 'react';
@@ -90,7 +90,7 @@ function RoleSection({ c, a, cb, can }: { c: SystemsCtx; a: ProjectedActor; cb: 
   );
 }
 
-/** Round 4 U4: activated (Sandevistan-type) speedware: Activate button and its state. */
+/** Activated (Sandevistan-type) speedware: Activate button and its state. */
 function SpeedwareSection({ c, cb, actorId, can }: { c: SystemsCtx; cb: Combatant; actorId: string; can: boolean }) {
   const piece = (cb.cyberware ?? []).find((i) => i.effects.some((e) => e.kind === 'speedware'));
   const eff = piece?.effects.find((e) => e.kind === 'speedware');
@@ -161,7 +161,7 @@ function AmmoSection({ c, a, cb, can }: { c: SystemsCtx; a: ProjectedActor; cb: 
     <section className="card">
       <div className="ttl">Ammunition</div>
       {guns.map((w) => {
-        // Round 3 P (#11): 2070s ammo only when the GM has the 2070s options on.
+        // 2070s ammo only when the GM has the 2070s options on.
         const era = !!c.view.netrun?.quickhacks2070s;
         const options = AMMO_TYPES.filter((t) => !ammoProblem(w, t.id) && (era || !t.era2070s || t.id === w.ammoType));
         const cur = w.ammoType ?? 'basic';

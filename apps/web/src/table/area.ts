@@ -50,7 +50,7 @@ export type AreaKind = 'blast' | 'shell';
 /** Which template a weapon can use, if any. */
 export function areaKindFor(w: Weapon | undefined): AreaKind | null {
   if (!w) return null;
-  if (w.type === 'grenadeLauncher' || w.type === 'rocketLauncher' || w.type === 'grenade') return 'blast'; // Round 3 D: thrown grenades
+  if (w.type === 'grenadeLauncher' || w.type === 'rocketLauncher' || w.type === 'grenade') return 'blast'; // Thrown grenades
   if (w.type === 'shotgun') return 'shell';
   return null;
 }

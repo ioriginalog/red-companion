@@ -1,5 +1,5 @@
 /**
- * Track K systems: cyberware and Humanity, Role Abilities, healing and
+ * systems: cyberware and Humanity, Role Abilities, healing and
  * treatment, cover with HP, ammunition, On Fire, and the area-dodge decision.
  *
  * Every intent here validates its own payload (types, whole numbers, bounds)
@@ -11,7 +11,7 @@ import {
   cyberwareProblem, DEFAULT_COVER_MATERIAL, hlAverage, humanityMax, parseHlDice, rollHl, effectiveStat, empFromHumanity, gridDistance, hasLineOfSight, inBounds, makeCheck,
   metersBetween, naturalHealing, profileOf, RANGE_DV, rangeBandIndex, rollDamage, skillLevel, spendAmmo, standingModifiers,
   terrainAt, THERAPY, THERAPY_DICE, treatInjury, treatmentDv, wieldProblem, woundState,
-  isSpeedware, SPEEDWARE_ROUNDS, // Round 4 R4
+  isSpeedware, SPEEDWARE_ROUNDS,
   type Cell, type CombatEvent, type Combatant, type CoverMaterialId, type Dice, type Weapon,
 } from '@cprc/rules-core';
 import {
@@ -28,7 +28,7 @@ type DamagePending = Extract<Pending, { kind: 'awaitingDamage' }>;
 export const SYSTEMS_INTENTS = [
   'respondAreaDodge', 'resolveAreaDodges', 'attackCover', 'setCover', 'setAmmoType', 'extinguish', 'setAwareness',
   'installCyberware', 'removeCyberware', 'therapy', 'treatInjury', 'rest',
-  'activateSpeedware', // Round 4 R4
+  'activateSpeedware',
 ] as const;
 const ALL: ReadonlySet<string> = new Set(SYSTEMS_INTENTS);
 export const SYSTEMS_GM_ONLY: ReadonlySet<IntentType> = new Set(['resolveAreaDodges', 'setCover', 'installCyberware', 'removeCyberware', 'therapy', 'rest']);
@@ -89,7 +89,7 @@ export function authorizeSystems(state: SessionState, intent: Intent, by: Viewer
       return;
     case 'setAmmoType':
     case 'extinguish':
-    case 'activateSpeedware': // Round 4 R4
+    case 'activateSpeedware':
       requireActing(state, by, intent.actorId);
       return;
     case 'setAwareness': {
@@ -167,7 +167,7 @@ export function executeSystems(state: SessionState, intent: SystemsIntent, by: V
       const a = getActor(state, intent.actorId);
       const w = getWeapon(a, intent.weaponId);
       need(typeof intent.ammoType === 'string', 'Pick an ammunition type.');
-      // 2070s ammunition only when the GM has turned on the Edgerunners 2070s options (Track N's toggle).
+      // 2070s ammunition only when the GM has turned on the Edgerunners 2070s options.
       need(!AMMO_TYPES.find((t) => t.id === intent.ammoType)?.era2070s || !!state.netrun?.quickhacks2070s, 'That ammunition needs the 2070s options turned on.');
       const problem = ammoProblem(w, intent.ammoType);
       need(!problem, problem ?? '');
@@ -261,7 +261,6 @@ export function executeSystems(state: SessionState, intent: SystemsIntent, by: V
       if (encounter) patch.encounter = encounter;
       return { events: r.events, patch };
     }
-    // --- Round 4 R4 ---
     case 'activateSpeedware': {
       const a = getActor(state, intent.actorId);
       const bonus = a.combatant.mods?.activatedSpeedware ?? 0;
@@ -280,7 +279,6 @@ export function executeSystems(state: SessionState, intent: SystemsIntent, by: V
       }
       return { events, patch };
     }
-    // --- end Round 4 R4 ---
     case 'rest': {
       need(isInt(intent.days, 1, 60), 'Rest 1–60 days.');
       need(intent.care === 'street' || intent.care === 'home' || intent.care === 'hospital', 'Pick where they rest.');
@@ -294,7 +292,7 @@ export function executeSystems(state: SessionState, intent: SystemsIntent, by: V
         const a = getActor(state, id);
         if (a.combatant.conditions.dead) continue;
         const r = naturalHealing(a.combatant, intent.days, intent.care);
-        // Round 4 R4: an hour or more of rest recharges speedware.
+        // An hour or more of rest recharges speedware.
         const { speedware: _recharged, ...recharged } = r.combatant;
         if (r.combatant.speedware?.spent) events.push({ type: 'speedwareChanged', visibility: visibilityFor(a), combatantId: id, state: 'recharged' });
         actors[id] = withCombatant(a, recharged);
@@ -329,7 +327,7 @@ function doInstall(state: SessionState, intent: Extract<Intent, { type: 'install
   const problem = cyberwareProblem(intent.item);
   need(!problem, problem ?? '');
   need(!(a.combatant.cyberware ?? []).some((i) => i.id === intent.item.id), 'That cyberware id is already installed.');
-  // Round 4 R4: only one piece of speedware at a time.
+  // Only one piece of speedware at a time.
   need(!isSpeedware(intent.item) || !(a.combatant.cyberware ?? []).some(isSpeedware), 'Only one piece of speedware can be installed.');
   need((a.combatant.cyberware ?? []).length < 60, 'Too much cyberware.');
   let loss = intent.item.humanityLoss;
@@ -407,7 +405,7 @@ export function onTurnStart(state: SessionState, encounter: Encounter): { events
   if (!a || burn <= 0 || a.combatant.conditions.dead) return { events: [], actors: {} };
   const before = woundState(a.combatant.hp);
   const c: Combatant = { ...a.combatant, hp: { ...a.combatant.hp, current: a.combatant.hp.current - burn } };
-  // Round 4 R4: no NPC HP in payloads; friendly targets keep the figure.
+  // No NPC HP in payloads; friendly targets keep the figure.
   const events: CombatEvent[] = [{ type: 'burning', visibility: 'public', targetId: a.id, damage: burn, ...(factionOf(a) === 'friendly' ? { hpAfter: c.hp.current } : {}) }];
   const after = woundState(c.hp);
   if (before !== after) events.push({ type: 'woundStateChanged', visibility: 'public', targetId: a.id, from: before, to: after });

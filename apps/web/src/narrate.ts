@@ -1,7 +1,7 @@
 /** Combat log lines. Sentence case (Chicago); names come from the viewer's projection. */
 import { getInjury, type CheckResult, type CombatEvent } from '@cprc/rules-core';
-import { narrateSystems } from './systems/narrate.js'; // Track K
-import { narrateExtras } from './extras/narrate.js'; // Round 3 X
+import { narrateSystems } from './systems/narrate.js';
+import { narrateExtras } from './extras/narrate.js';
 
 export type Tone = 'hit' | 'miss' | 'info' | 'bad' | 'good' | 'chat' | 'roll';
 export interface Line { text: string; tone: Tone }
@@ -18,14 +18,14 @@ export function injuryName(id: string): string {
 
 /** `who` names a viewer id ('gm' or a player id); defaults to 'GM'/'A player'. */
 export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: string) => string = (b) => (b === 'gm' ? 'GM' : 'A player')): Line | null {
-  const k = narrateSystems(e, name); // Track K events
+  const k = narrateSystems(e, name);
   if (k !== undefined) return k;
-  if (e.type === 'extraResolved') return narrateExtras(e); // Round 3 X
-  const r4 = narrateRound4(e, name); // Round 4 R4 events
+  if (e.type === 'extraResolved') return narrateExtras(e);
+  const r4 = narrateRound4(e, name);
   if (r4 !== undefined) return r4;
   switch (e.type) {
     case 'initiativeRolled':
-      if (e.entries.length === 1) return { text: `${name(e.entries[0]!.combatantId)} joins the Turn order.`, tone: 'info' }; // Round 3 P
+      if (e.entries.length === 1) return { text: `${name(e.entries[0]!.combatantId)} joins the Turn order.`, tone: 'info' };
       return { text: `Initiative: ${e.entries.map((x) => name(x.combatantId)).join(', ')}.`, tone: 'info' };
     case 'attackResolved':
       return {
@@ -82,12 +82,11 @@ export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: 
     case 'sceneChanged':
       return { text: `Scene: ${e.name}.`, tone: 'info' };
     case 'areaResolved': {
-      // Round 3 P: an explosive's areaResolved only comes once it has gone off (hit or placed scatter).
+      // An explosive's areaResolved only comes once it has gone off (hit or placed scatter).
       const caught = e.targetIds.length ? e.targetIds.map(name).join(', ') : '';
       if (e.kind === 'shotgunShell') return { text: caught ? `${name(e.attackerId)}’s shotgun shell catches ${caught}.` : `${name(e.attackerId)}’s shotgun shell hits no one.`, tone: caught ? 'hit' : 'miss' };
       return { text: caught ? `The blast catches ${caught}.` : 'The blast catches no one.', tone: caught ? 'hit' : 'miss' };
     }
-    // --- Round 3 P ---
     case 'explosiveMissed':
       return { text: `${name(e.attackerId)}’s explosive misses and scatters. The GM places where it lands.`, tone: 'miss' };
     case 'explosiveScattered':
@@ -98,7 +97,6 @@ export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: 
       return { text: `${name(e.combatantId)} delays${e.after ? ` until after ${name(e.after)}` : ' to the end of the Round'}.`, tone: 'info' };
     case 'leftInitiative':
       return { text: `${name(e.combatantId)} leaves the Turn order.`, tone: 'info' };
-    // --- end Round 3 P ---
     case 'suppressiveFireResolved':
       return { text: `${name(e.attackerId)} lays down Suppressive Fire${e.results.some((r) => r.mustSeekCover) ? `; ${e.results.filter((r) => r.mustSeekCover).map((r) => name(r.targetId)).join(', ')} must take cover` : ''}.`, tone: 'hit' };
     default:
@@ -122,7 +120,7 @@ export function deathSaveMath(e: { natural?: number; penalty?: number; total?: n
   return `${nat}${e.total}${vs}${e.natural === 10 ? ', natural 10 always fails' : ''}.`;
 }
 
-/** Round 4 R4 automation: injury upkeep, Turn reminders, speedware, NET threats. No numbers when redacted. */
+/** Automation: injury upkeep, Turn reminders, speedware, NET threats. No numbers when redacted. */
 export function narrateRound4(e: CombatEvent, name: (id: string) => string): Line | null | undefined {
   switch (e.type) {
     case 'injuryEffect': {

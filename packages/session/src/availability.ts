@@ -1,10 +1,10 @@
 /**
- * Round 4 R4: can this character attack with this weapon right now, and with
+ * Can this character attack with this weapon right now, and with
  * what standing situational modifiers? Pure; works on the authority's state or
  * on any viewer's projection (the attacker's sheet must be visible).
  *
- * Rules folded in: hands per weapon and arm injuries (Track K `wieldProblem`),
- * grapples (Round 3 X: −2 to Actions, no two-handed weapons, an Iron Grip stops
+ * Rules folded in: hands per weapon and arm injuries (`wieldProblem`),
+ * grapples (−2 to Actions, no two-handed weapons, an Iron Grip stops
  * ranged attacks), and a lost Facedown (−2 against the winner).
  * Kept in lockstep with the authority's gates by test/round4.test.ts.
  */

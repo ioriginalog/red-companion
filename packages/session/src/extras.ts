@@ -1,5 +1,5 @@
 /**
- * Round 3 X: Grab/Grapple/Choke/Throw/Escape, Martial Arts Special Moves,
+ * Grab/Grapple/Choke/Throw/Escape, Martial Arts Special Moves,
  * Facedowns and the table tools for the remaining Role Abilities.
  *
  * One intent, `{ type: 'extra', op }`. `executeExtra` validates the payload
