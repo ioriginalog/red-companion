@@ -304,7 +304,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
                     <option value="">Default ({p.rof})</option><option value="1">1</option><option value="2">2</option>
                   </select>
                 </label>
-                <AmmoSelect type={w.type} value={w.ammoType} onChange={(ammoType) => upd({ ammoType })} />
+                <AmmoSelect type={w.type} value={w.ammoType} onChange={(ammoType) => upd({ ammoType })} era2070s={!!view.netrun?.quickhacks2070s} />
                 <label className="fld"><span>Damage</span>
                   <input type="number" min={1} max={10} value={w.damageDiceOverride ?? ''} placeholder={`${p.damageDice}d6`}
                     onChange={(e) => upd({ damageDiceOverride: e.target.value ? Number(e.target.value) : null })} aria-label={`${w.name} damage dice override (d6)`} />

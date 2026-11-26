@@ -262,8 +262,9 @@ function EffectAdder({ onAdd }: { onAdd: (e: CyberwareEffect) => void }) {
   );
 }
 
-export function AmmoSelect({ type, value, onChange }: { type: WeaponType; value: AmmoTypeId | undefined; onChange: (v: AmmoTypeId | undefined) => void }) {
-  const options = AMMO_TYPES.filter((a) => !ammoProblem({ id: 'w', name: 'w', type }, a.id));
+export function AmmoSelect({ type, value, onChange, era2070s = false }: { type: WeaponType; value: AmmoTypeId | undefined; onChange: (v: AmmoTypeId | undefined) => void; era2070s?: boolean }) {
+  // 2070s ammo only when the GM has the 2070s options on (matches the sheet); keep a current pick visible.
+  const options = AMMO_TYPES.filter((a) => !ammoProblem({ id: 'w', name: 'w', type }, a.id) && (era2070s || !a.era2070s || a.id === value));
   if (!options.length) return <label className="fld"><span>Ammo</span><input disabled value="—" /></label>;
   return (
     <label className="fld"><span>Ammo</span>

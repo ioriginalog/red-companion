@@ -37,6 +37,11 @@ export function TopBar({ c, onHelp }: { c: TableCtx; onHelp: () => void }) {
       )}
       {isGm && <span className="chip hide-sm">{s.players.filter((p) => p.online).length} Online</span>}
       {!isGm && <span className="chip hide-sm"><span className={`dot ${s.gmOnline ? 'on' : 'off'}`} />GM {s.gmOnline ? 'Online' : 'Offline'}</span>}
+      {!isGm && s.queued > 0 && (
+        <span className="chip warn-chip" role="status" title="These go to the GM as soon as they return.">
+          Queued: {s.queued} {s.queued === 1 ? 'Action' : 'Actions'}
+        </span>
+      )}
       <span className={`chip${s.unsynced > 0 ? ' warn-chip' : ''}`} role="status" title={s.unsynced > 0 ? `${s.unsynced} ${s.unsynced === 1 ? 'action' : 'actions'} will sync when the connection returns` : s.status === 'online' ? 'Synced' : 'Reconnecting'}>
         <span className={`dot ${s.status === 'online' && !s.unsynced ? 'on' : 'off'}`} />
         <span className={s.unsynced > 0 ? '' : 'hide-sm'}>{s.unsynced > 0
