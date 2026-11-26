@@ -66,7 +66,8 @@ export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor
             <button className={`mode${lighting.revealAll ? ' sel' : ''}`} aria-pressed={!!lighting.revealAll} onClick={() => c.act({ type: 'setLighting', lighting: { ...lighting, revealAll: !lighting.revealAll } })}>Reveal All</button>
             <button className={`mode${mapMode === 'reveal' ? ' sel' : ''}`} onClick={() => setMapMode(mapMode === 'reveal' ? 'move' : 'reveal')}>Paint Revealed Squares</button>
             <button className="mode" disabled={!lighting.revealed?.length} onClick={() => c.act({ type: 'setLighting', lighting: { ...lighting, revealed: [] } })}>Clear Revealed</button>
-            <button className={`mode${shareCursor ? ' sel' : ''}`} aria-pressed={shareCursor} onClick={() => setShareCursor(!shareCursor)} title="Players see your pointer. Careful: hovering a hidden token shows where it is.">Share My Cursor</button>
+            <button className={`mode${shareCursor ? ' sel' : ''}`} aria-pressed={shareCursor} onClick={() => setShareCursor(!shareCursor)} title="Players see your pointer, but only over squares the party can see.">Share My Cursor</button>
+            <button className={`mode${c.s.gmSignals ? ' sel' : ''}`} aria-pressed={c.s.gmSignals} onClick={() => client.setGmSignals(!c.s.gmSignals)} title="Players see your pings and ruler lines, but only over squares the party can see.">Show My Pings and Ruler to Players</button>
           </div>
           {/* Exploration fog (never-seen squares are dark for players). */}
           <div className="modes" style={{ marginTop: 8 }} role="group" aria-label="Exploration">

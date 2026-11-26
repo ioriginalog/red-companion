@@ -2,12 +2,16 @@
  * Session persistence. FileStore writes to DATA_DIR (a Railway volume):
  *   <DATA_DIR>/sessions/<id>/meta.json
  *   <DATA_DIR>/sessions/<id>/log.jsonl   (one LogEntry per line, append-only except undo)
+ *   <DATA_DIR>/sessions/<id>/queue.json  (player intents waiting for an absent GM)
  *   <DATA_DIR>/assets/<id>/<sha256>.<ext> (uploaded images, content-addressed)
  * MemoryStore is for tests and for running without a volume (data lost on restart).
  */
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { LogEntry } from '@cprc/session';
+import type { Intent, LogEntry } from '@cprc/session';
+
+/** A player intent held for an absent GM. */
+export interface QueuedIntent { playerId: string; clientMsgId: string; intent: Intent; at: number }
 
 export interface PlayerRecord { playerId: string; name: string; tokenHash: string }
 export interface SessionMeta {
@@ -30,6 +34,9 @@ export interface Store {
   hasAsset(sessionId: string, name: string): boolean;
   /** Total bytes stored for a session. */
   assetBytes(sessionId: string): number;
+  /** Player intents waiting for the GM; written atomically after every change. */
+  loadQueue(sessionId: string): QueuedIntent[];
+  saveQueue(sessionId: string, queue: QueuedIntent[]): void;
 }
 
 export const ASSET_NAME = /^[a-f0-9]{64}\.(webp|png|jpg)$/;
@@ -51,6 +58,9 @@ export class MemoryStore implements Store {
   getAsset(id: string, name: string) { return this.assets.get(id)?.get(name) ?? null; }
   hasAsset(id: string, name: string) { return !!this.assets.get(id)?.has(name); }
   assetBytes(id: string) { let n = 0; for (const b of this.assets.get(id)?.values() ?? []) n += b.length; return n; }
+  private queues = new Map<string, QueuedIntent[]>();
+  loadQueue(id: string) { return structuredClone(this.queues.get(id) ?? []); }
+  saveQueue(id: string, q: QueuedIntent[]) { if (q.length) this.queues.set(id, structuredClone(q)); else this.queues.delete(id); }
 }
 
 const SAFE_ID = /^[a-f0-9-]{36}$/;
@@ -110,6 +120,19 @@ export class FileStore implements Store {
   }
   replaceLog(id: string, entries: LogEntry[]) {
     atomicWrite(join(this.dir(id), 'log.jsonl'), entries.map((e) => JSON.stringify(e) + '\n').join(''));
+  }
+  loadQueue(id: string): QueuedIntent[] {
+    const f = join(this.dir(id), 'queue.json');
+    if (!existsSync(f)) return [];
+    try {
+      const q = JSON.parse(readFileSync(f, 'utf8')) as unknown;
+      return Array.isArray(q) ? (q as QueuedIntent[]).filter((i) => i && typeof i.playerId === 'string' && typeof i.clientMsgId === 'string' && typeof i.at === 'number') : [];
+    } catch { return []; }
+  }
+  saveQueue(id: string, q: QueuedIntent[]) {
+    const d = this.dir(id);
+    mkdirSync(d, { recursive: true });
+    atomicWrite(join(d, 'queue.json'), JSON.stringify(q));
   }
 }
 

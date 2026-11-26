@@ -53,6 +53,8 @@ export interface ClientState {
   gmOnline: boolean;
   feed: FeedItem[];
   toast: { text: string; at: number } | null;
+  /** GM setting: send pings and ruler lines to players (still only where the party can see). */
+  gmSignals: boolean;
   signals: Signals;
   /** GM: entries made while disconnected, waiting to reach the relay. */
   unsynced: number;
@@ -71,6 +73,7 @@ export interface SavedGm extends GmCreds { name?: string; lastUsed: number }
 const GM_KEY = 'nsc.gm';
 const GM_SESSIONS = 'nsc.gmSessions';
 const LAST_JOIN = 'nsc.lastJoin';
+const GM_SIGNALS_KEY = 'nsc.gmSignals';
 const playerKey = (code: string) => `nsc.player.${code}`;
 
 /**
@@ -101,6 +104,7 @@ type Listener = () => void;
 export class Client {
   state: ClientState = {
     status: 'idle', role: null, sessionId: null, joinCode: null, playerId: null, view: null, players: [], gmOnline: false, feed: [], toast: null,
+    gmSignals: store.get<boolean>(GM_SIGNALS_KEY) ?? true,
     signals: { pings: [], measures: {}, cursors: {} }, unsynced: 0, queued: 0, lockedUntil: null, sessionMenu: false,
   };
   /** GM log cache (IndexedDB, localStorage fallback). Replaceable for tests. */
@@ -359,9 +363,20 @@ export class Client {
     };
   }
 
+  /** GM: show or hide pings and ruler lines from players. Hiding also clears a ruler they may be seeing. */
+  setGmSignals(on: boolean) {
+    store.set(GM_SIGNALS_KEY, on);
+    this.set({ gmSignals: on });
+    if (!on) this.send({ t: 'signal', signal: { kind: 'measure', from: { x: 0, y: 0 }, to: null } });
+  }
+
   /** Send a table signal; rendered locally right away as 'me'. Cursor and measure updates are throttled. */
   signal(sig: Signal) {
     const now = Date.now();
+    if (this.state.role === 'gm' && !this.state.gmSignals && (sig.kind === 'ping' || sig.kind === 'measure')) {
+      this.applySignal('me', sig);
+      return;
+    }
     const final = sig.kind === 'ping' || (sig.kind === 'measure' && sig.to === null) || (sig.kind === 'cursor' && sig.at === null);
     const wait = 120 - (now - (this.lastSignalAt[sig.kind] ?? 0));
     this.applySignal('me', sig);
@@ -442,8 +457,13 @@ export class Client {
           // Reconnects reuse this.hello: carry the token so the relay restores this
           // player instead of creating a new, unassigned one.
           if (this.hello) this.hello = { ...this.hello, playerToken: m.playerToken };
-          this.queuedIds.clear();
-          this.set({ status: 'online', sessionId: m.sessionId, playerId: m.playerId, view: m.view, players: m.players ?? [], feed: feedFromHistory(m.history), queued: 0, lockedUntil: null });
+          // The relay says which of our held actions it still has; anything else was lost (e.g. a relay restart).
+          const held = new Set(m.queued ?? []);
+          const settled = new Set(m.settled ?? []);
+          const lost = [...this.queuedIds].filter((id) => !held.has(id) && !settled.has(id)).length;
+          this.queuedIds = held;
+          this.set({ status: 'online', sessionId: m.sessionId, playerId: m.playerId, view: m.view, players: m.players ?? [], feed: feedFromHistory(m.history), queued: held.size, lockedUntil: null, toast: null });
+          if (lost > 0) this.toast(`${lost === 1 ? 'A queued action was' : `${lost} queued actions were`} lost before the GM got ${lost === 1 ? 'it' : 'them'}. Try again.`);
         }
         return;
       case 'log': {
@@ -495,6 +515,10 @@ export class Client {
         this.runIntent(m.intent, { role: 'player', playerId: m.from }, m.clientMsgId);
         return;
       case 'rejected':
+        if (this.queuedIds.delete(m.clientMsgId)) this.set({ queued: this.queuedIds.size });
+        this.toast(m.message);
+        return;
+      case 'queueDropped':
         if (this.queuedIds.delete(m.clientMsgId)) this.set({ queued: this.queuedIds.size });
         this.toast(m.message);
         return;
