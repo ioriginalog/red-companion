@@ -4,6 +4,10 @@ import { Table } from './Table.js';
 import { GmShell } from './editors/GmShell.js';
 import { SessionMenu } from './SessionMenu.js';
 
+// End-to-end tests drive the client through this hook; it's only set when a
+// test has opted in on this device (localStorage nsc.e2e = 1).
+try { if (typeof window !== 'undefined' && localStorage.getItem('nsc.e2e') === '1') (window as unknown as { __nsc: typeof client }).__nsc = client; } catch { /* storage blocked */ }
+
 export function App() {
   const s = useSyncExternalStore(client.subscribe, client.getState);
   // A reload drops a player back into their last session (Leave forgets it).
