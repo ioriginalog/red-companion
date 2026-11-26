@@ -5,7 +5,7 @@
  * Players see in full: actors they control, and (by default) all PCs.
  * Everything else: name, side, Wound State, conditions, injury names.
  */
-import { getInjury, woundState, type CheckResult, type CombatEvent } from '@cprc/rules-core';
+import { getInjury, woundState, type CheckResult, type CombatEvent, type Weapon } from '@cprc/rules-core';
 import { projectPendingForPlayer } from './systems.js'; // Track K
 import { allegianceOf, factionOf, projectMap } from './tactical.js';
 import { visibleHandouts } from './handouts.js'; // Track U
@@ -131,6 +131,11 @@ function projectEncounter(enc: Encounter, kn: Knowledge): Encounter {
   };
 }
 
+function weaponTypeOf(state: SessionState, actorId: string, weaponId: string): { weaponType?: Weapon['type'] } {
+  const w = state.actors[actorId]?.weapons.find((x) => x.id === weaponId);
+  return w ? { weaponType: w.type } : {};
+}
+
 function projectPending(p: Pending | null, viewer: Viewer, state: SessionState, kn: Knowledge, opts?: ProjectionOptions): ProjectedPending | null {
   if (!p || viewer.role === 'gm') return p;
   const full = (id: string) => { const a = state.actors[id]; return !!a && canSeeFull(a, viewer, opts); };
@@ -143,6 +148,8 @@ function projectPending(p: Pending | null, viewer: Viewer, state: SessionState, 
           type: 'rangedAttack', attackerId: kn.aliasOf(a.attackerId), defenderId: kn.aliasOf(a.defenderId),
           weaponId: full(a.attackerId) ? a.weaponId : 'unknown', distance: a.distance,
           ...(a.mode ? { mode: a.mode } : {}), ...(a.aimTarget ? { aimTarget: a.aimTarget } : {}),
+          // Round 4 U4 (#15): the type of a known attacker's weapon (the defender can see it), for the real range DV.
+          ...(kn.known.has(a.attackerId) ? weaponTypeOf(state, a.attackerId, a.weaponId) : {}),
         },
       };
     }

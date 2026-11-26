@@ -146,7 +146,9 @@ export type Pending =
 
 /** What a player sees of a pending step: NPC damage dice are withheld. */
 export type ProjectedPending =
-  | Exclude<Pending, { kind: 'awaitingDamage' }>
+  | Exclude<Pending, { kind: 'awaitingDamage' | 'awaitingDodge' }>
+  // Round 4 U4 (#15): a defender sees the gun pointed at them, so players get its type (not its stats).
+  | (Omit<Extract<Pending, { kind: 'awaitingDodge' }>, 'attack'> & { attack: Extract<Pending, { kind: 'awaitingDodge' }>['attack'] & { weaponType?: Weapon['type'] } })
   | (Omit<Extract<Pending, { kind: 'awaitingDamage' }>, 'spec'> & { spec?: DamageSpec });
 
 export interface SessionState {
