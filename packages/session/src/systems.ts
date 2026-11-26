@@ -273,7 +273,8 @@ export function executeSystems(state: SessionState, intent: SystemsIntent, by: V
       const c: Combatant = { ...a.combatant, speedware: { active: true, roundsLeft: SPEEDWARE_ROUNDS, spent: true } };
       const patch: StatePatch = { actors: { [a.id]: withCombatant(a, c) } };
       if (encounter) patch.encounter = encounter;
-      const events: CombatEvent[] = [{ type: 'speedwareChanged', visibility: visibilityFor(a), combatantId: a.id, state: 'activated', initiative: bonus }];
+      // The bonus is a sheet number: only friendly characters' events carry it.
+      const events: CombatEvent[] = [{ type: 'speedwareChanged', visibility: visibilityFor(a), combatantId: a.id, state: 'activated', ...(factionOf(a) === 'friendly' ? { initiative: bonus } : {}) }];
       if (state.encounter.active) {
         events.push({ type: 'gmRulingRequired', visibility: 'gm', reason: `${a.combatant.name}’s speedware adds +${bonus} to Initiative rolls while it’s on. Initiative isn’t rerolled mid-fight; reroll them in (Remove and Add to Initiative) if your table does.` });
       }

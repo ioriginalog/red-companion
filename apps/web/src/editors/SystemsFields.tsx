@@ -88,9 +88,10 @@ const EFFECT_LABEL: Record<CyberwareEffect['kind'], string> = {
   targetingScope: 'Targeting Scope', neuralLink: 'Neural Link', subdermalGrip: 'Subdermal Grip', interfacePlugs: 'Interface Plugs',
   healingMultiplier: 'Faster Healing', ignoreSeriouslyWounded: 'Ignore Seriously Wounded',
   smartLink: 'Targeting Scope (Old)',
+  speedware: 'Speedware', // Round 4 R4: display-only here until the editor offers it
 };
 /** Effects offered when adding (the legacy alias is display-only). */
-const PICKABLE = (Object.keys(EFFECT_LABEL) as CyberwareEffect['kind'][]).filter((k) => k !== 'smartLink');
+const PICKABLE = (Object.keys(EFFECT_LABEL) as CyberwareEffect['kind'][]).filter((k) => k !== 'smartLink' && k !== 'speedware' /* Round 4 R4 */);
 const INSTALL: Record<string, string> = { mall: 'Mall', clinic: 'Clinic', hospital: 'Hospital', none: 'No Surgery' };
 
 function effectText(e: CyberwareEffect): string {

@@ -253,3 +253,17 @@ describe('attackAvailability stays in lockstep with the authority', () => {
     });
   }
 });
+
+describe('actor validation of Round 4 fields', () => {
+  it('accepts good turn flags and speedware state, rejects junk', () => {
+    const t = table();
+    expect(t.send({ type: 'addActor', actor: actor('ok', 'pc', 'gm', { turnFlags: { loseAction: true }, speedware: { active: true, roundsLeft: 12, spent: true } }) }, GM).ok).toBe(true);
+    const junk = [
+      { turnFlags: { loseAction: 'yes' } },
+      { speedware: { active: true, roundsLeft: 999, spent: false } },
+      { speedware: { active: true, spent: false } },
+      { cyberware: [{ id: 'x', name: 'X', humanityLoss: 0, effects: [{ kind: 'speedware', mode: 'passive', initiative: 50 }] }] },
+    ] as Partial<Combatant>[];
+    junk.forEach((over, i) => expect(t.send({ type: 'addActor', actor: actor(`bad${i}`, 'pc', 'gm', over) }, GM)).toMatchObject({ ok: false }));
+  });
+});

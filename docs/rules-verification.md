@@ -147,6 +147,21 @@ Sources: a community player handbook (melee, Martial Arts, combat and Role pages
 | Maker | 2 points per Rank, each specialty ≤ Rank. Upgrade/Fabrication/Invention: TECH + Tech skill + specialty + 1d10 vs DV 9/13/17/21/24/29/29 by price; Invention at least Expensive (DV 21). Field Expertise: jury-rig for 10 minutes × Field rank, no roll. | Secondary |
 | Role checks vs DV | Like every DV check in the engine, the total must beat the DV (ties fail). | Interpretation |
 
+## Automation (Round 4)
+
+| Rule | Engine Behavior | Status |
+|---|---|---|
+| Spinal Injury | The injured character's next Turn has no Action (a Move Action is still allowed). Queued when the injury lands; a Quick Fix before that Turn cancels it. | Easy Mode |
+| Broken Ribs, Foreign Object | At the end of any Turn moving more than 4 m/yds on foot, the injury's 5 bonus damage hits HP again, once per such injury. Movement = the Turn's movement cost in squares × 2 m/yds (difficult terrain counts double). Re-bleed doesn't trigger the Mortally Wounded extra crit. | Easy Mode (body) · Secondary (head) · Interpretation (distance, no extra crit) |
+| Damaged Ear, Lost Ear | After a Turn moving more than 4 m/yds on foot, no Move Action next Turn. The character can still Run with their Action. | Secondary · Interpretation (Run allowed) |
+| Turn-start reminders | At each Turn start the GM (and the character's player) get a checklist: Death Save, Prone, lost Action or Move, On Fire, grapples, active speedware, and the situational injury effects the engine can't apply (sight, hearing, speech, hands). | Tooling |
+| Speedware, passive (Kerenzikov type) | Always adds its bonus to Initiative. | Secondary |
+| Speedware, activated (Sandevistan type) | Turned on for one minute (20 Rounds); adds its bonus to Initiative rolls made while on; recharges after rest (the hour-long cooldown). Turning it on uses the Action during an encounter and is free outside one. Initiative isn't rerolled mid-fight; the GM can reroll the character in. | Secondary (bonus, duration, cooldown) · Interpretation (Action cost, no mid-fight reroll) |
+| One piece of speedware | A second piece can't be installed; if a sheet has two, only the first counts. | Secondary |
+| Black ICE Turns | Engaged Black ICE acts at the top of every Round, one attack each (ATK + 1d10 vs Interface + 1d10, ties to the runner). The GM gets a prompt at each new Round and runs it in one click. ICE stays on its floor (it doesn't chase between floors). | Secondary · Interpretation (no chasing) |
+| Demon Turns | A Demon spends its NET Actions on Control Nodes (GM call), then Zaps: Demon Interface + 1d10 vs the runner's Interface + 1d10, 1d6 to the runner on a hit. | Secondary · Interpretation (Zap uses Interface vs Interface) |
+| Attack availability | One rule for the client preview and the authority: arm injuries and hands, grapples (−2, no two-handed weapons, an Iron Grip stops ranged attacks), and a lost Facedown (−2 against the winner). | Tooling |
+
 ## Interpretations the GM Should Confirm
 
 1. **Armor penalties don't stack.** Worst single penalty across all worn pieces.

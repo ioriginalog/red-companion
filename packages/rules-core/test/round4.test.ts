@@ -11,7 +11,7 @@ describe('Spinal Injury: no Action next Turn', () => {
   it('queues the lost Action when the injury lands from damage', () => {
     // Two sixes trigger a crit; the injury roll (2d6) picks Spinal Injury (10 = 4 + 6).
     const t = combatant({ hpCurrent: 40, hp: { max: 40, current: 40 } });
-    const spec = { source: 'weapon' as const, diceCount: 2, multiplier: 1, location: 'body' as const, halveSP: false, ablation: 1, critTable: 'body' as const };
+    const spec = { source: 'ranged' as const, diceCount: 2, multiplier: 1, location: 'body' as const, halveSP: false, ablation: 1, critTable: 'body' as const };
     const r = applyDamage(t, spec, { dice: [6, 6], multiplier: 1, total: 12, critTriggered: true }, scriptedDice({ d6: [4, 6] }));
     expect(r.target.criticalInjuries.map((i) => i.injuryId)).toEqual(['spinalInjury']);
     expect(r.target.turnFlags?.loseAction).toBe(true);
