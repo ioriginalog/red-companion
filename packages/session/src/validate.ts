@@ -222,6 +222,10 @@ export function validateMap(v: unknown) {
   }
   for (const s of arr(m.spotted, 'Spotted', 500)!) str(s, 'Spotted id', 64);
   if (m.lighting !== undefined) validateLighting(m.lighting);
+  // Round 4 U4: exploration bitmap.
+  if (m.explored !== undefined && (typeof m.explored !== 'string' || m.explored.length !== w * h || !/^[01]*$/.test(m.explored))) {
+    bad('Explored squares must be a width × height string of 0 and 1.');
+  }
 }
 
 function validateLighting(v: unknown) {

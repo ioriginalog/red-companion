@@ -33,6 +33,8 @@ export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: 
     case 'damageRolled':
       return { text: `Damage ${damageMath(e.dice, e.multiplier)} = ${e.total}${e.critTriggered ? '. Critical Injury!' : '.'}`, tone: 'hit' };
     case 'damageApplied':
+      // Redacted for players: HP and SP fields are gone, so say only that it landed.
+      if (e.redacted) return { text: `${name(e.targetId)} is hit in the ${LOC[e.location] ?? e.location}.`, tone: 'bad' };
       return e.through > 0
         ? { text: `${name(e.targetId)} takes ${e.hpBefore - e.hpAfter} to the ${LOC[e.location] ?? e.location} (SP ${e.spCounted} stopped ${Math.min(e.rawDamage, e.spCounted)}).`, tone: 'bad' }
         : { text: `${name(e.targetId)}’s armor stops it.`, tone: 'info' };

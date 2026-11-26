@@ -21,6 +21,7 @@ import {
 } from './helpers.js';
 import { executeTool, TOOL_GM_ONLY, TOOL_WHILE_PENDING } from './tools.js';
 import { executeHandout } from './handouts.js'; // Track U
+import { executePlayerEdit } from './player-edits.js'; // Round 4 U4
 // --- Track N ---
 import { executeNet } from './netrun.js';
 // --- end Track N ---
@@ -51,7 +52,7 @@ const GM_ONLY: ReadonlySet<IntentType> = new Set([
   ...TOOL_GM_ONLY,
   'setHandout', 'removeHandout', // Track U
 ]);
-const ALLOWED_WHILE_PENDING: ReadonlySet<IntentType> = new Set(['respondDodge', 'rollDamage', 'cancelPending', 'declineWatch', ...TOOL_WHILE_PENDING, 'setHandout', 'removeHandout', ...SYSTEMS_WHILE_PENDING /* Track K */, ...(PLAYLOOP_WHILE_PENDING as ReadonlySet<IntentType>) /* Round 3 P */]);
+const ALLOWED_WHILE_PENDING: ReadonlySet<IntentType> = new Set(['respondDodge', 'rollDamage', 'cancelPending', 'declineWatch', ...TOOL_WHILE_PENDING, 'setHandout', 'removeHandout', 'editOwnSheet' /* Round 4 U4 */, ...SYSTEMS_WHILE_PENDING /* Track K */, ...(PLAYLOOP_WHILE_PENDING as ReadonlySet<IntentType>) /* Round 3 P */]);
 
 export function authorId(v: Viewer): AuthorId {
   return v.role === 'gm' ? 'gm' : `player:${v.playerId}`;
@@ -370,6 +371,7 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       return doAreaAttack(state, intent, by, dice, newId);
     case 'suppressiveFire':
       return doSuppressiveFire(state, intent, by, dice);
+    case 'editOwnSheet': return executePlayerEdit(state, intent, by); // Round 4 U4
     case 'setHandout': case 'removeHandout': // Track U
       return executeHandout(state, intent, by);
     // --- Round 3 P ---

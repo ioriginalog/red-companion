@@ -19,7 +19,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
       stats: stats({ REF: 5, DEX: 5, BODY: 5, WILL: 4, COOL: 4 }),
       skills: { Handgun: 4, Brawling: 4, Evasion: 2, Perception: 2, Streetwise: 3, Athletics: 2 },
       weapons: [w('pistol', 'Heavy Pistol', 'heavyPistol', 8), w('knife', 'Knife', 'lightMelee', null)],
-      armor: { head: { kind: 'none' }, body: armor('kevlar') }, notes: 'Runs when Seriously Wounded unless cornered.',
+      armor: { head: { kind: 'none' }, body: armor('kevlar') }, notes: '', gmNotes: 'Runs when Seriously Wounded unless cornered.',
     },
   },
   {
@@ -29,7 +29,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
       stats: stats({ REF: 6, DEX: 6, BODY: 6, WILL: 5, COOL: 6, INT: 5 }),
       skills: { Handgun: 5, Autofire: 4, Evasion: 4, Perception: 5, Tactics: 3, Brawling: 4, 'First Aid': 2 },
       weapons: [w('smg', 'Security SMG', 'smg', 30), w('baton', 'Stun Baton', 'mediumMelee', null)],
-      armor: { head: armor('lightArmorjack'), body: armor('lightArmorjack') }, notes: 'Calls for backup on its first Turn.',
+      armor: { head: armor('lightArmorjack'), body: armor('lightArmorjack') }, notes: '', gmNotes: 'Calls for backup on its first Turn.',
     },
   },
   {
@@ -39,7 +39,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
       stats: stats({ REF: 6, DEX: 7, BODY: 8, WILL: 6, MOVE: 5 }),
       skills: { 'Melee Weapon': 6, Brawling: 6, Evasion: 4, 'Shoulder Arms': 4, Endurance: 5, Perception: 3 },
       weapons: [w('blade', 'Heavy Blade', 'heavyMelee', null), w('shotgun', 'Shotgun', 'shotgun', 4)],
-      armor: { head: armor('mediumArmorjack'), body: armor('mediumArmorjack') }, notes: '',
+      armor: { head: armor('mediumArmorjack'), body: armor('mediumArmorjack') }, notes: '', gmNotes: '',
     },
   },
   {
@@ -52,7 +52,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
       stats: stats({ REF: 7, DEX: 5, BODY: 5, WILL: 5, COOL: 6, INT: 5 }),
       skills: { 'Shoulder Arms': 7, Handgun: 4, Evasion: 3, Perception: 6, Stealth: 5, Concentration: 5 },
       weapons: [w('rifle', 'Sniper Rifle', 'sniperRifle', 4), w('pistol', 'Medium Pistol', 'mediumPistol', 12)],
-      armor: { head: { kind: 'none' }, body: armor('lightArmorjack') }, notes: 'Prefers Aimed Shots at the head.',
+      armor: { head: { kind: 'none' }, body: armor('lightArmorjack') }, notes: '', gmNotes: 'Prefers Aimed Shots at the head.',
     },
   },
   {
@@ -62,7 +62,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
       stats: stats({ REF: 6, DEX: 6, BODY: 4, WILL: 4, MOVE: 8, INT: 3, EMP: 1, COOL: 8 }),
       skills: { Handgun: 5, Autofire: 3, Evasion: 3, Perception: 6 },
       weapons: [w('smg', 'Mounted SMG', 'smg', 30)],
-      armor: { head: armor('lightArmorjack'), body: armor('lightArmorjack') }, notes: 'Machine: the GM rules on Death Saves and Critical Injuries.',
+      armor: { head: armor('lightArmorjack'), body: armor('lightArmorjack') }, notes: '', gmNotes: 'Machine: the GM rules on Death Saves and Critical Injuries.',
     },
   },
 ];

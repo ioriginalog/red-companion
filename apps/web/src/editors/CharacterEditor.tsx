@@ -397,8 +397,10 @@ export function CharacterEditor({ s }: { s: ClientState }) {
         <GearField value={draft.gear} onChange={(gear) => set({ gear })} />
 
         <section className="card">
-          <div className="ttl">Notes</div>
-          <textarea aria-label="Notes" value={draft.notes} maxLength={2000} onChange={(e) => set({ notes: e.target.value })} placeholder="Cyberware, tactics, loot, motives…" style={{ width: '100%' }} />
+          <div className="ttl">Notes (Visible to Players)</div>
+          <textarea aria-label="Notes (Visible to Players)" value={draft.notes} maxLength={2000} onChange={(e) => set({ notes: e.target.value })} placeholder="Background, look, gear the party knows about…" style={{ width: '100%' }} />
+          <div className="ttl" style={{ marginTop: 10 }}>GM Notes</div>
+          <textarea aria-label="GM Notes" value={draft.gmNotes} maxLength={4000} onChange={(e) => set({ gmNotes: e.target.value })} placeholder="Secrets, tactics, loot, motives. Never sent to players." style={{ width: '100%' }} />
         </section>
       </main>
 

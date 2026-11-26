@@ -5,6 +5,7 @@ import { isFriendly, moveRings, occupancy, partyVision, watchCells, wedgePath, t
 import { pct } from './odds.js';
 import { PING_MS, type Signals } from './net.js';
 import { blastCells, shellCells, tokensIn, type AreaKind } from './table/area.js';
+import { fogPaths } from './table/fog.js';
 import { clampBox, panBy, reaspect, zoomAt, type Box } from './table/viewport.js';
 import { centerOn, comfortablyInside, easeOut, fitMap, frameFocus, lerpBox, limitWidth, maxViewWidth, toStage, type Viewport } from './table/layout/camera.js';
 import { MiniMap } from './table/layout/MiniMap.js';
@@ -217,14 +218,9 @@ export function MapView(p: Props) {
   const actingAt = actingId ? map.tokens[actingId] : undefined;
   const revealed = useMemo(() => new Set(map.lighting?.revealed ?? []), [map.lighting]);
 
-  const fogPath = useMemo(() => {
-    if (!showFog) return '';
-    let d = '';
-    for (let y = 0; y < map.height; y++) for (let x = 0; x < map.width; x++) {
-      if (!vision.has(`${x},${y}`)) d += `M${x * S},${y * S}h${S}v${S}h${-S}z`;
-    }
-    return d;
-  }, [vision, showFog, map.width, map.height, S]);
+  // Seen-before squares dim; never-seen squares go dark (exploration fog).
+  const fog = useMemo(() => (showFog ? fogPaths(map, vision, S) : { dim: '', dark: '' }), [vision, showFog, map.width, map.height, map.explored, S]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fogPath = fog.dim;
 
   const toMap = (clientX: number, clientY: number) => {
     const m = svgRef.current?.getScreenCTM();
@@ -567,6 +563,7 @@ export function MapView(p: Props) {
         )}
 
         {showFog && <path d={fogPath} fill={p.isGm ? 'rgba(2,4,14,0.5)' : 'rgba(2,4,14,0.78)'} pointerEvents="none" />}
+        {showFog && fog.dark && <path d={fog.dark} fill={p.isGm ? 'rgba(2,4,14,0.8)' : '#02040e'} pointerEvents="none" />}
 
         {path && pathFrom && (
           <g pointerEvents="none">
@@ -752,7 +749,7 @@ export function MapView(p: Props) {
         {p.onToggleMini && <button className={`btn hide-compact${p.showMini ? ' on' : ''}`} onClick={p.onToggleMini} aria-pressed={!!p.showMini} title="Overview Map">Mini</button>}
       </div>
       {p.showMini && !p.compact && (
-        <MiniMap map={map} view={view} box={box} fogPath={fogPath} fogFill={p.isGm ? 'rgba(2,4,14,0.5)' : 'rgba(2,4,14,0.78)'}
+        <MiniMap map={map} view={view} box={box} fogPath={fogPath} fogFill={p.isGm ? 'rgba(2,4,14,0.5)' : 'rgba(2,4,14,0.78)'} darkPath={fog.dark} darkFill={p.isGm ? 'rgba(2,4,14,0.8)' : '#02040e'}
           onCenter={(x, y) => setBox((b) => clampBox({ ...b, x: x - b.w / 2, y: y - b.h / 2 }, W, H))} />
       )}
       {tipFor && !dragTo && (() => {

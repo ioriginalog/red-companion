@@ -13,7 +13,7 @@
 // --- Track N ---
 import type { NetOp, NetState, NetView } from './netrun-types.js';
 // --- end Track N ---
-import type { AimTarget, AmmoTypeId, AwarenessKey, Care, Cell, CheckResult, CombatEvent, Combatant, CoverMaterialId, CyberwareItem, DamageSpec, GridMap, Modifier, Weapon, WoundState } from '@cprc/rules-core';
+import type { AimTarget, AmmoTypeId, AwarenessKey, Care, Cell, CheckResult, CombatEvent, Combatant, CoverMaterialId, CyberwareItem, DamageSpec, GearItem, GridMap, Modifier, Weapon, WoundState } from '@cprc/rules-core';
 
 export type Viewer = { role: 'gm' } | { role: 'player'; playerId: string };
 /** Serialized author of an entry: 'gm' or 'player:<id>'. */
@@ -97,6 +97,8 @@ export interface TacticalMap extends GridMap {
   watches: Record<string, Watch>;
   /** NPC actor ids the party has seen at least once (names revealed). */
   spotted: string[];
+  /** Round 4 U4: squares the party has ever seen, row-major '0'/'1' of length width × height. Absent = nothing recorded yet. */
+  explored?: string;
   /** GM lighting overrides. `revealed` squares are always visible to players. */
   lighting?: { revealAll?: boolean; revealed?: string[] };
   // --- Track K ---
@@ -321,6 +323,8 @@ export type Intent =
   // --- end Track K ---
   // --- Track U ---
   | { type: 'setHandout'; id: string; title: string; body: string; imageUrl?: string; audience: 'all' | 'gm' | string[] }
+  // --- Round 4 U4 ---
+  | { type: 'editOwnSheet'; actorId: string; notes?: string; gear?: GearItem[] }
   | { type: 'removeHandout'; id: string }
   // --- Round 3 P ---
   /** GM: put a late arrival into the Turn order (rolled, or a given total). */

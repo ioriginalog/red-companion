@@ -9,8 +9,8 @@ const DOT = { party: '#22e3ff', ally: '#3dff8a', neutral: '#b46bff', hostile: '#
  * to move the camera. Shows only what this viewer already has (projected tokens,
  * the same fog path), so it reveals nothing new.
  */
-export function MiniMap({ map, view, box, fogPath, fogFill, onCenter }: {
-  map: TacticalMap; view: ViewState; box: Box; fogPath: string; fogFill: string; onCenter: (x: number, y: number) => void;
+export function MiniMap({ map, view, box, fogPath, fogFill, darkPath, darkFill, onCenter }: {
+  map: TacticalMap; view: ViewState; box: Box; fogPath: string; fogFill: string; darkPath?: string; darkFill?: string; onCenter: (x: number, y: number) => void;
 }) {
   const S = map.cellPx;
   const W = map.width * S, H = map.height * S;
@@ -30,6 +30,7 @@ export function MiniMap({ map, view, box, fogPath, fogFill, onCenter }: {
     >
       {map.background ? <image href={map.background} width={W} height={H} preserveAspectRatio="none" /> : <rect width={W} height={H} fill="#0b1230" />}
       {fogPath && <path d={fogPath} fill={fogFill} />}
+      {darkPath && <path d={darkPath} fill={darkFill ?? '#02040e'} />}
       {Object.entries(map.tokens).map(([id, t]) => {
         const a = view.actors[id];
         if (!a) return null;

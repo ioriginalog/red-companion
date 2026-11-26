@@ -35,14 +35,16 @@ export interface ActorDraft {
   weapons: WeaponDraft[];
   armor: { head: ArmorChoice; body: ArmorChoice };
   notes: string;
+  /** GM-only notes (never sent to players). */
+  gmNotes: string;
   /** Role and rank (Combat Awareness / Medicine allocations live here). */
   role: RoleState | null;
   cyberware: CyberwareItem[];
   gear: GearItem[];
 }
 
-/** Actor plus GM notes. `notes` rides along in the JSON; the engine ignores it. */
-export type ActorWithNotes = Actor & { notes?: string };
+/** Actor with its notes: `notes` is shown to anyone with the full sheet, `gmNotes` to the GM only. */
+export type ActorWithNotes = Actor & { notes?: string; gmNotes?: string };
 
 export const STAT_MIN = 1;
 export const STAT_MAX = 10;
@@ -84,7 +86,7 @@ export function numberedNames(base: string, count: number, taken: Iterable<strin
 export function emptyDraft(): ActorDraft {
   return {
     id: '', name: '', allegiance: 'hostile', controller: 'gm', portrait: null, stats: { ...DEFAULT_STATS },
-    skills: { Evasion: 2, Perception: 2 }, weapons: [], armor: { head: { kind: 'none' }, body: { kind: 'none' } }, notes: '',
+    skills: { Evasion: 2, Perception: 2 }, weapons: [], armor: { head: { kind: 'none' }, body: { kind: 'none' } }, notes: '', gmNotes: '',
     role: null, cyberware: [], gear: [],
   };
 }
@@ -172,6 +174,7 @@ export function draftFromActor(a: ActorWithNotes): ActorDraft {
       body: armorChoice(c.armor.find((p) => p.location === 'body' && !p.id.startsWith('cw:'))),
     },
     notes: a.notes ?? '',
+    gmNotes: a.gmNotes ?? '',
     role: c.role ? { ...c.role } : null,
     cyberware: (c.cyberware ?? []).map((i) => ({ ...i, effects: i.effects.map((e) => ({ ...e })) })),
     gear: (c.gear ?? []).map((g) => ({ ...g })),
@@ -221,6 +224,7 @@ export function actorFromDraft(d: ActorDraft, opts: BuildOptions = {}): ActorWit
     weapons,
     ...(d.portrait ? { portrait: d.portrait } : {}),
     ...(d.notes.trim() ? { notes: d.notes.trim() } : {}),
+    ...(d.gmNotes.trim() ? { gmNotes: d.gmNotes.trim() } : {}),
     combatant: {
       id,
       name: d.name.trim() || 'Unnamed',

@@ -26,9 +26,12 @@ export function narrateSystems(e: CombatEvent, name: (id: string) => string): Sy
     case 'rested':
       return e.blocked
         ? { text: `${name(e.targetId)} doesn’t heal: ${e.blocked}.`, tone: 'bad' }
-        : { text: `${name(e.targetId)} rests ${e.days} day${e.days > 1 ? 's' : ''} and heals ${e.healed} HP.`, tone: 'good' };
+        : e.redacted || typeof e.healed !== 'number'
+          ? { text: `${name(e.targetId)} rests ${e.days} day${e.days > 1 ? 's' : ''}.`, tone: 'good' }
+          : { text: `${name(e.targetId)} rests ${e.days} day${e.days > 1 ? 's' : ''} and heals ${e.healed} HP.`, tone: 'good' };
     case 'coverDamaged':
-      return { text: e.destroyed ? `The ${e.material.toLowerCase()} cover is destroyed.` : `The ${e.material.toLowerCase()} cover takes ${e.hpBefore - e.hpAfter} (${e.hpAfter} HP left).`, tone: e.destroyed ? 'hit' : 'info' };
+      // No cover HP in the log: players only ever get a damage state (the GM sees HP on hover).
+      return { text: e.destroyed ? `The ${e.material.toLowerCase()} cover is destroyed.` : `The ${e.material.toLowerCase()} cover takes damage.`, tone: e.destroyed ? 'hit' : 'info' };
     case 'burning':
       return { text: `${name(e.targetId)} burns for ${e.damage}.`, tone: 'bad' };
     case 'ignited':
@@ -38,11 +41,13 @@ export function narrateSystems(e: CombatEvent, name: (id: string) => string): Sy
     case 'ammoLoaded':
       return { text: `${name(e.combatantId)} loads ${ammoName(e.ammoType)} ammunition.`, tone: 'info' };
     case 'smartAmmoRetry':
-      return { text: `${e.kind === 'improvedSmart' ? 'Improved Smart' : 'Smart'} rounds track: ${e.total} vs ${e.defense ? 'a fresh dodge of' : 'DV'} ${e.dv}. ${e.hit ? 'Hit.' : 'Miss.'}`, tone: e.hit ? 'hit' : 'miss' };
+      return { text: e.redacted
+        ? `${e.kind === 'improvedSmart' ? 'Improved Smart' : 'Smart'} rounds track. ${e.hit ? 'Hit.' : 'Miss.'}`
+        : `${e.kind === 'improvedSmart' ? 'Improved Smart' : 'Smart'} rounds track: ${e.total} vs ${e.defense ? 'a fresh dodge of' : 'DV'} ${e.dv}. ${e.hit ? 'Hit.' : 'Miss.'}`, tone: e.hit ? 'hit' : 'miss' };
     case 'damageDeflected':
-      return { text: `${name(e.targetId)} deflects ${e.amount} damage.`, tone: 'good' };
+      return { text: e.redacted || typeof e.amount !== 'number' ? `${name(e.targetId)} deflects some of the damage.` : `${name(e.targetId)} deflects ${e.amount} damage.`, tone: 'good' };
     case 'spotWeakness':
-      return { text: `${name(e.combatantId)} finds a weak spot (+${e.bonus} damage).`, tone: 'hit' };
+      return { text: e.redacted || typeof e.bonus !== 'number' ? `${name(e.combatantId)} finds a weak spot.` : `${name(e.combatantId)} finds a weak spot (+${e.bonus} damage).`, tone: 'hit' };
     case 'areaDodgeRequested':
       return { text: `${name(e.combatantId)} can try to dodge the blast.`, tone: 'info' };
     default:

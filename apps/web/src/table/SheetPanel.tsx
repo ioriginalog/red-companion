@@ -6,6 +6,7 @@ import {
 import type { StatKeyName } from '@cprc/session';
 import { STATS } from './commands.js';
 import { linkedStat } from './skills.js';
+import { NotesAndGear } from './SheetEdit.js';
 import { ALLEGIANCE, WOUND, type TableCtx } from './ctx.js';
 import { Portrait } from './panels.js';
 import { SystemsSheet } from '../systems/index.js'; // Track K
@@ -147,12 +148,7 @@ export function SheetPanel({ c, preferId }: { c: TableCtx; preferId: string | nu
         )}
       </section>
 
-      {a.notes && (
-        <section className="card">
-          <div className="ttl">Notes</div>
-          <p className="notes">{a.notes}</p>
-        </section>
-      )}
+      <NotesAndGear key={a.id} c={c} a={a} canEdit={canRoll} />
 
       <section className="card">
         <div className="ttl">Critical Injuries</div>

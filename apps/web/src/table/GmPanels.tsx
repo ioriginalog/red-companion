@@ -69,6 +69,13 @@ export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor
             <button className="mode" disabled={!lighting.revealed?.length} onClick={() => c.act({ type: 'setLighting', lighting: { ...lighting, revealed: [] } })}>Clear Revealed</button>
             <button className={`mode${shareCursor ? ' sel' : ''}`} aria-pressed={shareCursor} onClick={() => setShareCursor(!shareCursor)} title="Players see your pointer. Careful: hovering a hidden token shows where it is.">Share My Cursor</button>
           </div>
+          {/* Round 4 U4: exploration fog (never-seen squares are dark for players). */}
+          <div className="modes" style={{ marginTop: 8 }} role="group" aria-label="Exploration">
+            <button className="mode" onClick={() => { const m = view.map!; c.act({ type: 'setMap', map: { ...m, explored: '1'.repeat(m.width * m.height) } }); }}
+              title="Players see the whole map's layout (tokens still follow line of sight).">Mark All Explored</button>
+            <button className="mode" onClick={() => { const { explored: _e, ...m } = view.map!; c.act({ type: 'setMap', map: m }); }}
+              title="Forget everything but what the party sees right now.">Reset Exploration</button>
+          </div>
           <p className="dim small" style={{ marginTop: 8 }}>
             {mapMode === 'reveal' ? 'Drag over squares to reveal them to players; drag over revealed squares to hide them again.' : 'Players always see revealed squares, even without line of sight (lit areas, windows, cameras).'}
           </p>
