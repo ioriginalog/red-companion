@@ -12,7 +12,12 @@ import type { AmmoTypeId, AwarenessKey, CheckResult, CritTable, D10Roll, HitLoca
  * `audience`: when present, only these viewers (player ids, or 'gm') receive
  * the event; the GM always does. Used for whispers.
  */
-type Base = { visibility: 'public' | 'gm'; audience?: string[] };
+type Base = {
+  visibility: 'public' | 'gm';
+  audience?: string[];
+  /** Set by the projection layer when it removed numbers this viewer may not see (HP, SP, stats, dice). */
+  redacted?: boolean;
+};
 
 export type CombatEvent = Base & (
   | { type: 'initiativeRolled'; entries: { combatantId: string; base: number; roll: number; total: number; tiebreaks: number[] }[] }

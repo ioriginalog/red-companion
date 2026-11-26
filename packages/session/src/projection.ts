@@ -48,7 +48,13 @@ export function projectActor(actor: Actor, viewer: Viewer, opts?: ProjectionOpti
       injuries: c.criticalInjuries.map((i) => getInjury(i.injuryId).name),
     },
   };
-  return canSeeFull(actor, viewer, opts) ? { ...base, combatant: c, weapons: actor.weapons, ...(actor.notes ? { notes: actor.notes } : {}) } : base;
+  if (!canSeeFull(actor, viewer, opts)) return base;
+  return {
+    ...base, combatant: c, weapons: actor.weapons,
+    ...(actor.notes ? { notes: actor.notes } : {}),
+    // GM notes never leave the GM's view.
+    ...(viewer.role === 'gm' && actor.gmNotes ? { gmNotes: actor.gmNotes } : {}),
+  };
 }
 
 // ----- Player knowledge (fog of war) ----------------------------------------------
@@ -152,8 +158,9 @@ function projectPending(p: Pending | null, viewer: Viewer, state: SessionState, 
       const f = projectPendingForPlayer(p, state) as typeof p;
       return {
         ...f, attackerId: kn.aliasOf(p.attackerId),
-        targets: f.targets.map((t) => ({ id: kn.aliasOf(t.id) })),
-        decisions: Object.fromEntries(Object.entries(f.decisions).map(([k, v]) => [kn.aliasOf(k), v])),
+        // Unknown targets are dropped, not aliased: a list of `hidden` entries would be a count.
+        targets: f.targets.filter((t) => kn.known.has(t.id)).map((t) => ({ id: t.id })),
+        decisions: Object.fromEntries(Object.entries(f.decisions).filter(([k]) => kn.known.has(k))),
       };
     }
     // --- end Track K ---
@@ -210,16 +217,93 @@ function eventSubject(e: CombatEvent): string | undefined {
   return 'targetId' in e ? e.targetId : 'combatantId' in e ? e.combatantId : undefined;
 }
 
-const ID_KEYS = new Set(['attackerId', 'defenderId', 'targetId', 'combatantId', 'medicId', 'watcherId', 'asCombatantId']);
+// ----- Player event scrubbing -----------------------------------------------------
+//
+// Not a hand-kept list of event shapes: every event is walked. Values under
+// actor-id keys are aliased; id lists drop unknown ids; list entries that
+// only concern unknown actors are dropped (so nothing reveals a count);
+// any other string equal to an unknown actor's id becomes `hidden`; and
+// unknown actors' names are replaced in free text.
 
-/** Rewrite every actor id in an event that the player doesn't know. */
-function aliasIds<T>(v: T, f: (id: string) => string, key?: string): T {
-  if (typeof v === 'string') return (key && ID_KEYS.has(key) ? f(v) : v) as T;
-  if (Array.isArray(v)) return v.map((x) => aliasIds(x, f, key === 'targetIds' ? 'targetId' : undefined)) as T;
+/** Keys whose string value is always an actor id. */
+const ACTOR_ID_KEYS = new Set([
+  'attackerId', 'defenderId', 'targetId', 'combatantId', 'medicId', 'watcherId', 'asCombatantId',
+  'byId', 'after', 'actorId', 'holderId', 'heldId', 'winnerId', 'loserId', 'runnerId', 'ownerId', 'sourceId',
+]);
+/** Keys whose value is a list of actor ids. */
+const ACTOR_LIST_KEYS = new Set(['targetIds', 'actorIds', 'combatantIds']);
+/** Keys that hold other kinds of ids or player ids: never treated as actor ids. */
+const NON_ACTOR_KEYS = new Set(['id', 'by', 'weaponId', 'itemId', 'injuryId', 'mapId', 'pendingId', 'audience', 'type', 'visibility']);
+
+interface Scrub {
+  known: Set<string>;
+  /** Ids of actors the player doesn't know (in the state before or after the entry). */
+  unknownIds: Set<string>;
+  /** Their names, longest first, for free-text replacement. */
+  unknownNames: RegExp | null;
+}
+
+function scrubContext(after: SessionState, kn: Knowledge, before?: SessionState): Scrub {
+  const unknownIds = new Set<string>();
+  const names = new Set<string>();
+  const knownNames = new Set<string>();
+  for (const st of before ? [after, before] : [after]) {
+    for (const a of Object.values(st.actors)) {
+      if (kn.known.has(a.id)) { knownNames.add(a.combatant.name); continue; }
+      unknownIds.add(a.id);
+      names.add(a.combatant.name);
+    }
+  }
+  // A name shared with a known actor can't be scrubbed without breaking that actor's lines.
+  const list = [...names].filter((n) => n.trim().length >= 3 && !knownNames.has(n)).sort((x, y) => y.length - x.length);
+  const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return { known: kn.known, unknownIds, unknownNames: list.length ? new RegExp(`\\b(?:${list.map(esc).join('|')})\\b`, 'g') : null };
+}
+
+/** Every actor id an event mentions (for "does it concern anyone the player knows?"). */
+function mentionedActors(v: unknown, out: string[] = [], key?: string): string[] {
+  if (typeof v === 'string') { if (key && ACTOR_ID_KEYS.has(key)) out.push(v); return out; }
+  if (Array.isArray(v)) {
+    for (const x of v) {
+      if (typeof x === 'string') { if (key && ACTOR_LIST_KEYS.has(key)) out.push(x); }
+      else mentionedActors(x, out);
+    }
+    return out;
+  }
+  if (v && typeof v === 'object') for (const [k, x] of Object.entries(v as Record<string, unknown>)) mentionedActors(x, out, k);
+  return out;
+}
+
+function scrubValue(v: unknown, sc: Scrub, key?: string): unknown {
+  if (typeof v === 'string') {
+    if (key && NON_ACTOR_KEYS.has(key)) return v;
+    if ((key && ACTOR_ID_KEYS.has(key)) || sc.unknownIds.has(v)) return sc.known.has(v) ? v : HIDDEN;
+    return sc.unknownNames ? v.replace(sc.unknownNames, 'Unknown Contact') : v;
+  }
+  if (Array.isArray(v)) {
+    if (key && ACTOR_LIST_KEYS.has(key)) return v.filter((x) => typeof x !== 'string' || sc.known.has(x));
+    if (key && NON_ACTOR_KEYS.has(key)) return v;
+    return v
+      .filter((x) => {
+        // An entry about unknown actors only (initiative entries, suppression results) is dropped.
+        if (!x || typeof x !== 'object') return true;
+        const ids = mentionedActors(x);
+        return ids.length === 0 || ids.some((id) => sc.known.has(id));
+      })
+      .map((x) => scrubValue(x, sc));
+  }
   if (v && typeof v === 'object') {
-    return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, aliasIds(x, f, k)])) as T;
+    return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, scrubValue(x, sc, k)]));
   }
   return v;
+}
+
+/** Drop events that only concern actors the player doesn't know about (they would reveal that someone is there). */
+function concernsKnown(e: CombatEvent, sc: Scrub): boolean {
+  // The GM may speak as an unseen voice; the speaker becomes `hidden`.
+  if (e.type === 'chatMessage') return true;
+  const ids = mentionedActors(e);
+  return ids.length === 0 || ids.some((id) => sc.known.has(id));
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -257,11 +341,12 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
     return a ? canSeeFull(a, viewer, opts) : false;
   };
   const me = viewer.playerId;
+  const sc = scrubContext(after, kn, before);
   let events = entry.events
     .filter((e) => !e.audience || e.audience.includes(me))
     .filter((e) => e.visibility === 'public' || visible(eventSubject(e)))
-    // NPC ammo counts are stats.
-    .filter((e) => e.type !== 'ammoSpent' || visible(e.combatantId))
+    .filter((e) => !sheetOnly(e, visible))
+    .filter((e) => concernsKnown(e, sc))
     .map((e) => redactEvent(e, visible));
   // Don't reveal hidden tokens: drop their checks, trim them from area results.
   if (after.map && events.some((e) => e.type === 'areaResolved' || e.type === 'checkRolled')) {
@@ -272,7 +357,7 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
       .filter((e) => !(e.type === 'checkRolled' && e.combatantId && hidden(e.combatantId)))
       .map((e) => (e.type === 'areaResolved' ? { ...e, targetIds: e.targetIds.filter((id) => !hidden(id)) } : e));
   }
-  events = events.map((e) => aliasIds(e, kn.aliasOf));
+  events = events.map((e) => scrubValue(e, sc) as CombatEvent);
 
   const patch: ProjectedEntry['patch'] = {};
   const nowActors = playerActors(after, viewer, kn, opts);
@@ -310,6 +395,37 @@ function redactCheck(c: CheckResult): CheckResult {
   return { base: 0, baseBreakdown: [], modifiers: [], roll: { natural: 0, kind: 'normal', value: 0 }, total: c.total, redacted: true };
 }
 
+/** Remove keys and mark the event redacted. Narration must not print numbers from a redacted event. */
+function omit<E extends CombatEvent>(e: E, keys: readonly string[]): E {
+  const out: Record<string, unknown> = { ...e, redacted: true };
+  for (const k of keys) delete out[k];
+  return out as E;
+}
+
+/**
+ * Events that only make sense on a character sheet (Humanity, cyberware,
+ * therapy, Combat Awareness, ammo counts, GM HP edits). Players get them
+ * only for actors whose sheet they can see.
+ */
+function sheetOnly(e: CombatEvent, visible: (id: string | undefined) => boolean): boolean {
+  switch (e.type) {
+    case 'ammoSpent':
+    case 'ammoLoaded':
+    case 'humanityChanged':
+    case 'cyberwareInstalled':
+    case 'cyberwareRemoved':
+    case 'therapyResolved':
+    case 'awarenessSet':
+    case 'deathSavePenaltyChanged':
+      return !visible(eventSubject(e));
+    case 'hpAdjusted':
+      return !visible(e.targetId);
+    default:
+      return false;
+  }
+}
+
+/** HP, SP and stat numbers are removed for anyone whose sheet the viewer can't see. */
 export function redactEvent(e: CombatEvent, visible: (id: string | undefined) => boolean): CombatEvent {
   switch (e.type) {
     case 'attackResolved':
@@ -318,19 +434,29 @@ export function redactEvent(e: CombatEvent, visible: (id: string | undefined) =>
         attack: visible(e.attackerId) ? e.attack : redactCheck(e.attack),
         defense: e.defense && !visible(e.defenderId) ? redactCheck(e.defense) : e.defense,
       };
+    case 'damageApplied':
+      return visible(e.targetId) ? e : omit(e, ['spBefore', 'spCounted', 'through', 'hpBefore', 'hpAfter']);
     case 'criticalInjury':
-      return visible(e.targetId) ? e : { ...e, hpAfter: 0 };
+      return visible(e.targetId) ? e : omit(e, ['hpAfter']);
     case 'armorAblated':
-      return visible(e.targetId) ? e : { ...e, pieces: [] };
+      return visible(e.targetId) ? e : { ...e, pieces: [], redacted: true };
     case 'deathSaveRolled':
-      return visible(e.targetId) ? e : { ...e, penalty: 0, total: 0, body: 0 };
-    case 'deathSavePenaltyChanged':
-      return visible(e.targetId) ? e : { ...e, from: 0, to: 0 };
+      return visible(e.targetId) ? e : omit(e, ['penalty', 'total', 'body']);
     case 'stabilized':
-      return visible(e.targetId) ? e : { ...e, hpAfter: 0 };
+      return visible(e.targetId) ? e : omit(e, ['hpAfter']);
+    case 'burning':
+      return visible(e.targetId) ? e : omit(e, ['hpAfter']);
+    case 'rested':
+      return visible(e.targetId) ? e : omit(e, ['healed', 'hpAfter']);
+    case 'damageDeflected':
+      return visible(e.targetId) ? e : omit(e, ['amount']);
+    case 'spotWeakness':
+      return visible(e.combatantId) ? e : omit(e, ['bonus']);
     case 'checkRolled':
       return !e.combatantId || visible(e.combatantId) ? e : { ...e, check: redactCheck(e.check) };
     case 'stabilizationAttempted':
+      return visible(e.medicId) ? e : { ...e, check: redactCheck(e.check) };
+    case 'injuryTreated':
       return visible(e.medicId) ? e : { ...e, check: redactCheck(e.check) };
     case 'initiativeRolled':
       return { ...e, entries: e.entries.map((x) => (visible(x.combatantId) ? x : { ...x, base: 0, roll: 0, total: 0, tiebreaks: [] })) };
@@ -340,6 +466,17 @@ export function redactEvent(e: CombatEvent, visible: (id: string | undefined) =>
         attack: visible(e.attackerId) ? e.attack : redactCheck(e.attack),
         results: e.results.map((r) => (visible(r.targetId) ? r : { ...r, resist: redactCheck(r.resist) })),
       };
+    case 'smartAmmoRetry':
+      return {
+        ...e,
+        ...(visible(e.attackerId) ? {} : { roll: { natural: 0, kind: 'normal' as const, value: 0 }, redacted: true }),
+        ...(e.defense && !visible(e.defenderId) ? { defense: redactCheck(e.defense) } : {}),
+      };
+    case 'netAction':
+      if (visible(e.combatantId)) return e;
+      return omit({ ...e, ...(e.check ? { check: redactCheck(e.check) } : {}), ...(e.vs ? { vs: redactCheck(e.vs) } : {}) }, ['dice', 'amount']);
+    case 'extraResolved':
+      return visible(e.combatantId) || !e.rolls ? e : { ...e, rolls: e.rolls.map(({ label, total }) => ({ label, total })) };
     default:
       return e;
   }
