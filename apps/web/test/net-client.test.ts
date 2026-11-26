@@ -141,3 +141,64 @@ describe('GM key safety (round 4 #6)', () => {
     expect(c.savedGmSessions().map((g) => g.sessionId)).toContain('s3');
   });
 });
+
+describe('held actions while the GM is away (round 5 #4)', () => {
+  it('clears the count and says so when the relay drops or loses a held action', async () => {
+    const c = await freshClient();
+    c.join('ABCDEF', 'Ana');
+    let ws = FakeWS.all.at(-1)!;
+    ws.open();
+    ws.recv(welcome());
+    ws.recv({ t: 'queued', clientMsgId: 'a' } as ServerMessage);
+    ws.recv({ t: 'queued', clientMsgId: 'b' } as ServerMessage);
+    ws.recv({ t: 'queued', clientMsgId: 'c' } as ServerMessage);
+    expect(c.getState().queued).toBe(3);
+    ws.recv({ t: 'queueDropped', clientMsgId: 'a', reason: 'expired', message: 'The GM was away too long, so that action was dropped. Try it again.' } as ServerMessage);
+    expect(c.getState().queued).toBe(2);
+    expect(c.getState().toast?.text).toContain('dropped');
+    // Relay restart: it still holds b, delivered nothing, and lost c.
+    ws.drop();
+    vi.advanceTimersByTime(1000);
+    ws = FakeWS.all.at(-1)!;
+    ws.open();
+    ws.recv({ ...(welcome() as object), queued: ['b'], settled: [] } as unknown as ServerMessage);
+    expect(c.getState().queued).toBe(1);
+    expect(c.getState().toast?.text).toBe('A queued action was lost before the GM got it. Try again.');
+  });
+
+  it('treats settled actions as delivered, not lost', async () => {
+    const c = await freshClient();
+    c.join('ABCDEF', 'Ana');
+    let ws = FakeWS.all.at(-1)!;
+    ws.open();
+    ws.recv(welcome());
+    ws.recv({ t: 'queued', clientMsgId: 'a' } as ServerMessage);
+    ws.drop();
+    vi.advanceTimersByTime(1000);
+    ws = FakeWS.all.at(-1)!;
+    ws.open();
+    ws.recv({ ...(welcome() as object), queued: [], settled: ['a'] } as unknown as ServerMessage);
+    expect(c.getState().queued).toBe(0);
+    expect(c.getState().toast).toBeNull();
+  });
+});
+
+describe('GM pings and ruler toggle (round 5 #3)', () => {
+  it('stops sending pings and ruler lines when off, and clears the ruler players may see', async () => {
+    const c = await freshClient();
+    await c.resumeGm({ sessionId: 's1', gmKey: 'k', joinCode: 'ABCDEF' });
+    await vi.runAllTimersAsync();
+    const ws = FakeWS.all.at(-1)!;
+    ws.readyState = 1;
+    ws.open();
+    const before = ws.sent.length;
+    c.setGmSignals(false);
+    expect(ws.sent.slice(before)).toEqual([{ t: 'signal', signal: { kind: 'measure', from: { x: 0, y: 0 }, to: null } }]);
+    c.signal({ kind: 'ping', at: { x: 1, y: 1 } });
+    expect(ws.sent.filter((m) => m.t === 'signal')).toHaveLength(1);
+    expect(c.getState().signals.pings).toHaveLength(1); // still shown locally
+    c.setGmSignals(true);
+    c.signal({ kind: 'ping', at: { x: 2, y: 1 } });
+    expect(ws.sent.filter((m) => m.t === 'signal')).toHaveLength(2);
+  });
+});
