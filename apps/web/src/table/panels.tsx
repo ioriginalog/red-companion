@@ -50,7 +50,8 @@ export function TopBar({ c, onHelp }: { c: TableCtx; onHelp: () => void }) {
       </span>
       <button className="btn ghost icon" onClick={() => { setMuted(!muted); setM(!muted); }} aria-pressed={!muted} aria-label={muted ? 'Sound Off' : 'Sound On'} title={muted ? 'Sound Off' : 'Sound On'}>{muted ? 'Muted' : 'Sound'}</button>
       <button className="btn ghost icon" onClick={onHelp} title="Help, Shortcuts and About (?)" aria-label="Help and About">?</button>
-      <button className="btn ghost hide-sm" onClick={() => client.leave()}>Leave</button>
+      {/* Round 4 H1: the session menu holds Leave (with confirmation), the GM key, backup and export. */}
+      <button className="btn ghost hide-sm" onClick={() => client.openSessionMenu()}>{isGm ? 'Session' : 'Leave'}</button>
     </header>
   );
 }

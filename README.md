@@ -90,10 +90,15 @@ Environment:
 | `ALLOWED_ORIGINS` | Browser origins allowed to create or import sessions, upload, and open sockets. **Unset = same-origin only** (the Origin's host must match the Host header). Comma-separated list = exactly those. `*` = any (not recommended). |
 | `TRUST_PROXY_HOPS` | Reverse proxies in front of the relay. Unset or `0` = rate limits and lockouts use the socket address and ignore `X-Forwarded-For` (it's client-controlled). `N` = use the Nth `X-Forwarded-For` entry from the right. **Railway: `1`.** |
 | `WEB_DIR` | Built client to serve; default `apps/web/dist`. |
+| `MAX_LOG_ENTRIES` | Log entries per session before appends are refused (minimum 1000, default 20000). Player chat and free rolls pause 2% (at least 50 entries) short of it so the GM always has headroom. |
 
 **Sync behavior worth knowing:**
 
-- **Failed hellos** (unknown join codes, wrong GM keys) draw from a per-address bucket of 10 that refills one every 30 seconds. A correct GM key or player token always gets in, even from a locked address; only guessing and brand-new joins wait. The client keeps its saved session and retries when the lock lifts.
+- **Failed hellos** (unknown join codes, wrong GM keys) are tarpitted, never locked out. The first 5 failures from an address cost nothing; after that every unauthenticated hello from that address waits about a second per extra failure, capped at 5 seconds, and failures decay one per 30 seconds. A correct GM key or player token is never delayed. At most 8 unauthenticated sockets per address are open at once. Trade-off: someone guessing join codes on the same network slows *new* joins there by a few seconds; in exchange a mistyped code (or a noisy housemate) can never lock the table out. With join codes of 6 characters from 31 (about 887 million) and these limits, guessing one is impractical.
+- **Before hello**, a socket gets exactly one small (4 KB), well-formed `hello`; anything else closes it.
+- **Player rate limits:** 5 actions per second per player (burst 20), and at most 30 chat messages and free rolls per minute. Excess is refused with `RATE_LIMITED` (the player sees why).
+- **Undo:** when the GM undoes, each player gets a `rewind` with their view and history rebuilt, so undone lines disappear from their logs.
+- **Log size and compaction:** the log only grows. For long campaigns, export the session (GM menu → Export Session) at the end of an arc and import it as a fresh session, or start a new session for the next arc; the export is the archive.
 - **GM offline:** players' actions are held at the relay (50 per session, 10 per player, up to 10 minutes) and handed to the GM in order once it reconnects and has fetched the log. The GM device caches its log in IndexedDB, so actions taken offline survive a closed tab and sync on reopen.
 - **History:** a player's welcome carries their last 300 projected log entries (events only, redacted exactly like live updates); the GM rebuilds its feed from the whole log.
 - **Unseen hostiles** are absent from the players' Turn order; while one acts, players see a single "Unknown Contact Acting" slot, never a count.
