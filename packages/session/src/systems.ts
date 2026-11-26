@@ -11,6 +11,7 @@ import {
   cyberwareProblem, DEFAULT_COVER_MATERIAL, hlAverage, humanityMax, parseHlDice, rollHl, effectiveStat, empFromHumanity, gridDistance, hasLineOfSight, inBounds, makeCheck,
   metersBetween, naturalHealing, profileOf, RANGE_DV, rangeBandIndex, rollDamage, skillLevel, spendAmmo, standingModifiers,
   terrainAt, THERAPY, THERAPY_DICE, treatInjury, treatmentDv, wieldProblem, woundState,
+  isSpeedware, SPEEDWARE_ROUNDS, // Round 4 R4
   type Cell, type CombatEvent, type Combatant, type CoverMaterialId, type Dice, type Weapon,
 } from '@cprc/rules-core';
 import {
@@ -27,6 +28,7 @@ type DamagePending = Extract<Pending, { kind: 'awaitingDamage' }>;
 export const SYSTEMS_INTENTS = [
   'respondAreaDodge', 'resolveAreaDodges', 'attackCover', 'setCover', 'setAmmoType', 'extinguish', 'setAwareness',
   'installCyberware', 'removeCyberware', 'therapy', 'treatInjury', 'rest',
+  'activateSpeedware', // Round 4 R4
 ] as const;
 const ALL: ReadonlySet<string> = new Set(SYSTEMS_INTENTS);
 export const SYSTEMS_GM_ONLY: ReadonlySet<IntentType> = new Set(['resolveAreaDodges', 'setCover', 'installCyberware', 'removeCyberware', 'therapy', 'rest']);
@@ -87,6 +89,7 @@ export function authorizeSystems(state: SessionState, intent: Intent, by: Viewer
       return;
     case 'setAmmoType':
     case 'extinguish':
+    case 'activateSpeedware': // Round 4 R4
       requireActing(state, by, intent.actorId);
       return;
     case 'setAwareness': {
@@ -258,6 +261,25 @@ export function executeSystems(state: SessionState, intent: SystemsIntent, by: V
       if (encounter) patch.encounter = encounter;
       return { events: r.events, patch };
     }
+    // --- Round 4 R4 ---
+    case 'activateSpeedware': {
+      const a = getActor(state, intent.actorId);
+      const bonus = a.combatant.mods?.activatedSpeedware ?? 0;
+      need(bonus > 0, `${a.combatant.name} has no activated speedware.`);
+      need(!a.combatant.conditions.dead && !a.combatant.conditions.unconscious, `${a.combatant.name} can’t do that now.`);
+      need(!a.combatant.speedware?.active, 'It’s already on.');
+      need(!a.combatant.speedware?.spent, 'It needs an hour to recharge (rest first).');
+      const encounter = checkOtherAction(state, by, a);
+      const c: Combatant = { ...a.combatant, speedware: { active: true, roundsLeft: SPEEDWARE_ROUNDS, spent: true } };
+      const patch: StatePatch = { actors: { [a.id]: withCombatant(a, c) } };
+      if (encounter) patch.encounter = encounter;
+      const events: CombatEvent[] = [{ type: 'speedwareChanged', visibility: visibilityFor(a), combatantId: a.id, state: 'activated', initiative: bonus }];
+      if (state.encounter.active) {
+        events.push({ type: 'gmRulingRequired', visibility: 'gm', reason: `${a.combatant.name}’s speedware adds +${bonus} to Initiative rolls while it’s on. Initiative isn’t rerolled mid-fight; reroll them in (Remove and Add to Initiative) if your table does.` });
+      }
+      return { events, patch };
+    }
+    // --- end Round 4 R4 ---
     case 'rest': {
       need(isInt(intent.days, 1, 60), 'Rest 1–60 days.');
       need(intent.care === 'street' || intent.care === 'home' || intent.care === 'hospital', 'Pick where they rest.');
@@ -271,7 +293,10 @@ export function executeSystems(state: SessionState, intent: SystemsIntent, by: V
         const a = getActor(state, id);
         if (a.combatant.conditions.dead) continue;
         const r = naturalHealing(a.combatant, intent.days, intent.care);
-        actors[id] = withCombatant(a, r.combatant);
+        // Round 4 R4: an hour or more of rest recharges speedware.
+        const { speedware: _recharged, ...recharged } = r.combatant;
+        if (r.combatant.speedware?.spent) events.push({ type: 'speedwareChanged', visibility: visibilityFor(a), combatantId: id, state: 'recharged' });
+        actors[id] = withCombatant(a, recharged);
         events.push({
           type: 'rested', visibility: 'gm', targetId: id, days: intent.days, care: intent.care, healed: r.healed, hpAfter: r.combatant.hp.current,
           ...(r.blocked ? { blocked: r.blocked } : {}),
@@ -303,6 +328,8 @@ function doInstall(state: SessionState, intent: Extract<Intent, { type: 'install
   const problem = cyberwareProblem(intent.item);
   need(!problem, problem ?? '');
   need(!(a.combatant.cyberware ?? []).some((i) => i.id === intent.item.id), 'That cyberware id is already installed.');
+  // Round 4 R4: only one piece of speedware at a time.
+  need(!isSpeedware(intent.item) || !(a.combatant.cyberware ?? []).some(isSpeedware), 'Only one piece of speedware can be installed.');
   need((a.combatant.cyberware ?? []).length < 60, 'Too much cyberware.');
   let loss = intent.item.humanityLoss;
   let rolled: number[] | undefined;
@@ -379,7 +406,8 @@ export function onTurnStart(state: SessionState, encounter: Encounter): { events
   if (!a || burn <= 0 || a.combatant.conditions.dead) return { events: [], actors: {} };
   const before = woundState(a.combatant.hp);
   const c: Combatant = { ...a.combatant, hp: { ...a.combatant.hp, current: a.combatant.hp.current - burn } };
-  const events: CombatEvent[] = [{ type: 'burning', visibility: 'public', targetId: a.id, damage: burn, hpAfter: c.hp.current }];
+  // Round 4 R4: no NPC HP in payloads; friendly targets keep the figure.
+  const events: CombatEvent[] = [{ type: 'burning', visibility: 'public', targetId: a.id, damage: burn, ...(factionOf(a) === 'friendly' ? { hpAfter: c.hp.current } : {}) }];
   const after = woundState(c.hp);
   if (before !== after) events.push({ type: 'woundStateChanged', visibility: 'public', targetId: a.id, from: before, to: after });
   return { events, actors: { [a.id]: withCombatant(a, c) } };

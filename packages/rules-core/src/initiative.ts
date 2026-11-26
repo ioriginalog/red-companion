@@ -9,6 +9,7 @@ import { rollD10 } from './checks.js';
 import type { Dice } from './dice.js';
 import type { CombatEvent } from './events.js';
 import { effectiveStat } from './character.js';
+import { activeSpeedwareBonus } from './injury-effects.js'; // Round 4 R4
 import type { Combatant } from './types.js';
 
 export interface InitiativeEntry {
@@ -25,7 +26,8 @@ export function rollInitiative(
   opts: { explodeCrits?: boolean } = {},
 ): { order: InitiativeEntry[]; events: CombatEvent[] } {
   const entries: InitiativeEntry[] = participants.map(({ combatant, bonus = 0 }) => {
-    const base = effectiveStat(combatant, 'REF') + bonus + (combatant.mods?.initiative ?? 0); // Track K: Initiative Reaction, cyberware
+    const base = effectiveStat(combatant, 'REF') + bonus + (combatant.mods?.initiative ?? 0) // Track K: Initiative Reaction, cyberware
+      + activeSpeedwareBonus(combatant); // Round 4 R4: activated speedware while on
     const roll = opts.explodeCrits ? rollD10(dice).value : dice.d10();
     return { combatantId: combatant.id, base, roll, total: base + roll, tiebreaks: [] };
   });

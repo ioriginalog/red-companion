@@ -68,6 +68,8 @@ export interface TurnUsage {
   attacks: number;
   /** Weapon (or 'brawling' / 'martialArts') that used the Action, for ROF follow-ups. */
   attackWith: string | null;
+  /** Round 4 R4: squares of `moveUsed` that were blocked, not walked (an ear injury took the Move Action). */
+  moveBlocked?: number;
 }
 
 /**
@@ -317,6 +319,10 @@ export type Intent =
   /** GM. Advance downtime: natural healing for these actors (default: everyone not dead). */
   | { type: 'rest'; days: number; care: Care; actorIds?: string[] }
   // --- end Track K ---
+  // --- Round 4 R4 ---
+  /** Turn on activated speedware (Sandevistan type). Uses the Action in an encounter; recharges on rest. */
+  | { type: 'activateSpeedware'; actorId: string }
+  // --- end Round 4 R4 ---
   // --- Track U ---
   | { type: 'setHandout'; id: string; title: string; body: string; imageUrl?: string; audience: 'all' | 'gm' | string[] }
   | { type: 'removeHandout'; id: string }

@@ -97,6 +97,12 @@ export interface Combatant {
   /** On Fire: HP lost at the start of each of this character's Turns until put out. */
   onFire?: number;
   // --- end Track K ---
+  // --- Round 4 R4 ---
+  /** One-Turn effects waiting for this character's next Turn (from Critical Injuries). */
+  turnFlags?: { loseAction?: boolean; noMove?: boolean };
+  /** Activated speedware (Sandevistan type): on for `roundsLeft` Rounds; `spent` until the next rest. */
+  speedware?: { active: boolean; roundsLeft: number; spent: boolean };
+  // --- end Round 4 R4 ---
   // --- Round 3 X ---
   /** Reputation level 0–10 (Facedowns). */
   reputation?: number;
@@ -143,7 +149,9 @@ export type CyberwareEffect =
   | { kind: 'subdermalGrip' }
   | { kind: 'interfacePlugs' }
   | { kind: 'healingMultiplier'; value: number }
-  | { kind: 'ignoreSeriouslyWounded' };
+  | { kind: 'ignoreSeriouslyWounded' }
+  /** Round 4 R4: speedware. Passive (Kerenzikov type) always adds; activated (Sandevistan type) adds while on. One piece only. */
+  | { kind: 'speedware'; mode: 'passive' | 'activated'; initiative: number };
 export interface CyberwareItem {
   id: string;
   name: string;
@@ -184,6 +192,8 @@ export interface CombatMods {
   interfacePlugs?: boolean;
   healingMultiplier?: number;
   ignoreSeriouslyWounded?: boolean;
+  /** Round 4 R4: Initiative bonus of installed activated speedware while it's on. */
+  activatedSpeedware?: number;
 }
 export type AmmoTypeId = 'basic' | 'armorPiercing' | 'expansive' | 'incendiary' | 'rubber' | 'smart' | 'improvedSmart'
   | 'emp' | 'smoke' | 'teargas' | 'flashbang' | 'biotoxin' | 'poison' | 'sleep';

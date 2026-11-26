@@ -29,6 +29,12 @@ export type NetOp =
   | { op: 'iceAttack'; actorId: string; index: number }
   /** GM: rip the runner out (unsafe): every live ICE they met bites. */
   | { op: 'forceJackOut'; actorId: string }
+  // --- Round 4 R4 ---
+  /** GM: the Black ICE's Turn: every live ICE on the runner's floor attacks once. */
+  | { op: 'iceTurn'; actorId: string }
+  /** GM: the Demon on the runner's floor spends `count` NET Actions on Zap (Control Nodes stay a GM call). */
+  | { op: 'demonZap'; actorId: string; count: number }
+  // --- end Round 4 R4 ---
   // Runner
   | { op: 'jackIn'; actorId: string; archId: string }
   | { op: 'jackOut'; actorId: string }
