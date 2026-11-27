@@ -1,0 +1,25 @@
+/* Map drawing and lighting tools (top-left of the table map). */
+.map-tools { position: absolute; left: 14px; top: 14px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; max-width: min(320px, calc(100% - 90px)); z-index: 3; }
+.map-tools .tool-toggles { display: flex; gap: 6px; }
+.map-tools .tool-toggles .btn { background: rgba(8, 14, 40, 0.9); padding: 6px 10px; }
+.map-tools .btn.on { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 10px rgba(34, 227, 255, 0.35); }
+.tool-panel { background: rgba(5, 8, 22, 0.95); border: 1px solid var(--line-hi); border-radius: 4px; padding: 8px 10px; display: grid; gap: 8px; max-height: calc(100vh - 220px); overflow-y: auto; }
+.tool-panel .ttl { font: 700 12px var(--head); text-transform: uppercase; letter-spacing: 0.1em; color: var(--cyan); }
+.tool-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tool-row .mode { padding: 4px 8px; font-size: 13px; }
+.tool-row .sm { padding: 3px 8px; font-size: 13px; }
+.swatch-btn { width: 24px; height: 24px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.25); padding: 0; cursor: pointer; }
+.swatch-btn.sel { border-color: #fff; box-shadow: 0 0 8px currentColor; }
+.tool-panel input[type='text'] { padding: 4px 8px; width: 100%; }
+.tool-panel select { padding: 3px 6px; }
+.tool-panel .hint { font-size: 13px; color: var(--dim, #8d9bd0); margin: 0; }
+.tool-panel .stepper { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+.tool-panel .stepper b { min-width: 22px; text-align: center; font-family: var(--mono, monospace); }
+.light-list { display: grid; gap: 3px; max-height: 150px; overflow-y: auto; }
+.light-list .row-btn { display: flex; justify-content: space-between; align-items: center; gap: 6px; text-align: left; background: #071030; border: 1px solid var(--line); border-radius: 3px; padding: 3px 6px; color: inherit; font-size: 13px; cursor: pointer; }
+.light-list .row-btn.sel { border-color: var(--yellow); }
+.light-list .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.tool-hint { background: rgba(5, 8, 22, 0.95); border: 1px solid var(--yellow); color: var(--yellow); padding: 4px 8px; font-size: 13px; }
+.mapstage svg.tool-draw, .mapstage svg.tool-light { cursor: crosshair; }
+.ann-text { font: 700 18px var(--head, 'Barlow Condensed'); letter-spacing: 0.04em; }
+@media (max-width: 700px) { .map-tools { top: 60px; } .tool-panel { max-height: 46vh; } }

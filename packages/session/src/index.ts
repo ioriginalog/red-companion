@@ -16,3 +16,5 @@ export * from './upkeep.js';
 export { netThreats } from './netrun.js';
 export * from './net-availability.js';
 export * from './gear.js';
+export * from './vision.js';
+export * from './annotations.js';

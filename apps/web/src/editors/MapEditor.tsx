@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { COVER_MATERIALS, coverMaterial, DEFAULT_COVER_MATERIAL, type Cell, type CoverMaterialId, type Terrain } from '@cprc/rules-core';
-import type { TacticalMap } from '@cprc/session';
+import type { AmbientLight, TacticalMap } from '@cprc/session';
 import { client, type ClientState } from '../net.js';
 import { demoMap } from '../demo.js';
 import { downloadText, loadImage, pickFile, prepareMapImage, scaledSize, storeImage } from '../assets.js';
@@ -12,10 +12,10 @@ import './editors.css';
 import { joinNames } from '../table/format.js';
 
 type Source = 'active' | 'library' | 'new';
-type Tool = 'brush' | 'rect' | 'fill';
+type Tool = 'brush' | 'rect' | 'fill' | 'light';
 interface Pending { img: HTMLImageElement; preview: string; name: string; cellPx: number }
 
-const TOOL_LABEL: Record<Tool, string> = { brush: 'Brush', rect: 'Rectangle', fill: 'Fill' };
+const TOOL_LABEL: Record<Tool, string> = { brush: 'Brush', rect: 'Rectangle', fill: 'Fill', light: 'Lights' };
 
 export function MapEditor({ s }: { s: ClientState }) {
   const view = s.view!;
@@ -50,7 +50,8 @@ export function MapEditor({ s }: { s: ClientState }) {
   useEffect(() => { if (!draft && active) open(active, 'active'); }, [active, draft, open]);
 
   const cells = hist.present;
-  const dirty = !!draft && (cells !== draft.cells || draft.name !== (source === 'library' ? library[draft.id]?.name : source === 'active' ? active?.name : undefined)
+  const srcMap = draft ? (source === 'library' ? library[draft.id] : source === 'active' ? active : undefined) : undefined;
+  const dirty = !!draft && (draft.lights !== srcMap?.lights || draft.ambient !== srcMap?.ambient || cells !== draft.cells || draft.name !== (source === 'library' ? library[draft.id]?.name : source === 'active' ? active?.name : undefined)
     || draft.sightRange !== (source === 'library' ? library[draft.id]?.sightRange : source === 'active' ? active?.sightRange : undefined));
   const current: TacticalMap | null = draft ? { ...draft, cells, cover: coverFor(cells, draft.width, draft.cover, coverMat) } : null;
 
@@ -67,6 +68,7 @@ export function MapEditor({ s }: { s: ClientState }) {
       if (k === 'b') setTool('brush');
       else if (k === 'r') setTool('rect');
       else if (k === 'f') setTool('fill');
+      else if (k === 'l') setTool('light');
       else if (k === '[') setSize((n) => Math.max(1, n - 1));
       else if (k === ']') setSize((n) => Math.min(5, n + 1));
       else if (['1', '2', '3', '4'].includes(k)) setTerrain(TERRAINS[Number(k) - 1]!.code);
@@ -213,7 +215,7 @@ export function MapEditor({ s }: { s: ClientState }) {
               </div>
               <div className="toolbar" role="toolbar" aria-label="Terrain Tools">
                 {(Object.keys(TOOL_LABEL) as Tool[]).map((t) => (
-                  <button key={t} className={`mode${tool === t ? ' sel' : ''}`} aria-pressed={tool === t} onClick={() => setTool(t)} title={`${TOOL_LABEL[t]} (${t === 'rect' ? 'R' : t[0]!.toUpperCase()})`}>{TOOL_LABEL[t]}</button>
+                  <button key={t} className={`mode${tool === t ? ' sel' : ''}`} aria-pressed={tool === t} onClick={() => setTool(t)} title={t === 'light' ? 'Lights (L): tap a square to add or remove a light' : `${TOOL_LABEL[t]} (${t === 'rect' ? 'R' : t[0]!.toUpperCase()})`}>{TOOL_LABEL[t]}</button>
                 ))}
                 <span className="sep" />
                 {TERRAINS.map((t, i) => (
@@ -250,13 +252,14 @@ export function MapEditor({ s }: { s: ClientState }) {
               </div>
               <PaintCanvas map={current} tool={tool} terrain={terrain} size={size} outline={outline} zoom={zoom}
                 actors={view.actors}
+                onLight={(c) => setDraft((d) => (d ? { ...d, lights: toggleLight(d.lights, c) } : d))}
                 onPaint={(next, final) => setHist((h) => (final ? commit(h, next) : { ...h, present: next }))}
                 onStrokeStart={() => setHist((h) => ({ ...h, past: [...h.past, h.present].slice(-100), future: [] }))}
               />
               <div className="statusline">
                 <span>{current.width} × {current.height} squares · {current.width * 2} × {current.height * 2} m</span>
                 {(() => { const c = terrainCounts(cells); return <span>Wall {c['#']} · Cover {c.c} · Difficult {c['~']}</span>; })()}
-                <span><span className="kbd">B</span> <span className="kbd">R</span> <span className="kbd">F</span> tools · <span className="kbd">1</span>–<span className="kbd">4</span> terrain · <span className="kbd">[</span> <span className="kbd">]</span> size</span>
+                <span><span className="kbd">B</span> <span className="kbd">R</span> <span className="kbd">F</span> <span className="kbd">L</span> tools · <span className="kbd">1</span>–<span className="kbd">4</span> terrain · <span className="kbd">[</span> <span className="kbd">]</span> size</span>
               </div>
             </>
           ) : (
@@ -283,6 +286,17 @@ export function MapEditor({ s }: { s: ClientState }) {
                 </label>
                 <div className="note">Use a short sight range for dark scenes; the party sees that many squares around each character.</div>
                 {bgWarn && <div className="warn">This background only exists on this device. Re-upload it once the relay can store images.</div>}
+              </div>
+            </section>
+            <section className="card">
+              <div className="ttl">Lighting</div>
+              <div style={{ display: 'grid', gap: 10 }}>
+                <label className="fld"><span>Ambient Light</span>
+                  <select value={draft!.ambient ?? 'bright'} onChange={(e) => setDraft({ ...draft!, ambient: e.target.value as AmbientLight })}>
+                    <option value="bright">Bright</option><option value="dim">Dim</option><option value="dark">Dark</option>
+                  </select>
+                </label>
+                <div className="note">{Object.keys(draft!.lights ?? {}).length} {Object.keys(draft!.lights ?? {}).length === 1 ? 'light' : 'lights'}. Pick Lights in the toolbar and tap squares to add or remove them (2 squares bright, 2 more dim). Fine-tune and carry lights from the table.</div>
               </div>
             </section>
             <section className="card">
@@ -385,9 +399,10 @@ interface CanvasProps {
   actors: NonNullable<ClientState['view']>['actors'];
   onPaint: (cells: string, final: boolean) => void;
   onStrokeStart: () => void;
+  onLight: (c: Cell) => void;
 }
 
-function PaintCanvas({ map, tool, terrain, size, outline, zoom, actors, onPaint, onStrokeStart }: CanvasProps) {
+function PaintCanvas({ map, tool, terrain, size, outline, zoom, actors, onPaint, onStrokeStart, onLight }: CanvasProps) {
   const S = map.cellPx;
   const W = map.width * S;
   const H = map.height * S;
@@ -427,6 +442,7 @@ function PaintCanvas({ map, tool, terrain, size, outline, zoom, actors, onPaint,
           const c = cellAt(e);
           if (!c) return;
           (e.target as Element).setPointerCapture?.(e.pointerId);
+          if (tool === 'light') { onLight(c); return; }
           if (tool === 'fill') { onPaint(floodFill(map.cells, map.width, map.height, c, terrain), true); return; }
           if (tool === 'rect') { setRect({ a: c, b: c }); return; }
           onStrokeStart();
@@ -467,6 +483,12 @@ function PaintCanvas({ map, tool, terrain, size, outline, zoom, actors, onPaint,
             <text textAnchor="middle" dy="0.35em" fontFamily="Barlow Condensed" fontWeight={700} fontSize={S * 0.3} fill="#fff">{(actors[id]?.public.name ?? id).slice(0, 2)}</text>
           </g>
         ))}
+        {Object.values(map.lights ?? {}).map((l) => l.at && (
+          <g key={l.id} pointerEvents="none">
+            <rect x={(l.at.x - l.bright) * S} y={(l.at.y - l.bright) * S} width={(2 * l.bright + 1) * S} height={(2 * l.bright + 1) * S} fill="rgba(255,212,0,0.10)" stroke="rgba(255,212,0,0.6)" strokeDasharray="8 6" />
+            <circle cx={l.at.x * S + S / 2} cy={l.at.y * S + S / 2} r={S * 0.2} fill={l.on ? '#ffd400' : '#0a1030'} stroke="#ffd400" strokeWidth={3} />
+          </g>
+        ))}
         {rect && (() => {
           const x0 = Math.min(rect.a.x, rect.b.x), y0 = Math.min(rect.a.y, rect.b.y);
           return <rect x={x0 * S} y={y0 * S} width={(Math.abs(rect.a.x - rect.b.x) + 1) * S} height={(Math.abs(rect.a.y - rect.b.y) + 1) * S} fill="rgba(255,212,0,0.18)" stroke="var(--yellow)" strokeWidth={3} strokeDasharray="10 6" pointerEvents="none" />;
@@ -479,6 +501,19 @@ function PaintCanvas({ map, tool, terrain, size, outline, zoom, actors, onPaint,
       </svg>
     </div>
   );
+}
+
+// Lights ----------------------------------------------------------
+
+/** Adds a fixed light on `c`, or removes the fixed light already there. */
+function toggleLight(lights: TacticalMap['lights'], c: Cell): NonNullable<TacticalMap['lights']> {
+  const all = { ...(lights ?? {}) };
+  const here = Object.values(all).find((l) => l.at && l.at.x === c.x && l.at.y === c.y);
+  if (here) { delete all[here.id]; return all; }
+  if (Object.keys(all).length >= 64) return all;
+  const id = `l-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  all[id] = { id, at: c, bright: 2, dim: 2, on: true, color: 'yellow' };
+  return all;
 }
 
 // Cover materials -------------------------------------------------

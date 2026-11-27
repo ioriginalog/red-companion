@@ -75,7 +75,7 @@ export interface RelayOptions {
 /** Largest hello frame; anything bigger before authentication closes the socket. */
 const MAX_HELLO_BYTES = 4096;
 /** Intents that only add chatter; refused first when the log nears its cap. */
-const CHATTY: ReadonlySet<string> = new Set(['chat', 'rollDice', 'rollCheck']);
+const CHATTY: ReadonlySet<string> = new Set(['chat', 'rollDice', 'rollCheck', 'annotate']);
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',

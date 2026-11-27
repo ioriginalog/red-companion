@@ -195,7 +195,9 @@ export type CyberwareEffect =
   | { kind: 'healingMultiplier'; value: number }
   | { kind: 'ignoreSeriouslyWounded' }
   /** Speedware. Passive (Kerenzikov type) always adds; activated (Sandevistan type) adds while on. One piece only. */
-  | { kind: 'speedware'; mode: 'passive' | 'activated'; initiative: number };
+  | { kind: 'speedware'; mode: 'passive' | 'activated'; initiative: number }
+  /** Cyberoptics that see in the dark (Low Light, or IR's heat vision): unlit squares count as dim. */
+  | { kind: 'vision'; sense: 'lowlight' | 'ir' };
 export interface CyberwareItem {
   id: string;
   name: string;

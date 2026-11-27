@@ -144,6 +144,7 @@ function effectProblem(e: CyberwareEffect): string | null {
     case 'initiative': return small(e.value, -5, 5) ? null : 'An Initiative effect needs a value from −5 to 5.';
     case 'healingMultiplier': return small(e.value, 1, 4) ? null : 'A healing multiplier must be 1–4.';
     case 'speedware': return (e.mode === 'passive' || e.mode === 'activated') && small(e.initiative, 1, 5) ? null : 'Speedware needs passive or activated and an Initiative bonus from 1 to 5.';
+    case 'vision': return e.sense === 'lowlight' || e.sense === 'ir' ? null : 'A vision effect needs Low Light or IR.';
     case 'smartLink': case 'targetingScope': case 'neuralLink': case 'subdermalGrip':
     case 'interfacePlugs': case 'ignoreSeriouslyWounded': return null;
     default: return 'Unknown cyberware effect.';

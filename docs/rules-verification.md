@@ -162,6 +162,22 @@ Sources: a community player handbook (melee, Martial Arts, combat and Role pages
 | Demon Turns | A Demon spends its NET Actions on Control Nodes (GM call), then Zaps: Demon Interface + 1d10 vs the runner's Interface + 1d10, 1d6 to the runner on a hit. | Secondary · Interpretation (Zap uses Interface vs Interface) |
 | Attack availability | One rule for the client preview and the authority: arm injuries and hands, grapples (−2, no two-handed weapons, an Iron Grip stops ranged attacks), and a lost Facedown (−2 against the winner). | Tooling |
 
+## Light, Vision and Drawings
+
+RED Core has no light-level rules or darkness modifier that we could confirm. Community transcriptions of the Low Light/IR/UV cybereye say it reduces penalties from darkness and obscurement (fog, smoke) to 0 and can't see through cover, but name no penalty values. So everything below is our ruling, and the penalty is a GM toggle.
+
+| Rule | Implementation | Status |
+|---|---|---|
+| Ambient light | Each map is Bright (default: no lighting effects), Dim or Dark. | Interpretation |
+| Light sources | Position (a fixed square or carried by a token), a bright radius and a further dim radius in squares (Chebyshev, like range), on or off. Walls and cover block light (same ray as line of sight). The brightest light on a square wins. | Interpretation |
+| Seeing in the dark | A token sees a square it has line of sight to unless the square is dark; adjacent squares are always visible. Dim squares are visible. | Interpretation |
+| Low Light and IR cyberoptics | A `vision` cyberware effect (Low Light or IR): dark squares count as dim, so the character sees everything in line of sight. Neither sees through cover. UV isn't modeled separately. | Secondary (no penalties in darkness) · Interpretation (dark counts as dim) |
+| Darkness penalty | **House rule, off by default** (GM toggle in the Lights panel): ranged attacks into a dim square −2, into a dark square the attacker can't see −4. Low Light and IR remove both. The attack preview shows the same modifier. | House Rule |
+| Party vision with lights | The union of every conscious friendly token's view. A light carried by a token the party can't see lights nothing for the party, so its glow never gives the carrier away. | Interpretation |
+| Players' copy | Players receive only lights on squares the party sees (never one carried by a hidden token), without GM labels, plus the party's view and light levels computed by the relay. | Interpretation (redaction) |
+| Incoming area attack | During "Blast Incoming" and "Explosive Missed", everyone sees the landing (or aim) square and the 5 × 5 blast area; a shotgun cone shows only when the shooter's token is visible, otherwise just the aim square. | Interpretation (display) |
+| Drawings | GM drawings (freehand, line, rectangle, circle, text) are GM-only or shared and last until removed. With the GM's permission, players draw shared marks that fade after 30 seconds to 5 minutes (10 at a time each). Drawings never affect rules. | House Rule (table aid) |
+
 ## Interpretations the GM Should Confirm
 
 1. **Armor penalties don't stack.** Worst single penalty across all worn pieces.
@@ -178,6 +194,7 @@ Sources: a community player handbook (melee, Martial Arts, combat and Role pages
 12. **HP can go negative** with no floor; only Death Saves kill.
 13. **Shared vision vs. your own line of sight**: you can *see* a target a teammate spots, but you can only *shoot* it with your own line of sight.
 14. **Difficult terrain** ('~' squares) costs 2 squares to enter. No demo map uses it yet.
+15. **Darkness**: dark squares hide tokens from normal eyes beyond 1 square; Low Light and IR see them; the −2/−4 penalty is off unless you turn it on.
 
 ## Not Built Yet
 
@@ -185,9 +202,8 @@ Sources: a community player handbook (melee, Martial Arts, combat and Role pages
 - Weapon quality (Poor, Excellent); the GM can override a weapon's damage dice and ROF instead.
 - Drug effects.
 - Vehicles: no SDP, seats, speed or vehicle combat. Moto tracks Family vehicles by name only.
-- Light sources and darkness levels: vision is line of sight within the map's sight range, plus squares the GM reveals.
 
-Built since earlier versions of this list: Broken Ribs and Foreign Object re-bleed, Spinal Injury's lost Action, and the ear injuries' lost Move Action (see Automation); Martial Arts Special Moves; Demon Turns.
+Built since earlier versions of this list: Broken Ribs and Foreign Object re-bleed, Spinal Injury's lost Action, and the ear injuries' lost Move Action (see Automation); Martial Arts Special Moves; Demon Turns; light sources, darkness and night vision (see Light, Vision and Drawings).
 
 ## Rules Packs and Book Values (Round 3)
 

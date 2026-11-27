@@ -102,6 +102,67 @@ export interface TacticalMap extends GridMap {
   lighting?: { revealAll?: boolean; revealed?: string[] };
   /** Cover squares ('c') with a material and current HP, keyed "x,y". Missing = default material at full HP. */
   cover?: Record<string, { material: CoverMaterialId; hp: number }>;
+  /** Ambient light. Absent = bright (no lighting effects). */
+  ambient?: AmbientLight;
+  /** Light sources, keyed by id. Players only receive the ones the party can see. */
+  lights?: Record<string, LightSource>;
+  /** GM toggles for lighting house rules. */
+  lightRules?: LightRules;
+  /** GM and player drawings. Players never receive GM-only ones. */
+  annotations?: Record<string, Annotation>;
+  drawRules?: DrawRules;
+  /**
+   * Player projections only, when lighting is in play: what the party sees right now, one
+   * character per square: '0' not visible, 'B' bright, 'D' dim, 'K' dark (seen anyway).
+   * The relay computes it so hidden lights never have to be sent.
+   */
+  seen?: string;
+}
+
+export type AmbientLight = 'bright' | 'dim' | 'dark';
+
+/** A light: fixed at `at`, or carried by the token `attachedTo`. Radii in squares. */
+export interface LightSource {
+  id: string;
+  label?: string;
+  at?: Cell;
+  attachedTo?: string;
+  /** Squares lit bright. */
+  bright: number;
+  /** Further squares lit dim beyond `bright`. */
+  dim: number;
+  on: boolean;
+  color?: AnnotationColor;
+}
+
+export interface LightRules {
+  /** House rule: ranged attacks into dim squares −2, into dark squares the attacker can't see −4. */
+  darknessPenalty?: boolean;
+}
+
+export type AnnotationColor = 'cyan' | 'yellow' | 'magenta' | 'green' | 'red' | 'white';
+export type AnnotationKind = 'path' | 'line' | 'rect' | 'circle' | 'text';
+
+/** A drawing on the map. Coordinates are in squares (fractions allowed). */
+export interface Annotation {
+  id: string;
+  kind: AnnotationKind;
+  /** x0, y0, x1, y1, … (path: up to 200 points; line/rect/circle: 2 points; text: 1 point). */
+  points: number[];
+  color: AnnotationColor;
+  text?: string;
+  /** 'gm' = GM eyes only. */
+  visibility: 'gm' | 'all';
+  /** 'gm' or a player id. */
+  by: string;
+  /** ISO time after which a player's mark disappears. */
+  expiresAt?: string;
+}
+
+export interface DrawRules {
+  playersMayDraw: boolean;
+  /** Seconds a player's mark lasts (10–600). */
+  playerTtl: number;
 }
 
 /** GM-only prep library (never projected to players). */
@@ -284,6 +345,10 @@ export type Intent =
   /** Spawn a copy of a library actor with a fresh id, optionally on the map. */
   | { type: 'spawnFromLibrary'; templateId: string; newId: string; name?: string; at?: Cell }
   | { type: 'setLighting'; lighting: NonNullable<TacticalMap['lighting']> }
+  /** GM: ambient light, light sources and lighting house rules. */
+  | { type: 'light'; op: LightOp }
+  /** Drawings: the GM always; players when the GM allows. */
+  | { type: 'annotate'; op: AnnotateOp }
   // Area attacks on the grid
   | { type: 'areaAttack'; attackerId: string; weaponId: string; kind: 'shotgunShell' | 'launcher' | 'thrownGrenade'; at: Cell }
   | { type: 'suppressiveFire'; attackerId: string; weaponId: string }
@@ -381,3 +446,17 @@ export interface ProjectedEntry {
   events: CombatEvent[];
   patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: ProjectedPending | null; map?: TacticalMap | null; library?: Library; handouts?: Record<string, Handout>; /* */ netrun?: NetView; /* */ extras?: ExtrasState };
 }
+
+export type LightOp =
+  | { op: 'setAmbient'; ambient: AmbientLight }
+  | { op: 'upsert'; light: LightSource }
+  | { op: 'remove'; id: string }
+  | { op: 'toggle'; id: string; on: boolean }
+  | { op: 'setRules'; rules: LightRules };
+
+export type AnnotateOp =
+  | { op: 'add'; annotation: Omit<Annotation, 'by' | 'expiresAt'> }
+  | { op: 'move'; id: string; dx: number; dy: number }
+  | { op: 'remove'; id: string }
+  | { op: 'clear'; scope: 'all' | 'mine' | 'players' }
+  | { op: 'setRules'; rules: DrawRules };

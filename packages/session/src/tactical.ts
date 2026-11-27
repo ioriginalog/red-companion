@@ -7,8 +7,10 @@
  * tokens outside it are hidden from players; their names stay hidden until
  * the party has seen them once.
  */
-import { cellKey, findPath, inCone, hasLineOfSight, gridDistance, visibleCells, type Cell } from '@cprc/rules-core';
+import { cellKey, findPath, inCone, hasLineOfSight, gridDistance, type Cell } from '@cprc/rules-core';
 import type { Actor, Allegiance, TacticalMap } from './types.js';
+import { encodeSeen, lightingActive, partySeers, partyView, unionVision, visibleLights, type Seer } from './vision.js';
+import { playerAnnotations } from './annotations.js';
 
 export type Faction = 'friendly' | 'hostile' | 'neutral';
 
@@ -24,27 +26,26 @@ export function factionOf(a: Actor): Faction {
 const canSee = (a: Actor) => !a.combatant.conditions.dead && !a.combatant.conditions.unconscious;
 
 /**
- * Squares visible from `seers` (token squares), honoring the GM's lighting:
- * `revealAll` shows everything; `revealed` squares are always visible.
- * Pure; the web client uses it with its own idea of who can see.
+ * Squares visible from `seers`, honoring the GM's overrides (`revealAll`
+ * shows everything; `revealed` squares are always visible) and the map's
+ * lighting (see vision.ts). A bare Cell is a seer with normal sight.
+ * Pure. Party fog goes through `partyVision`, which also hides the lights of
+ * carriers the party can't see.
  */
-export function visionFor(map: TacticalMap, seers: Cell[]): Set<string> {
-  const out = new Set<string>();
-  if (map.lighting?.revealAll) {
-    for (let y = 0; y < map.height; y++) for (let x = 0; x < map.width; x++) out.add(`${x},${y}`);
-    return out;
-  }
-  for (const at of seers) for (const k of visibleCells(map, at, map.sightRange)) out.add(k);
-  for (const k of map.lighting?.revealed ?? []) out.add(k);
-  return out;
+export function visionFor(map: TacticalMap, seers: (Cell | Seer)[]): Set<string> {
+  return unionVision(map, seers.map((s) => ('at' in s ? s : { at: s, sense: 'normal' as const })));
+}
+
+/** Seers and friendly token ids for `partyView`. */
+export function partyInputs(map: TacticalMap, actors: Record<string, Actor>): { seers: Seer[]; friendlyIds: Set<string> } {
+  const friendlyIds = new Set(Object.keys(map.tokens).filter((id) => { const a = actors[id]; return !!a && factionOf(a) === 'friendly'; }));
+  return { seers: partySeers(map, actors, (a) => factionOf(a) === 'friendly' && canSee(a)), friendlyIds };
 }
 
 /** Squares the party can see right now. */
 export function partyVision(map: TacticalMap, actors: Record<string, Actor>): Set<string> {
-  const seers = Object.entries(map.tokens)
-    .filter(([id]) => { const a = actors[id]; return !!a && factionOf(a) === 'friendly' && canSee(a); })
-    .map(([, at]) => at);
-  return visionFor(map, seers);
+  const { seers, friendlyIds } = partyInputs(map, actors);
+  return partyView(map, seers, friendlyIds).vision;
 }
 
 /** Returns `map` itself when nothing new was spotted, so callers can skip a patch. */
@@ -117,9 +118,15 @@ export function watchTrigger(map: TacticalMap, actors: Record<string, Actor>, mo
   return null;
 }
 
-/** Player-facing copy of the map: hidden tokens and enemy watches removed. */
+/**
+ * Player-facing copy of the map: hidden tokens, enemy watches, GM-only
+ * drawings and lights the party can't see removed. With lighting in play it
+ * carries `seen` (the party's view and light levels), so the client never
+ * needs the hidden lights to draw the fog.
+ */
 export function projectMap(map: TacticalMap, actors: Record<string, Actor>): TacticalMap {
-  const vision = partyVision(map, actors);
+  const { seers, friendlyIds } = partyInputs(map, actors);
+  const { vision, lightMap } = partyView(map, seers, friendlyIds);
   const tokens: Record<string, Cell> = {};
   for (const [id, at] of Object.entries(map.tokens)) {
     const a = actors[id];
@@ -130,5 +137,11 @@ export function projectMap(map: TacticalMap, actors: Record<string, Actor>): Tac
     const a = actors[id];
     return a && factionOf(a) === 'friendly';
   }));
-  return { ...map, tokens, watches };
+  const out: TacticalMap = { ...map, tokens, watches };
+  const lights = visibleLights(lightMap, vision, new Set(Object.keys(tokens)));
+  if (lights) out.lights = lights; else delete out.lights;
+  const annotations = playerAnnotations(map);
+  if (annotations) out.annotations = annotations; else delete out.annotations;
+  if (lightingActive(map)) out.seen = encodeSeen(lightMap, vision); else delete out.seen;
+  return out;
 }
