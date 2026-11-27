@@ -209,7 +209,7 @@ export function MapEditor({ s }: { s: ClientState }) {
             <>
               <div className="row u-between u-wrap u-gap-8 u-mb-8">
                 <h1 className="ed-h">{current.name}</h1>
-                <span className="note">{source === 'active' ? 'Editing the live map' : source === 'library' ? 'Editing a library map' : 'Unsaved new map'}{dirty ? ' · Unsaved changes' : ''}</span>
+                <span className="note">{source === 'active' ? 'Editing the Live Map' : source === 'library' ? 'Editing a Library Map' : 'Unsaved New Map'}{dirty ? ' · Unsaved Changes' : ''}</span>
               </div>
               <div className="toolbar" role="toolbar" aria-label="Terrain Tools">
                 {(Object.keys(TOOL_LABEL) as Tool[]).map((t) => (

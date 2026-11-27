@@ -217,7 +217,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
       <main className="ed-col ed-main">
         <div className="row u-between u-wrap">
           <h1 className="ed-h">{draft.name.trim() || 'Unnamed'}</h1>
-          <span className="note">{title}{dirty ? ' · Unsaved changes' : ''}</span>
+          <span className="note">{title}{dirty ? ' · Unsaved Changes' : ''}</span>
         </div>
 
         <section className="card">
