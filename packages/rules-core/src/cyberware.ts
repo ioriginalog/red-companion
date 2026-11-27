@@ -178,7 +178,11 @@ export function rollHl(spec: HlDice, d6: () => number): { rolled: number[]; tota
 }
 
 /** Average Humanity Loss for a spec, rounded up: the usual fixed value. */
-export const hlAverage = (spec: HlDice) => Math.ceil((spec.halve ? spec.count * 3.5 / 2 : spec.count * 3.5)) + spec.bonus;
+/**
+ * The book's fixed Humanity Loss: the average rounded down (1d6 → 3, 3d6 → 10, 2d6 → 7).
+ * Halved dice ("1d6/2", each die halved rounding up) average exactly 2 per die.
+ */
+export const hlAverage = (spec: HlDice) => (spec.halve ? spec.count * 2 : Math.floor(spec.count * 3.5)) + spec.bonus;
 
 // ----- Maximum Humanity ------------------------------------------------------------------
 

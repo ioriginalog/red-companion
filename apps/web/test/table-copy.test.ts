@@ -117,9 +117,10 @@ describe('GM roster', () => {
     const calls: string[] = [];
     const fake = { removePlayer: (id: string) => calls.push(`rm ${id}`), renamePlayer: (id: string, n: string) => calls.push(`mv ${id} ${n}`), mergePlayers: (a: string, b: string) => calls.push(`merge ${a} ${b}`) };
     const admin = playerAdmin(fake)!;
+    // Merge p2 into p1: the client keeps p1 and drops p2 (keepId first).
     admin.mergePlayers('p2', 'p1');
     admin.renamePlayer('p1', 'Ana');
-    expect(calls).toEqual(['merge p2 p1', 'mv p1 Ana']);
+    expect(calls).toEqual(['merge p1 p2', 'mv p1 Ana']);
   });
 });
 

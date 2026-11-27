@@ -3,7 +3,6 @@
  * and Remove. Pure; the Players card (RosterCard.tsx) draws it.
  *
  * The relay does the work. `playerAdmin` finds the client's player-management
- * calls; until the relay and net.ts ship them it returns null and the card
  * shows the roster with the controls off.
  */
 import type { PlayerInfo, ProjectedActor } from '@cprc/session';
@@ -23,7 +22,8 @@ export function playerAdmin(client: unknown): PlayerAdmin | null {
   return {
     removePlayer: (id) => (c.removePlayer as PlayerAdmin['removePlayer']).call(client, id),
     renamePlayer: (id, name) => (c.renamePlayer as PlayerAdmin['renamePlayer']).call(client, id, name),
-    mergePlayers: (from, into) => (c.mergePlayers as PlayerAdmin['mergePlayers']).call(client, from, into),
+    // net.ts takes (keepId, dropId): the seat merged *into* is kept, the one merged *from* is dropped.
+    mergePlayers: (from, into) => (c.mergePlayers as (keepId: string, dropId: string) => void).call(client, into, from),
   };
 }
 

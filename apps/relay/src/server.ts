@@ -30,13 +30,20 @@ server.once('listening', () => {
 const listen = (host: string) => server.listen(port, host);
 server.once('error', (e: NodeJS.ErrnoException) => {
   if (e.code === 'EAFNOSUPPORT' && !process.env.HOST) listen('0.0.0.0');
-  else throw e;
+  else {
+    // Fail fast (e.g. EADDRINUSE): the global handler below would otherwise keep a zombie alive.
+    console.error(`relay failed to listen: ${e.message}`);
+    process.exit(1);
+  }
 });
 listen(process.env.HOST ?? '::');
 
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
     console.log(`${sig}: shutting down`);
+    // Keep-alive HTTP connections would hold server.close() open indefinitely.
+    server.closeIdleConnections?.();
+    setTimeout(() => { server.closeAllConnections?.(); process.exit(0); }, 5000).unref();
     void close().then(() => process.exit(0));
   });
 }

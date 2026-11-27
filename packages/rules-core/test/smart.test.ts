@@ -73,6 +73,8 @@ describe('Humanity Loss dice and maximum Humanity', () => {
     expect(hlAverage(parseHlDice('2d6')!)).toBe(7);
     expect(hlAverage(parseHlDice('4d6')!)).toBe(14);
     expect(hlAverage(parseHlDice('1d6/2')!)).toBe(2);
+    expect(hlAverage(parseHlDice('1d6')!)).toBe(3);
+    expect(hlAverage(parseHlDice('3d6')!)).toBe(10);
   });
   it('rolls halved dice rounding up', () => {
     let i = 0; const faces = [5];
