@@ -83,14 +83,16 @@ Built from community references (not the Core Rulebook). Starter Programs (Lockp
 | Speed Check | On arrival, each live Black ICE: Interface + Speed Boosters + 1d10 vs ICE SPD + 1d10. The ICE strikes first on a tie or better. | Secondary (tie rule: Interpretation) |
 | Black ICE attacks | ICE ATK + 1d10 vs Interface + 1d10; ties go to the runner. The GM triggers ICE attacks on the ICE's Turn. | Secondary (GM-triggered timing: Interpretation) |
 | Runner attacks | Zap: Interface + 1d10 vs ICE DEF + 1d10, 1d6 REZ. Attacker Programs add their ATK and roll their damage; once per Round each. Demons defend with their Interface. | Secondary |
-| Engagement | On a floor with live Black ICE or a live Demon, you can't move away; Slide (Interface + 1d10 vs PER + 1d10, once per Turn, not vs Demons), derez it, or jack out. | Secondary |
+| Engagement and chasing | Black ICE that has met a runner chases them: a runner engaged with live Black ICE may still move (1 NET Action), and every live ICE on the floor follows to the new floor (no new Speed Check for it). Passwords don't stop it. Only derezzing it, a Slide (Interface + 1d10 vs PER + 1d10, once per Turn, not vs Demons) or jacking out shakes it. ICE slid away from lies in wait where the chase ended; arriving there again sets off a new Speed Check. Unsafe Jack Out: every live ICE met bites, wherever it is now. Sources: community Player Handbook (Netrunning) and a community player reference. | Secondary |
+| Chasing details | Followers move with the runner at once (not on the ICE's next action). A Slide leaves only the ICE slid past; other live ICE on the floor still follow. Demons don't chase, and leaving a Demon's floor is allowed. The starter Bloodhound no longer claims a special chase (all Black ICE chases); its original effect is now a GM prompt that the owner learns roughly where the runner's body is. | Interpretation |
+| NET Action availability | One pure rule (`netAvailability`) used by the authority and the NetPanel, kept in lockstep by a test: Jack In needs a found access point within reach and no Meat Action this Turn; Virus only on a lowest floor; Backdoor, Eye-Dee and Control only on their floor kinds; Slide and Zap only while engaged; NET Actions per Turn. Disabled buttons show the reason. | Tooling |
 | Brain damage | Straight to HP, ignores armor, no Critical Injuries. Shield negates the first hit of a run; the best active Armor-type Defender reduces it (they don't stack). | Secondary (stacking: Interpretation) |
 | Anti-program ICE | Damages the first running Program (then a ready one) and destroys it at 0 REZ. | Secondary (target choice: Interpretation) |
 | Programs | Boosters stack; activating or stopping costs 1 NET Action; restarting a Derezzed Program costs 2 and restores REZ. Deck slots: Poor 5, Standard 7, Excellent 9. | Secondary |
 | ICE state | Each runner's ICE state is their own and resets when they jack out safely. | Interpretation |
 | 2070s Quickhacks (option) | Jack In to a visible target's neuroport within 50 m/yds (25 squares), 1 NET Action; the quickhack's effect is a GM prompt (the kit's tables aren't in the tool). Off by default. | Secondary (public summaries) |
 
-Not built for Netrunning: rival netrunners fighting each other, ICE following a runner between floors, and the Edgerunners Mission Kit quickhack tables. (Demon Turns are built; see Automation.) (Improved Smart Ammo is now built as a weapon option; see Systems.)
+Not built for Netrunning: rival netrunners fighting each other, ICE that stops a runner moving at all (an effect of some book ICE; the GM can rule it), and the Edgerunners Mission Kit quickhack tables. (Demon Turns are built; see Automation.) (Improved Smart Ammo is now built as a weapon option; see Systems.)
 
 ## Systems (2026-11, Track K)
 
@@ -136,6 +138,7 @@ Sources: a community player handbook (melee, Martial Arts, combat and Role pages
 | Armor Breaking Blow | While held, after two Martial Arts hits on the holder this Turn: break free and the holder gets a Broken Arm. | Secondary ⚠ one source |
 | Recovery | All Forms: when taking Get Up, beat DV 13 (DEX + Form) and it costs no Action; on a miss the Action is spent (no Action left: stay Prone). | Secondary (miss handling: Interpretation) |
 | Expanded Forms | Moves from later books are GM prompts: the app rolls DEX + Form vs the DV and states the effect for the GM. | Secondary |
+| Facedown sight | The initiator must see the target: their own sight, or for the party and allies, anything the party sees (lighting included). Off the map it's the GM's call; the GM isn't refused. | Interpretation |
 | Facedown | COOL + Reputation + 1d10 each; a tie means nothing happens; the loser backs down or fights on at −2 to all Actions against the winner. No Action cost; it lasts until the GM or the winner ends it. | Secondary (duration, cost: Interpretation) |
 | Reputation | GM sets 0–10 per character. | Secondary |
 | Charismatic Impact | Rank + 1d10 must beat DV 8 (one person), 10 (up to 6) or 12 (huge crowd, Rank 3+). Favors scale with Rank; a failure blocks those fans for a week. | Secondary |
@@ -158,7 +161,7 @@ Sources: a community player handbook (melee, Martial Arts, combat and Role pages
 | Speedware, passive (Kerenzikov type) | Always adds its bonus to Initiative. | Secondary |
 | Speedware, activated (Sandevistan type) | Turned on for one minute (20 Rounds); adds its bonus to Initiative rolls made while on; recharges after rest (the hour-long cooldown). Turning it on uses the Action during an encounter and is free outside one. Initiative isn't rerolled mid-fight; the GM can reroll the character in. | Secondary (bonus, duration, cooldown) · Interpretation (Action cost, no mid-fight reroll) |
 | One piece of speedware | A second piece can't be installed; if a sheet has two, only the first counts. | Secondary |
-| Black ICE Turns | Engaged Black ICE acts at the top of every Round, one attack each (ATK + 1d10 vs Interface + 1d10, ties to the runner). The GM gets a prompt at each new Round and runs it in one click. ICE stays on its floor (it doesn't chase between floors). | Secondary · Interpretation (no chasing) |
+| Black ICE Turns | Engaged Black ICE acts at the top of every Round, one attack each (ATK + 1d10 vs Interface + 1d10, ties to the runner). The GM gets a prompt at each new Round and runs it in one click. ICE that chased the runner attacks from the runner's floor (see Netrunning, Engagement and chasing). | Secondary |
 | Demon Turns | A Demon spends its NET Actions on Control Nodes (GM call), then Zaps: Demon Interface + 1d10 vs the runner's Interface + 1d10, 1d6 to the runner on a hit. | Secondary · Interpretation (Zap uses Interface vs Interface) |
 | Attack availability | One rule for the client preview and the authority: arm injuries and hands, grapples (−2, no two-handed weapons, an Iron Grip stops ranged attacks), and a lost Facedown (−2 against the winner). | Tooling |
 
@@ -196,12 +199,30 @@ RED Core has no light-level rules or darkness modifier that we could confirm. Co
 14. **Difficult terrain** ('~' squares) costs 2 squares to enter. No demo map uses it yet.
 15. **Darkness**: dark squares hide tokens from normal eyes beyond 1 square; Low Light and IR see them; the −2/−4 penalty is off unless you turn it on.
 
+## Shields, Weapon Quality, Drugs and Vehicles (2026-11)
+
+Sources: the community Player Handbook (weapons, Drugs and Addiction, Vehicle Combat pages) and a community Armor and Cover summary; never the Core book. Every example shield, drug and vehicle is original (own names and numbers); the GM enters book items as custom ones.
+
+| Rule | Engine Behavior | Status |
+|---|---|---|
+| Weapon quality | Poor −1, Standard 0, Excellent +1 to attack rolls (ranged, melee, cover and vehicle attacks); never damage. Bows and crossbows can't be Excellent. | Secondary |
+| Shield basics | Takes one hand (no two-handed weapons while held). Equipping or dropping it is an Action. At 0 HP it's destroyed and stays in hand until dropped. | Secondary |
+| Raised shield | Blocks ranged and melee hits: the holder can't dodge ranged attacks, a shot can still miss against the range DV, and the whole hit goes into the shield's HP (damage past 0 is lost). | Secondary |
+| Shield details | Explosives and other area attacks aren't blocked. Against melee the holder still rolls the usual defense (no DV is given for an undodged melee attack). Raising or lowering is free. | Interpretation |
+| Human shield | The holder of a Grapple (not already holding a shield) spends an Action to raise the held character. Blocks ranged attacks except head Aimed Shots, never melee; the held can't dodge ranged attacks and takes the hit as if hit directly. Released when the Grapple ends. Dead, they become a shield with HP equal to their BODY. | Secondary |
+| Drug dose | An Action (airhypo), on yourself or a willing character next to you. The primary effect starts at once; another dose restarts the duration instead of stacking. STAT changes apply through the engine; other effects are GM notes. | Secondary |
+| Wearing off and addiction | When the GM ends a dose: WILL + Resist Torture/Drugs + 1d10 vs the drug's DV. Failing adds an addiction: its secondary effect applies until the next dose of that drug or a cure (GM, after therapy). Addictions count separately. | Secondary (GM-ended doses: Interpretation) |
+| Hostile dosing | A melee attack with an airhypo: the GM rules it. | Interpretation |
+| Vehicle basics | A vehicle actor's HP is its SDP; it has seats and a combat MOVE. Vehicles never take Turns (they act on the driver's). At 0 SDP it's wrecked and can't be driven. | Secondary (one source) |
+| Attacking vehicles | Attack Vehicle: no dodge, normal range DVs; damage comes off SDP. An Aimed Shot at a weak spot is −8 and doubles the damage that gets through. Ordinary attacks on vehicles are refused with a pointer to Attack Vehicle. | Secondary (one source) |
+| Vehicle armor | No SP of its own; GM-added plating SP comes off each hit before the weak-spot doubling. | Interpretation |
+| Driving and boarding | Boarding, taking the wheel and getting out each use the Move Action. The driver's Move Action moves the vehicle up to its MOVE in squares. A driver with REF + Drive Land Vehicle of 9 or less gets a GM prompt for a control check. Melee on an adjacent vehicle hits automatically. | Secondary (control check) · Interpretation (Move Action costs, auto-hit melee) |
+| Ramming and occupants | Ramming raises a GM prompt (both take damage, whiplash, a pedestrian may dodge). Shots at someone inside a vehicle are the GM's call. | Secondary (GM prompt) |
+
 ## Not Built Yet
 
-- Shields and human shields.
-- Weapon quality (Poor, Excellent); the GM can override a weapon's damage dice and ROF instead.
-- Drug effects.
-- Vehicles: no SDP, seats, speed or vehicle combat. Moto tracks Family vehicles by name only.
+- Vehicle chases, collision damage numbers and whiplash effects (GM prompts). Moto tracks Family vehicles by name only.
+- Shooting a particular vehicle occupant from the attack panel (the GM rules it).
 
 Built since earlier versions of this list: Broken Ribs and Foreign Object re-bleed, Spinal Injury's lost Action, and the ear injuries' lost Move Action (see Automation); Martial Arts Special Moves; Demon Turns; light sources, darkness and night vision (see Light, Vision and Drawings).
 
