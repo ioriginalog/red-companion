@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:side": "python3 scripts/side-overflow.py"
   },
   "dependencies": {
     "@cprc/rules-core": "0.1.0",

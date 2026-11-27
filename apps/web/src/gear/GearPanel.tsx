@@ -47,7 +47,7 @@ export function GearPanel({ c, actingId, targetId, canAct }: { c: GearCtx; actin
     <div className="gear-block">
       <div className="gear-sub">Vehicles</div>
       <div className="row gear-row">
-        <select aria-label="Vehicle" value={spawn.templateId} onChange={(e) => setSpawn({ ...spawn, templateId: e.target.value })}>
+        <select className="gear-wide" aria-label="Vehicle" value={spawn.templateId} onChange={(e) => setSpawn({ ...spawn, templateId: e.target.value })}>
           {VEHICLE_TEMPLATES.map((v) => <option key={v.id} value={v.id}>{v.name} (SDP {v.sdp}, {v.seats} {v.seats === 1 ? 'Seat' : 'Seats'}, MOVE {v.move})</option>)}
         </select>
         <select aria-label="Vehicle Allegiance" value={spawn.allegiance} onChange={(e) => setSpawn({ ...spawn, allegiance: e.target.value as typeof spawn.allegiance })}>
