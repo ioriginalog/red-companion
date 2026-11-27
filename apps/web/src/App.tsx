@@ -45,8 +45,8 @@ function Home({ busy, toast, lockedUntil }: { busy: boolean; toast: string | nul
 
         <h2>Join a Session</h2>
         <form className="stack" onSubmit={(e) => { e.preventDefault(); if (code.trim()) client.join(code, name); }}>
-          <input className="code-input" aria-label="Join Code" placeholder="Join code" value={code} maxLength={8} onChange={(e) => setCode(e.target.value.toUpperCase())} />
-          <input aria-label="Your Name" placeholder="Your name" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
+          <input className="code-input" aria-label="Join Code" placeholder="Join Code" value={code} maxLength={8} onChange={(e) => setCode(e.target.value.toUpperCase())} />
+          <input aria-label="Your Name" placeholder="Your Name" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
           <button className="cta" disabled={!code.trim() || busy}>Join</button>
         </form>
 
