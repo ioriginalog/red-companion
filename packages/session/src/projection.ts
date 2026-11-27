@@ -44,6 +44,7 @@ export function projectActor(actor: Actor, viewer: Viewer, opts?: ProjectionOpti
       woundState: woundState(c.hp),
       conditions: c.conditions,
       injuries: c.criticalInjuries.map((i) => getInjury(i.injuryId).name),
+      ...(c.vehicle ? { vehicle: true as const } : {}),
     },
   };
   if (!canSeeFull(actor, viewer, opts)) return base;
@@ -470,6 +471,8 @@ export function redactEvent(e: CombatEvent, visible: (id: string | undefined) =>
     case 'netAction':
       if (visible(e.combatantId)) return e;
       return omit({ ...e, ...(e.check ? { check: redactCheck(e.check) } : {}), ...(e.vs ? { vs: redactCheck(e.vs) } : {}) }, ['dice', 'amount']);
+    case 'gearAction':
+      return visible(e.combatantId) ? e : omit({ ...e, ...(e.check ? { check: redactCheck(e.check) } : {}) }, ['amount', 'hpLeft', 'dv']);
     case 'extraResolved':
       return visible(e.combatantId) || !e.rolls ? e : { ...e, rolls: e.rolls.map(({ label, total }) => ({ label, total })) };
     default:

@@ -11,6 +11,7 @@
  * trivially deterministic and lets the relay redact patches per viewer.
  */
 import type { NetOp, NetState, NetView } from './netrun-types.js';
+import type { GearOp } from './gear.js';
 import type { AimTarget, AmmoTypeId, AwarenessKey, Care, Cell, CheckResult, CombatEvent, Combatant, CoverMaterialId, CyberwareItem, DamageSpec, GearItem, GridMap, Modifier, Weapon, WoundState } from '@cprc/rules-core';
 
 export type Viewer = { role: 'gm' } | { role: 'player'; playerId: string };
@@ -158,7 +159,7 @@ export interface SessionState {
 }
 
 // Grapples, Facedowns and per-Round attack history for Special Move triggers.
-export interface Grapple { holderId: string; heldId: string; chokes: number; lastChokeRound: number | null; ironGrip: boolean }
+export interface Grapple { holderId: string; heldId: string; chokes: number; lastChokeRound: number | null; ironGrip: boolean; /** The holder uses the held character as a human shield. */ humanShield?: boolean }
 export interface Facedown { id: string; winnerId: string; loserId: string; status: 'choosing' | 'fighting' }
 export interface RoundHit { round: number; turnIndex: number; attackerId: string; defenderId: string; with: 'ranged' | 'weapon' | 'brawling' | 'martialArts'; hit: boolean }
 export interface ExtrasState {
@@ -318,7 +319,8 @@ export type Intent =
   /** GM: where a missed explosive lands (omit `at` to roll it within the blast area). */
   | { type: 'placeScatter'; pendingId: string; at?: Cell }
   | { type: 'net'; op: NetOp }
-  | { type: 'extra'; op: ExtraOp };
+  | { type: 'extra'; op: ExtraOp }
+  | { type: 'gear'; op: GearOp };
 
 export type StatKeyName = 'INT' | 'REF' | 'DEX' | 'TECH' | 'COOL' | 'WILL' | 'LUCK' | 'MOVE' | 'BODY' | 'EMP';
 
@@ -337,6 +339,8 @@ export interface PublicCombatantView {
   woundState: WoundState;
   conditions: Combatant['conditions'];
   injuries: string[];
+  /** A vehicle (its SDP shows as the wound state). */
+  vehicle?: true;
 }
 
 export interface ProjectedActor {

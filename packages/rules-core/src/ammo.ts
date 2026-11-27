@@ -6,6 +6,7 @@
 import type { AimTarget, AmmoTypeId, CheckResult, Combatant, DamageSpec, Modifier, Weapon } from './types.js';
 import type { Dice } from './dice.js';
 import type { CombatEvent } from './events.js';
+import { qualityMods } from './quality.js';
 import { WEAPON_TYPES } from './data/core.js';
 import { beats, rollD10 } from './checks.js';
 
@@ -107,6 +108,7 @@ export function smartAttackMods(attacker: Combatant, weapon: Weapon, aimTarget?:
   if (weapon.smartgunLink && smartgunLinked(attacker)) out.push({ label: 'Smartgun Link', value: 1 });
   if (isSmartWeapon(weapon)) out.push({ label: 'Smart Weapon', value: 1 });
   if (aimTarget && attacker.mods?.targetingScope) out.push({ label: 'Targeting Scope', value: 1 });
+  out.push(...qualityMods(weapon)); // Poor −1 / Excellent +1
   return out;
 }
 

@@ -20,6 +20,7 @@ import {
 } from '@cprc/rules-core';
 import { checkOtherAction, controls, currentActorId, getActor, SessionError, usageFor } from './helpers.js';
 import { factionOf, partyVision, visionFor } from './tactical.js';
+import { corpseShields, gearAdjust } from './gear.js';
 import type { Actor, Encounter, ExtraOp, ExtrasState, Grapple, Intent, RoundHit, SessionState, StatePatch, Viewer } from './types.js';
 
 type Result = { events: CombatEvent[]; patch: StatePatch };
@@ -131,7 +132,8 @@ export function extrasPenalties(state: SessionState, actorId: string, opponentId
 }
 
 /** Authority hook: the intent that actually runs, with Grapple and Facedown penalties added. */
-export function extrasAdjust(state: SessionState, intent: Intent): Intent {
+export function extrasAdjust(state: SessionState, rawIntent: Intent): Intent {
+  const intent = gearAdjust(state, rawIntent); // shields: no dodge behind a raised shield or as a human shield
   if (!state.extras) return intent;
   switch (intent.type) {
     case 'rangedAttack':
@@ -223,6 +225,9 @@ export function trackExtras(before: SessionState, intent: Intent, result: Result
   const facedowns = base.facedowns.filter((f) => actors[f.winnerId] && actors[f.loserId]);
   const next: ExtrasState = { grapples, facedowns, hits, movesUsed };
   if (JSON.stringify(next) === JSON.stringify(x ?? emptyExtras())) return result;
+  // A human shield who died stays in the holder's hand as a shield (HP = their BODY).
+  const corpses = corpseShields(base.grapples.filter((g) => !grapples.includes(g)), actors);
+  if (corpses.actors) return { events: [...result.events, ...corpses.events], patch: { ...result.patch, actors: { ...(result.patch.actors ?? {}), ...corpses.actors }, extras: next } };
   return { events: result.events, patch: { ...result.patch, extras: next } };
 }
 

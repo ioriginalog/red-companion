@@ -49,6 +49,8 @@ export type CombatEvent = Base & (
   | { type: 'handoutShared'; id: string; title: string }
   /** Netrunning: one line per NET Action, with its check(s). `text` is ready to narrate (sentence case). */
   | { type: 'netAction'; combatantId: string; action: string; text: string; check?: CheckResult; vs?: CheckResult; dv?: number; success?: boolean; dice?: number[]; amount?: number }
+  /** Shields, human shields, drugs and vehicles. `text` is ready to narrate (no NPC numbers); `amount`/`hpLeft` only for the actor's own viewers. */
+  | { type: 'gearAction'; combatantId: string; targetId?: string; action: string; text: string; check?: CheckResult; dv?: number; success?: boolean; amount?: number; hpLeft?: number }
   // Grapples, Martial Arts moves, Facedowns, Role Abilities. `text` is a ready narration line.
   | { type: 'extraResolved'; combatantId: string; targetId?: string; move: string; text: string; success?: boolean; rolls?: { label: string; total: number; natural?: number }[] }
   | { type: 'areaResolved'; attackerId: string; kind: string; at: Cell; targetIds: string[] }

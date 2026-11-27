@@ -15,3 +15,4 @@ export * from './availability.js';
 export * from './upkeep.js';
 export { netThreats } from './netrun.js';
 export * from './net-availability.js';
+export * from './gear.js';

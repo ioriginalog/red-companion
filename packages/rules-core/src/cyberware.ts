@@ -14,6 +14,7 @@
  * `applySystems` derives everything the engine reads (`mods`, cyberware armor,
  * EMP) from role and cyberware. Call it after any change to either.
  */
+import { drugMods } from './drugs.js';
 import { roleMods } from './roles.js';
 import type { ArmorPiece, CombatMods, Combatant, CyberwareEffect, CyberwareItem, StatKey } from './types.js';
 
@@ -89,7 +90,7 @@ export function cyberwareMods(items: CyberwareItem[] | undefined): CombatMods {
 
 /** Recompute derived data: mods, cyberware armor pieces (keeping their ablation), EMP. */
 export function applySystems(c: Combatant): Combatant {
-  const mods = mergeMods(roleMods(c.role), cyberwareMods(c.cyberware));
+  const mods = mergeMods(mergeMods(roleMods(c.role), cyberwareMods(c.cyberware)), drugMods(c)); // drugs: STAT effects and addictions
   const existing = new Map(c.armor.filter((p) => p.id.startsWith(ARMOR_PREFIX)).map((p) => [p.id, p]));
   const cyberArmor: ArmorPiece[] = [];
   for (const item of c.cyberware ?? []) {

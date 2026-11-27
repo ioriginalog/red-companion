@@ -101,6 +101,7 @@ const FIXTURES: { [K in CombatEvent['type']]: Fixture<K> } = {
   conditionSet: (s) => ({ type: 'conditionSet', visibility: P, targetId: s, condition: 'prone', value: true }),
   sceneChanged: () => ({ type: 'sceneChanged', visibility: P, mapId: 'm2', name: 'Rooftop' }),
   handoutShared: () => ({ type: 'handoutShared', visibility: P, id: 'h1', title: 'Map' }),
+  gearAction: (s, o) => ({ type: 'gearAction', visibility: P, combatantId: s, targetId: o, action: 'shield', text: `${HIDDEN_NAME}’s shield takes the hit.`, check: check(true), dv: S, success: true, amount: S, hpLeft: S }),
   netAction: (s) => ({ type: 'netAction', visibility: P, combatantId: s, action: 'zap', text: `${HIDDEN_NAME} zaps the ICE.`, check: check(true), vs: check(true), dv: 8, success: true, dice: [S], amount: S }),
   extraResolved: (s, o) => ({ type: 'extraResolved', visibility: P, combatantId: s, targetId: o, move: 'grab', text: `${HIDDEN_NAME} grabs Vex.`, success: true, rolls: [{ label: 'Grab', total: 14, natural: S }] }),
   areaResolved: (s, o) => ({ type: 'areaResolved', visibility: P, attackerId: s, kind: 'launcher', at: c0, targetIds: [o, HIDDEN_ID2, s] }),

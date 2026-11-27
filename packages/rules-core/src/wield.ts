@@ -18,9 +18,10 @@ export const HANDS: Record<WeaponType, 1 | 2> = {
 
 const ARM_INJURIES = new Set(['brokenArm', 'dismemberedArm', 'dismemberedHand']);
 
+/** Working hands not holding a shield. A shield takes one hand (Secondary). */
 export function handsFree(c: Combatant): number {
   const lost = activeInjuries(c).filter((d) => ARM_INJURIES.has(d.id)).length;
-  return Math.max(0, 2 - lost);
+  return Math.max(0, 2 - lost - (c.shield ? 1 : 0));
 }
 
 /** Null if the character can use the weapon, else the reason. */
@@ -29,6 +30,7 @@ export function wieldProblem(c: Combatant, weapon: Weapon | 'brawling'): string 
   if (weapon === 'brawling') return free === 0 ? `${c.name} has no working arm to fight with.` : null;
   const need = HANDS[weapon.type];
   if (free >= need) return null;
+  if (c.shield && free < need) return free === 0 ? `${c.name}’s free hand is busy: drop the shield to use ${weapon.name}.` : `${weapon.name} needs two hands; drop the shield first.`;
   return free === 0
     ? `${c.name} has no working arm to use ${weapon.name}.`
     : `${weapon.name} needs two hands, and ${c.name} has one working arm.`;

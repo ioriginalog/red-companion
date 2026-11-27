@@ -74,7 +74,7 @@ export function NetPanel({ view, actorId, isGm, canAct, act, feed }: NetPanelPro
   const why = (k: keyof NonNullable<typeof avail>) => (avail && !avail[k].ok ? avail[k].reason : undefined);
 
   return (
-    <section className="card net" aria-label={`${actor.public.name} NET view`}>
+    <section className="card net" aria-label={`${actor.public.name} NET View`}>
       <div className="ttl">NET · {rig.deckName}</div>
       <div className="net-stats">
         <div><span className="k">Interface</span><span className="v">{rig.interface}</span></div>

@@ -9,6 +9,7 @@
  */
 import { makeCheck, beats, rollD10 } from './checks.js';
 import { applyAmmo, smartAttackMods, smartRetry } from './ammo.js';
+import { qualityMods } from './quality.js';
 import {
   AIMED_SHOT_PENALTY, AUTOFIRE_AMMO, AUTOFIRE_DV, DODGE_REF_THRESHOLD, RANGE_BANDS, RANGE_BAND_LABELS, RANGE_DV,
   WEAPON_TYPES, unarmedDamageDice,
@@ -247,7 +248,7 @@ export function resolveMeleeAttack(input: MeleeAttackInput, dice: Dice): AttackO
 
   const attack = withFumbleRecovery(attacker, makeCheck(
     [{ label: 'DEX', value: effectiveStat(attacker, 'DEX') }, { label: skill, value: skillLevel(attacker, skill) }],
-    [...standingModifiers(attacker, 'meleeAttack'), ...aimMods(aimTarget), ...(input.situational ?? [])],
+    [...standingModifiers(attacker, 'meleeAttack'), ...aimMods(aimTarget), ...(input.with.kind === 'weapon' ? qualityMods(input.with.weapon) : []), ...(input.situational ?? [])],
     dice,
   ));
 

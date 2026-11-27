@@ -25,3 +25,7 @@ export * from './facedown.js';
 export * from './roles-extra.js';
 export * from './data/packs.js';
 export * from './injury-effects.js';
+export * from './quality.js';
+export * from './shields.js';
+export * from './drugs.js';
+export * from './vehicles.js';

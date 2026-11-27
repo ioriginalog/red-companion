@@ -11,7 +11,7 @@
  * (Netrunning, systems) validate their own payloads.
  */
 import {
-  AMMO_TYPES, ammoProblem, cyberwareProblem, roleProblem, smartWeaponProblem, WEAPON_TYPES,
+  AMMO_TYPES, ammoProblem, cyberwareProblem, drugsStateProblem, qualityProblem, roleProblem, shieldProblem, smartWeaponProblem, vehicleProblem, WEAPON_QUALITIES, WEAPON_TYPES,
   type AmmoTypeId, type CyberwareItem, type RoleState, type Weapon,
 } from '@cprc/rules-core';
 import { SessionError } from './helpers.js';
@@ -110,11 +110,13 @@ function validateWeapon(w: unknown) {
   if (o.rofOverride !== undefined && o.rofOverride !== 1 && o.rofOverride !== 2) bad('ROF must be 1 or 2.');
   const ammoType = oneOf(o.ammoType, 'Ammo type', AMMO_IDS, true) as AmmoTypeId | undefined;
   bool(o.smartgunLink, 'Smartgun Link');
+  oneOf(o.quality, 'Quality', WEAPON_QUALITIES, true);
   oneOf(o.smart, 'Smart Weapon', ['built', 'rebuild'] as const, true);
   oneOf(o.tech2070s, '2070s class', ['power', 'tech'] as const, true);
   const weapon = o as unknown as Weapon;
   problem(smartWeaponProblem(weapon), weapon.name);
   if (ammoType && ammoType !== 'basic') problem(ammoProblem(weapon, ammoType), weapon.name);
+  problem(qualityProblem(weapon), weapon.name);
 }
 
 /**
@@ -164,6 +166,10 @@ function validateCombatantExtras(c: Obj) {
     const sw = obj(c.speedware, 'Speedware');
     bool(sw.active, 'Speedware on', false); int(sw.roundsLeft, 'Speedware Rounds left', 0, 100); bool(sw.spent, 'Speedware spent', false);
   }
+  // Shields, drugs, vehicles.
+  if (c.shield !== undefined) problem(shieldProblem(c.shield), 'Shield');
+  if (c.drugs !== undefined) problem(drugsStateProblem(c.drugs), 'Drugs');
+  if (c.vehicle !== undefined) problem(vehicleProblem(c.vehicle), 'Vehicle');
   if (c.flags !== undefined) for (const [k, x] of Object.entries(obj(c.flags, 'Flags'))) bool(x, `Flag ${k}`, false);
 }
 

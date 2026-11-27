@@ -28,6 +28,7 @@ import { validateIntent } from './validate.js';
 import { endTurnUpkeep, turnUpkeep } from './upkeep.js';
 import { attackAvailability } from './availability.js';
 import { executeExtra, extrasAdjust, extrasGate, trackExtras } from './extras.js';
+import { executeGear, gearDamage, gearGate } from './gear.js';
 import { authorizeSystems, beforeDamage, executeSystems, isSystemsIntent, onTurnStart, SYSTEMS_GM_ONLY, SYSTEMS_WHILE_PENDING, wieldCheck } from './systems.js';
 import { authorizePlayLoop, executePlayLoop, isPlayLoopIntent, PLAYLOOP_WHILE_PENDING } from './playloop.js';
 
@@ -99,6 +100,7 @@ function authorize(state: SessionState, intent: Intent, by: Viewer) {
 
   wieldCheck(state, intent); // Arm injuries limit weapons
   extrasGate(state, intent); // What a grapple forbids
+  gearGate(state, intent, by); // Vehicles: Attack Vehicle, driver-only moves, no Turns of their own
   switch (intent.type) {
     case 'rangedAttack':
     case 'meleeAttack':
@@ -303,6 +305,8 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       const p = state.pending as Extract<Pending, { kind: 'awaitingDamage' }>;
       const target = getActor(state, p.targetId);
       const k = beforeDamage(state, p); // Round stamp (Damage Deflection), Spot Weakness
+      const shielded = gearDamage(state, p, k.spec, dice, k); // Shields and human shields take the hit
+      if (shielded) return shielded;
       const roll = rollDamage(k.spec, dice);
       const r = applyDamage(target.combatant, k.spec, roll, dice);
       const events: CombatEvent[] = [
@@ -398,6 +402,8 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
       return executeNet(state, (intent as { op: unknown }).op, by, dice);
     case 'extra':
       return executeExtra(state, (intent as { op: unknown }).op, by, dice, newId);
+    case 'gear':
+      return executeGear(state, (intent as { op: unknown }).op, by, dice, newId);
     default:
       if (isSystemsIntent(intent)) return executeSystems(state, intent, by, dice, newId);
       return executeTool(state, intent, by, dice);

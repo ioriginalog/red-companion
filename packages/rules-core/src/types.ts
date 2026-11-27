@@ -101,6 +101,61 @@ export interface Combatant {
   speedware?: { active: boolean; roundsLeft: number; spent: boolean };
   /** Reputation level 0–10 (Facedowns). */
   reputation?: number;
+  /** A shield in one hand (see shields.ts). */
+  shield?: ShieldState;
+  /** Drugs in the system and addictions (see drugs.ts). */
+  drugs?: DrugsState;
+  /** Set on vehicle actors: `hp` is the vehicle's SDP (see vehicles.ts). */
+  vehicle?: VehicleData;
+}
+
+export interface ShieldState {
+  name: string;
+  hp: number;
+  maxHp: number;
+  /** Raised: it takes the hits it can block, and its holder can't dodge them. */
+  raised: boolean;
+  /** A dead human shield, carried as a shield (HP = their BODY). */
+  body?: boolean;
+}
+
+export interface DrugEffect {
+  /** STAT changes while it lasts (negative for penalties). */
+  stats?: Partial<Record<StatKey, number>>;
+  /** What the GM applies by hand. Sentence case, our words. */
+  note: string;
+}
+
+export interface DrugDef {
+  id: string;
+  name: string;
+  /** Primary effect: starts when dosed, lasts `duration`. */
+  effect: DrugEffect;
+  /** Free text such as "4 hours" (the GM ends it). */
+  duration: string;
+  /** WILL + Resist Torture/Drugs + 1d10 must beat this when it wears off, or the user is addicted. */
+  addictionDv: number;
+  /** The addiction's effect, until the next dose or a cure. */
+  secondary: DrugEffect;
+}
+
+export interface DrugsState {
+  active: DrugDef[];
+  addictions: DrugDef[];
+}
+
+export interface VehicleData {
+  /** Seats, the driver's included. */
+  seats: number;
+  /** Combat MOVE in squares when the driver takes their Move Action. */
+  move: number;
+  /** Narrative top speed, for the GM (free text such as "120 mph"). */
+  topSpeed?: string;
+  /** GM-added armor plating: SP subtracted from each hit. 0 or missing = none. */
+  sp?: number;
+  /** Actor ids aboard (their tokens leave the map). */
+  passengers: string[];
+  driverId?: string | null;
 }
 
 export type RoleId = 'rockerboy' | 'solo' | 'netrunner' | 'tech' | 'medtech' | 'media' | 'exec' | 'lawman' | 'fixer' | 'nomad';
@@ -233,7 +288,11 @@ export interface Weapon {
   smart?: 'built' | 'rebuild';
   /** 2070s weapon class. Power and Tech weapons can't be given a Smart Rebuild. */
   tech2070s?: 'power' | 'tech';
+  /** Poor −1, Standard 0, Excellent +1 to attacks (see quality.ts). Missing = Standard. */
+  quality?: WeaponQuality;
 }
+
+export type WeaponQuality = 'poor' | 'standard' | 'excellent';
 
 // ---------------------------------------------------------------------------
 // Checks and modifiers
