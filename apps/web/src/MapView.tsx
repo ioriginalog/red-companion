@@ -7,6 +7,7 @@ import { PING_MS, type Signals } from './net.js';
 import { blastCells, shellCells, tokensIn, type AreaKind } from './table/area.js';
 import { fogPaths } from './table/fog.js';
 import { clampBox, panBy, reaspect, zoomAt, type Box } from './table/viewport.js';
+import { zoomCoversToken } from './map/zoomDock.js';
 import { centerOn, comfortablyInside, easeOut, fitMap, frameFocus, lerpBox, limitWidth, maxViewWidth, toStage, type Viewport } from './table/layout/camera.js';
 import { MiniMap } from './table/layout/MiniMap.js';
 import { usePrefersReducedMotion } from './table/layout/useMedia.js';
@@ -285,6 +286,17 @@ export function MapView(p: Props) {
     return () => el.removeEventListener('wheel', onWheel);
   }); // rebinding each render keeps S/W/H fresh; cheap
 
+  // Phone zoom controls: folded by default, open on tap, fold again after a few idle seconds.
+  const [zoomOpen, setZoomOpen] = useState(false);
+  const zoomIdle = useRef<number | null>(null);
+  const bumpZoom = () => {
+    if (!p.compact) return;
+    if (zoomIdle.current) window.clearTimeout(zoomIdle.current);
+    zoomIdle.current = window.setTimeout(() => setZoomOpen(false), 4000);
+  };
+  useEffect(() => () => { if (zoomIdle.current) window.clearTimeout(zoomIdle.current); }, []);
+  useEffect(() => { if (!p.compact) setZoomOpen(false); }, [p.compact]);
+  const zoomTucked = !!p.compact && !zoomOpen && vp.w > 10 && zoomCoversToken(map.tokens, (id) => !!view.actors[id], box, vp, S);
   const zoomButton = (factor: number) => setBox((b) => clampBox(zoomAt(b, factor, b.x + b.w / 2, b.y + b.h / 2, S * 4, W * 2.5), W, H));
 
   const click = (c: Cell) => {
@@ -794,12 +806,23 @@ export function MapView(p: Props) {
         {hasFocus && kbdMode && kbd && <rect x={kbd.x * S + 1} y={kbd.y * S + 1} width={S - 2} height={S - 2} fill="none" stroke="#ffd400" strokeWidth={4} strokeDasharray="10 5" pointerEvents="none" className="kbd-focus" />}
       </svg>
       {p.act && <MapToolsBar t={tools} map={map} isGm={p.isGm} nameOf={(id) => view.actors[id]?.public.name ?? 'Unknown Contact'} />}
-      <div className="zoom" role="group" aria-label="Map Zoom">
-        <button className="btn" onClick={() => zoomButton(1.25)} aria-label="Zoom In" title="Zoom In">+</button>
-        <button className="btn" onClick={() => zoomButton(0.8)} aria-label="Zoom Out" title="Zoom Out">−</button>
-        <button className="btn" onClick={fit} title="Fit Map to Screen">Fit</button>
-        {(p.followIds?.length ?? 0) > 0 && <button className="btn" onClick={focusAction} title="Center on the Action" aria-label="Center on the Action">◎</button>}
-        {p.onToggleMini && <button className={`btn hide-compact${p.showMini ? ' on' : ''}`} onClick={p.onToggleMini} aria-pressed={!!p.showMini} title="Overview Map">Mini</button>}
+      {/* Phones: the zoom controls fold to one button and step aside (fade out) while a token is under them. */}
+      <div className={`zoom${p.compact && !zoomOpen ? ' folded' : ''}${zoomTucked ? ' tucked' : ''}`} role="group" aria-label="Map Zoom"
+        aria-hidden={zoomTucked || undefined} onPointerDown={bumpZoom} onFocus={bumpZoom}>
+        {p.compact && !zoomOpen ? (
+          <button className="btn" onClick={() => { setZoomOpen(true); bumpZoom(); }} aria-label="Zoom Controls" aria-expanded={false} title="Zoom Controls" tabIndex={zoomTucked ? -1 : 0}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden><circle cx="7.5" cy="7.5" r="5" /><path d="M11.5 11.5L16 16M5.5 7.5h4M7.5 5.5v4" /></svg>
+          </button>
+        ) : (
+          <>
+            <button className="btn" onClick={() => zoomButton(1.25)} aria-label="Zoom In" title="Zoom In">+</button>
+            <button className="btn" onClick={() => zoomButton(0.8)} aria-label="Zoom Out" title="Zoom Out">−</button>
+            <button className="btn" onClick={fit} title="Fit Map to Screen">Fit</button>
+            {(p.followIds?.length ?? 0) > 0 && <button className="btn" onClick={focusAction} title="Center on the Action" aria-label="Center on the Action">◎</button>}
+            {p.onToggleMini && <button className={`btn hide-compact${p.showMini ? ' on' : ''}`} onClick={p.onToggleMini} aria-pressed={!!p.showMini} title="Overview Map">Mini</button>}
+            {p.compact && <button className="btn" onClick={() => setZoomOpen(false)} aria-label="Hide Zoom Controls" aria-expanded title="Hide Zoom Controls">×</button>}
+          </>
+        )}
       </div>
       {p.showMini && !p.compact && (
         <MiniMap map={map} view={view} box={box} fogPath={fogPath} fogFill={p.isGm ? 'rgba(2,4,14,0.5)' : 'rgba(2,4,14,0.78)'} darkPath={fog.dark} darkFill={p.isGm ? 'rgba(2,4,14,0.8)' : '#02040e'}

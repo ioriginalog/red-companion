@@ -10,6 +10,7 @@ import {
 } from '@cprc/rules-core';
 import type { ExtraOp, Intent, ViewState } from '@cprc/session';
 import { chanceToWinContest, pct } from '../odds.js';
+import { actionSpent, grabButton } from '../table/hints.js';
 import './extras.css';
 
 export interface ExtrasCtx {
@@ -51,6 +52,8 @@ export function CombatExtrasPanel({ c, actingId, targetId, canAct }: { c: Extras
     ? chanceToWinContest(brawl(ac, true) + (heldBy.ironGrip ? -2 : 0), brawl(view.actors[heldBy.holderId]!.combatant!, true))
     : null;
   const usable = canAct && !ac.conditions.unconscious && !ac.conditions.dead;
+  const spent = actionSpent(view.encounter, a.id);
+  const grab = grabButton({ hasTarget: !!t, near, actionSpent: spent, odds: grabOdds !== null ? pct(grabOdds) : null });
 
   return (
     <>
@@ -77,11 +80,11 @@ export function CombatExtrasPanel({ c, actingId, targetId, canAct }: { c: Extras
               </button>
             ) : (
               <>
-                <button className="btn" disabled={!t || !near} title={!t ? 'Pick a target.' : !near ? 'Needs an adjacent target.' : 'Action: opposed DEX + Brawling.'}
+                <button className="btn" disabled={grab.disabled} title={grab.title}
                   onClick={() => t && send(c, { kind: 'grab', actorId: a.id, targetId: t.id, choice: 'grapple' })}>
-                  Grab{grabOdds !== null ? ` · ${pct(grabOdds)}` : ''}
+                  {grab.label}
                 </button>
-                <button className="btn" disabled={!t || !near} title="Action: opposed DEX + Brawling to take something they hold."
+                <button className="btn" disabled={!t || !near || spent} title={!t ? 'Pick a target.' : !near ? 'Needs an adjacent target.' : spent ? 'Your Action is spent this Turn.' : 'Action: opposed DEX + Brawling to take something they hold.'}
                   onClick={() => t && send(c, { kind: 'grab', actorId: a.id, targetId: t.id, choice: 'takeItem', ...(itemId ? { weaponId: itemId } : {}) })}>
                   Snatch Item
                 </button>

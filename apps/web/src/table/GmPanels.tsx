@@ -5,6 +5,8 @@ import type { MapMode } from '../MapView.js';
 import type { TerrainStyle } from '../map/terrain.js';
 import { ALLEGIANCE, WOUND, type TableCtx } from './ctx.js';
 import { Portrait } from './panels.js';
+import { RosterCard } from './RosterCard.js';
+import { playerAdmin } from './roster.js';
 
 const CONDITIONS: [ConditionKey, string][] = [['prone', 'Prone'], ['unconscious', 'Unconscious'], ['stabilized', 'Stabilized'], ['dead', 'Dead']];
 
@@ -110,9 +112,10 @@ export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor
           <p className="dim small u-mt-8">Delay isn’t a RED Core rule. With it on, the acting character can take their Turn later this Round, before they move or act.</p>
         </section>
       )}
+      <RosterCard c={c} admin={playerAdmin(client)} />
       {actors.length > 0 && (
         <section className="card">
-          <div className="ttl">Roster</div>
+          <div className="ttl">Characters</div>
           <div className="roster">
             {actors.map((a) => (
               <div key={a.id} className="row roster-row">

@@ -27,6 +27,7 @@ import { AreaConfirm } from './table/AreaConfirm.js';
 import { clearPlacement, prunePlacement, shiftPlacement, usePlacementQueue } from './table/placement.js';
 import { requiredPrompt } from './table/required.js';
 import { defaultTerrainStyle, rubbleFrom, type TerrainStyle } from './map/terrain.js';
+import { noTargetHint } from './table/hints.js';
 
 type Tab = 'combat' | 'sheet' | 'chat' | 'notes' | 'net' | 'scene';
 /** Bottom sheet height on phones and portrait tablets. */
@@ -279,10 +280,10 @@ export function Table({ s }: { s: ClientState }) {
   const fireNow = canAct && !!targetId && !!weapon && !fireBlocked({ attack, usage, weapon }, !!view.pending);
   const chips = useMemo(() => (canAct ? targetChips(view, actingId, chances) : []), [view, actingId, chances, canAct]);
   const anyShot = useMemo(() => (canAct && actingId ? nearestTarget(view, actingId) !== null : false), [view, actingId, canAct]);
-  const targetHint = !canAct ? undefined
-    : chips.length === 0 ? 'No enemies in sight. Move to find a line of sight.'
-      : !anyShot ? `The party can see enemies, but none is in ${acting ? name(acting.id) : 'this character'}’s line of sight. Move for a clear shot.`
-        : layout.compact || layout.sheet ? 'Tap an enemy on the map or in the target strip.' : 'Click an enemy on the map.';
+  const targetHint = noTargetHint({
+    canAct, opponents: chips.length, anyShot, actingName: acting ? name(acting.id) : null,
+    friendly: acting ? isFriendly(acting) : true, touch: layout.compact || layout.sheet,
+  });
   // Turn banner: your own characters (for the GM, the NPCs the GM runs).
   const bannerTitle = currentId && view.actors[currentId] && !view.actors[currentId]!.placeholder && mine(currentId) && (!isGm || view.actors[currentId]!.controller === 'gm')
     ? (isGm ? `${name(currentId)}’s Turn` : 'Your Turn') : null;
@@ -379,7 +380,7 @@ export function Table({ s }: { s: ClientState }) {
         {view.map && (
           <div className="legend">
             <span><i className="sw-move" />Move</span>
-            <span><i className="sw-run" />Run (Uses Action)</span>
+            <span><i className="sw-run" />Run (uses the Action)</span>
             <span><i className="sw-watch" />Watch</span>
             <span><i className="sw-unseen" />Unseen</span>
           </div>
@@ -446,7 +447,7 @@ export function Table({ s }: { s: ClientState }) {
           {tab === 'sheet' && <SheetPanel c={c} preferId={isGm ? (focusId ?? actingId) : actingId} />}
           {tab === 'notes' && <NotesPanel c={c} />}
           {tab === 'net' && showNet && <NetPanel view={view} actorId={netActorId} isGm={isGm} canAct={mine(netActorId)} act={(i) => client.act(i)} feed={s.feed} />}
-          {tab === 'chat' && <ChatPanel c={c} rollerId={isGm ? (focusId ?? actingId) : (actingId ?? ownIds[0] ?? null)} onUnreadReset={() => setUnread(0)} />}
+          {tab === 'chat' && <ChatPanel c={c} rollerId={isGm ? (focusId ?? actingId) : (canAct ? actingId : ownIds[0] ?? null)} onUnreadReset={() => setUnread(0)} />}
           {tab === 'scene' && isGm && <ScenePanel c={c} mapMode={mapMode} setMapMode={setMapMode} terrainStyle={terrainStyle} setTerrainStyle={setTerrainStyle} shareCursor={gmCursor} setShareCursor={(v) => { setGmCursor(v); if (!v) client.signal({ kind: 'cursor', at: null }); }} onFocus={(id) => { setFocusId(id); setTab('combat'); }} />}
           {tab === 'scene' && isGm && <GmSystemsPanel c={c} />}
         </div>
