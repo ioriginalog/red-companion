@@ -83,11 +83,12 @@ export function GearPanel({ c, actingId, targetId, canAct }: { c: GearCtx; actin
   const spent = actionSpent(view.encounter, ac.id);
   const needsAction = !canAct || spent;
   const SPENT = 'Your Action is spent this Turn.';
-  const spentNote = spent && canAct ? <p className="gear-line gear-why" role="note">Action spent this Turn. These wait until the next Turn.</p> : null;
+  const spentNote = spent && canAct ? <p className="gear-line gear-why" role="note">Action spent this Turn. Shield and drug actions wait until the next Turn.</p> : null;
 
   return (
     <section className="card gear" aria-label={`${ac.name} Gear`}>
       <div className="ttl">Gear · {ac.name}</div>
+      {spentNote}
 
       <div className="gear-block">
         <div className="gear-sub">Shield</div>
@@ -119,7 +120,6 @@ export function GearPanel({ c, actingId, targetId, canAct }: { c: GearCtx; actin
             {grappling?.humanShield && <span className="gear-tag good">Human Shield: {c.name(grappling.heldId)}</span>}
           </div>
         )}
-        {spentNote}
       </div>
 
       <div className="gear-block">
@@ -133,7 +133,6 @@ export function GearPanel({ c, actingId, targetId, canAct }: { c: GearCtx; actin
             <button className="btn" disabled={needsAction} onClick={() => gear(c, { op: 'takeDrug', actorId: ac.id, targetId: t.id, drugId })} title={spent ? SPENT : 'A willing target next to you. Uses your Action.'}>Dose {t.public.name}</button>
           )}
         </div>
-        {spentNote}
         <p className="gear-line dim">{DRUG_TEMPLATES.find((d) => d.id === drugId)?.effect.note}</p>
         {(ac.drugs?.active ?? []).map((d) => (
           <div className="row gear-row gear-dose" key={`a-${d.id}`}>

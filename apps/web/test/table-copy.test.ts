@@ -68,7 +68,10 @@ describe('Start of Turn card', () => {
     const healed = tv(pa(combatant({ hp: { max: 40, current: 27 } })));
     expect(startOfTurnItems(healed, 'vex', feed)).toEqual([]);
     const dying = tv(pa(combatant({ hp: { max: 40, current: -3 } })), { deathSaveRequiredFor: 'vex' });
-    expect(startOfTurnItems(dying, 'vex', feed).map((r) => r.key)).toContain('deathSave');
+    expect(startOfTurnItems(dying, 'vex', feed).map((r) => r.text)).toContain('Vex rolls a Death Save before acting.');
+    // Healed during the Turn while the authority still asks for the save: say so truthfully.
+    const owed = tv(pa(combatant({ hp: { max: 40, current: 27 } })), { deathSaveRequiredFor: 'vex' });
+    expect(startOfTurnItems(owed, 'vex', feed)[0]!.text).toBe('Vex began this Turn Mortally Wounded and still rolls a Death Save before acting.');
   });
   it('reads Prone, On Fire and grapples from the state, live', () => {
     const v = tv(pa(combatant({ conditions: { prone: true, unconscious: false, dead: false, stabilized: false }, onFire: 2 }), { conditions: { prone: true } }));

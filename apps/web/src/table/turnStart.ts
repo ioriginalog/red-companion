@@ -8,7 +8,7 @@
  * flag is spent when the Turn starts). That one comes from the reminder the
  * authority logged for this Turn, and only while the Action is still spent.
  */
-import { turnReminders, type CombatEvent, type TurnReminder } from '@cprc/rules-core';
+import { turnReminders, woundState, type CombatEvent, type TurnReminder } from '@cprc/rules-core';
 import type { ViewState } from '@cprc/session';
 
 /** Intents that start a Turn. Entries may omit intentType for players (hidden content). */
@@ -54,7 +54,7 @@ export function startOfTurnItems(view: ViewState, currentId: string | null, feed
     // The Death Save line follows the encounter: it goes once the save is rolled or they're healed.
     .filter((r) => r.key !== 'deathSave');
   const out: TurnReminder[] = [];
-  if (enc.deathSaveRequiredFor === currentId) out.push({ key: 'deathSave', text: `${name} rolls a Death Save before acting.` });
+  if (enc.deathSaveRequiredFor === currentId) out.push({ key: 'deathSave', text: deathSaveLine(name, woundState(c.hp) === 'mortally') });
 
   // A lost Action, from this Turn's logged reminder, while the Action is still spent.
   if (usage?.actionUsed) {
@@ -73,4 +73,9 @@ export function startOfTurnItems(view: ViewState, currentId: string | null, feed
   out.push(...base);
   // Same rule as the authority: injuries alone don't make a card.
   return out.some((r) => r.key !== 'injury') ? out : [];
+}
+
+/** The Death Save line, true to the current HP: healed after the Turn began, the save is still owed (the authority asks for it). */
+export function deathSaveLine(name: string, mortallyNow: boolean): string {
+  return mortallyNow ? `${name} rolls a Death Save before acting.` : `${name} began this Turn Mortally Wounded and still rolls a Death Save before acting.`;
 }

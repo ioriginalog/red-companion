@@ -164,7 +164,9 @@ export function Prompts({ c, onPickScatter, scatterPicking }: { c: TableCtx; onP
   const seen = useRef<{ key: string; seq: number | null }>({ key: turnKey, seq: null });
   // A Turn that starts while we watch: its own entry is the one that just arrived.
   if (seen.current.key !== turnKey) seen.current = { key: turnKey, seq: view.seq };
-  const items = currentId && (isGm || mine(currentId)) ? startOfTurnItems(view, currentId, feed, seen.current.seq) : [];
+  // The Death Save prompt below says it with a button; the card doesn't repeat it.
+  const items0 = currentId && (isGm || mine(currentId)) ? startOfTurnItems(view, currentId, feed, seen.current.seq) : [];
+  const items = items0.some((r) => r.key !== 'deathSave' && r.key !== 'injury') ? items0.filter((r) => r.key !== 'deathSave') : [];
   const turnStart = lastTurnStart(feed);
   if (items.length) {
     out.push(
@@ -227,7 +229,7 @@ export function Prompts({ c, onPickScatter, scatterPicking }: { c: TableCtx; onP
     out.push(
       <div className="card prompt" key="ds">
         <div className="ttl">Death Save</div>
-        <p>{name(id)} is Mortally Wounded and must roll under BODY before acting.</p>
+        <p>{view.actors[id]?.public.woundState === 'mortally' ? `${name(id)} is Mortally Wounded and must roll under BODY before acting.` : `${name(id)} began this Turn Mortally Wounded and must still roll under BODY before acting.`}</p>
         <button className="cta" onClick={() => act({ type: 'deathSave', actorId: id })}>Roll Death Save</button>
       </div>,
     );
