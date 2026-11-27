@@ -10,22 +10,18 @@ import {
   type AimTarget, type Cell, type Combatant, type Modifier, type Weapon, WEAPON_TYPES,
 } from '@cprc/rules-core';
 import {
-  attackAvailability, extrasGate, extrasPenalties, SessionError, visionFor,
+  attackAvailability, extrasGate, extrasPenalties, lightingModifiers, senseOf, SessionError,
   type Intent, type ProjectedActor, type SessionState, type TacticalMap, type ViewState, type Watch,
 } from '@cprc/session';
 import { chanceToBeat, chanceToWinContest } from './odds.js';
+import { clientVision } from './map/vision.js';
 
 export const isFriendly = (a?: ProjectedActor) => !!a && (a.public.allegiance === 'party' || a.public.allegiance === 'ally');
 export const canSeeActor = (a: ProjectedActor) => !a.public.conditions.dead && !a.public.conditions.unconscious;
 
-/** What the party sees: shared sight of conscious friendly tokens, plus GM lighting overrides (same rule as the relay). */
+/** What the party sees: the relay's own vision function (lighting, senses, GM overrides); see map/vision.ts. */
 export function partyVision(view: ViewState): Set<string> {
-  const map = view.map;
-  if (!map) return new Set();
-  const seers = Object.entries(map.tokens)
-    .filter(([id]) => { const a = view.actors[id]; return !!a && isFriendly(a) && canSeeActor(a); })
-    .map(([, at]) => at);
-  return visionFor(map, seers);
+  return clientVision(view).vision;
 }
 
 export function occupancy(view: ViewState, moverId: string) {
@@ -132,7 +128,9 @@ export function previewAttack(view: ViewState, attackerId: string, targetId: str
   }
   try {
     const pv0 = previewRangedAttack({ attacker: a.combatant, defender, weapon: w, distance: distanceM, mode: mode === 'autofire' ? 'autofire' : 'single', aimTarget: aim });
-    const pv = { ...pv0, modifiers: [...pv0.modifiers, ...extra] };
+    // Lighting house rule (GM toggle): the same helper the authority uses.
+    const light = lightingModifiers(map, { at: from, sense: senseOf(a.combatant) }, to);
+    const pv = { ...pv0, modifiers: [...pv0.modifiers, ...extra, ...light] };
     const total = pv.base + pv.modifiers.reduce((s, m) => s + m.value, 0);
     return {
       ok: true, melee: false, distanceM, base: pv.base, modifiers: pv.modifiers, baseLabel: 'REF',

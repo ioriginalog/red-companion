@@ -13,6 +13,9 @@
  * - A token sees a square when it has line of sight and range to it and the
  *   square isn't dark, or the square is adjacent, or the token has Low Light
  *   or IR cyberoptics (dark counts as dim for them).
+ * - Party vision is the union of conscious friendly tokens' vision. A light
+ *   carried by a token the party can't see lights nothing for the party (so
+ *   its glow can't give the carrier away); see `partyView`.
  */
 import {
   gridDistance, hasLineOfSight, visibleCells,
@@ -70,9 +73,19 @@ export function lightLevels(map: TacticalMap): Map<string, LightLevel> | null {
   return out;
 }
 
-export function levelAt(map: TacticalMap, k: string, levels = lightLevels(map)): LightLevel {
-  if (!levels) return 'bright';
-  return levels.get(k) ?? map.ambient ?? 'bright';
+/** Light level of square `k`. On a player's projection the relay's `seen` string decides (unseen squares read as ambient). */
+export function levelAt(map: TacticalMap, k: string, levels?: Map<string, LightLevel> | null): LightLevel {
+  if (levels === undefined && map.seen && map.seen.length === map.width * map.height) {
+    const [x, y] = k.split(',').map(Number);
+    const ch = map.seen[y! * map.width + x!];
+    if (ch === 'B') return 'bright';
+    if (ch === 'D') return 'dim';
+    if (ch === 'K') return 'dark';
+    return lightingActive(map) ? map.ambient! : 'bright';
+  }
+  const lv = levels === undefined ? lightLevels(map) : levels;
+  if (!lv) return 'bright';
+  return lv.get(k) ?? map.ambient ?? 'bright';
 }
 
 /** Low Light or IR from cyberware (IR wins). */
@@ -86,8 +99,8 @@ export function senseOf(c: Combatant | undefined): Sense {
   return s;
 }
 
-/** Squares one seer can see. */
-export function seerVision(map: TacticalMap, seer: Seer, levels = lightLevels(map)): Set<string> {
+/** Squares one seer can see (shared, read-only). */
+export function seerVision(map: TacticalMap, seer: Seer, levels = lightLevels(map)): ReadonlySet<string> {
   const geo = visibleCells(map, seer.at, map.sightRange);
   if (!levels || seer.sense !== 'normal') return geo;
   const out = new Set<string>();
@@ -121,7 +134,7 @@ export function lightingModifiers(map: TacticalMap | null, attacker: { at?: Cell
 }
 
 /** One character per square for player projections ('0' unseen, 'B'/'D'/'K' seen at that light). */
-export function encodeSeen(map: TacticalMap, vision: Set<string>): string {
+export function encodeSeen(map: TacticalMap, vision: ReadonlySet<string>): string {
   const levels = lightLevels(map);
   let s = '';
   for (let y = 0; y < map.height; y++) {
@@ -161,15 +174,70 @@ export function partySeers(map: TacticalMap, actors: Record<string, Actor>, isFr
   return out;
 }
 
-/** Lights a player may receive: on squares the party sees, never carried by a token they can't see. */
-export function visibleLights(map: TacticalMap, vision: Set<string>, visibleTokenIds: Set<string>): Record<string, LightSource> | undefined {
+/** Union of what each seer sees, plus the GM's overrides (`revealAll`, `revealed`). */
+export function unionVision(map: TacticalMap, seers: Seer[]): Set<string> {
+  const out = new Set<string>();
+  if (map.lighting?.revealAll) {
+    for (let y = 0; y < map.height; y++) for (let x = 0; x < map.width; x++) out.add(`${x},${y}`);
+    return out;
+  }
+  const levels = lightLevels(map);
+  for (const s of seers) for (const k of levels ? seerVision(map, s, levels) : visibleCells(map, s.at, map.sightRange)) out.add(k);
+  for (const k of map.lighting?.revealed ?? []) out.add(k);
+  return out;
+}
+
+export interface PartyView {
+  vision: Set<string>;
+  /** `map` itself, or a copy without the lights carried by tokens the party can't see. Light levels come from this. */
+  lightMap: TacticalMap;
+}
+
+const viewCache = new WeakMap<TacticalMap, { key: string; view: PartyView }>();
+
+/**
+ * What the party sees. Two passes: first with every light, to learn which
+ * carriers are in view; then without the lights of carriers that aren't
+ * (and aren't friendly). Dropping lights only shrinks vision, and a carrier
+ * seen in the first pass still lights its own square, so two passes settle.
+ * Memoized per map object and seer set. Used by the relay's projection, the
+ * authority (spotting) and both clients, so fog and redaction always agree.
+ */
+export function partyView(map: TacticalMap, seers: Seer[], friendlyIds: ReadonlySet<string>): PartyView {
+  const key = `${seers.map((s) => `${s.at.x},${s.at.y},${s.sense}`).join(';')}|${[...friendlyIds].sort().join(',')}`;
+  const hit = viewCache.get(map);
+  if (hit && hit.key === key) return hit.view;
+  let view: PartyView = { vision: unionVision(map, seers), lightMap: map };
+  if (lightingActive(map) && !map.lighting?.revealAll) {
+    const hiddenCarrier = (l: LightSource) => {
+      if (!l.attachedTo || friendlyIds.has(l.attachedTo)) return false;
+      const at = map.tokens[l.attachedTo];
+      return !at || !view.vision.has(`${at.x},${at.y}`);
+    };
+    const lights = Object.values(map.lights ?? {});
+    if (lights.some((l) => l.on && hiddenCarrier(l))) {
+      const lightMap: TacticalMap = { ...map, lights: Object.fromEntries(lights.filter((l) => !hiddenCarrier(l)).map((l) => [l.id, l])) };
+      view = { vision: unionVision(lightMap, seers), lightMap };
+    }
+  }
+  viewCache.set(map, { key, view });
+  return view;
+}
+
+/**
+ * Lights a player may receive: on squares the party sees, never carried by a
+ * token they can't see. GM labels stay with the GM. Pass `partyView`'s
+ * `lightMap` so hidden carriers' lights are already gone.
+ */
+export function visibleLights(map: TacticalMap, vision: ReadonlySet<string>, visibleTokenIds: ReadonlySet<string>): Record<string, LightSource> | undefined {
   if (!map.lights) return undefined;
   const out: Record<string, LightSource> = {};
   for (const [id, l] of Object.entries(map.lights)) {
     if (l.attachedTo && !visibleTokenIds.has(l.attachedTo)) continue;
     const at = lightPosition(map, l);
     if (!at || !vision.has(`${at.x},${at.y}`)) continue;
-    out[id] = l;
+    const { label: _gmOnly, ...shown } = l;
+    out[id] = shown;
   }
   return out;
 }

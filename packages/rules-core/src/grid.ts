@@ -108,20 +108,40 @@ export function hasLineOfSight(map: GridMap, a: Cell, b: Cell): boolean {
 
 /**
  * Every square visible from `from`, within `range` squares (Chebyshev).
- * Brute force on purpose: 24×16 maps are ~400 rays, and reusing
+ * Brute force over the range's bounding box on purpose: reusing
  * `hasLineOfSight` keeps fog and targeting provably identical.
+ *
+ * Memoized by terrain, origin and range (lighting and party vision ask the
+ * same questions every time a token moves), so the result is shared:
+ * treat it as read-only.
  */
-export function visibleCells(map: GridMap, from: Cell, range = Infinity): Set<string> {
+export function visibleCells(map: GridMap, from: Cell, range = Infinity): ReadonlySet<string> {
+  const key = `${map.width}|${from.x},${from.y}|${range}`;
+  let byTerrain = visCache.get(map.cells);
+  const hit = byTerrain?.get(key);
+  if (hit) return hit;
   const out = new Set<string>();
-  for (let y = 0; y < map.height; y++) {
-    for (let x = 0; x < map.width; x++) {
+  const r = Number.isFinite(range) ? Math.max(0, Math.floor(range)) : Math.max(map.width, map.height);
+  const x0 = Math.max(0, from.x - r), x1 = Math.min(map.width - 1, from.x + r);
+  const y0 = Math.max(0, from.y - r), y1 = Math.min(map.height - 1, from.y + r);
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
       const c = { x, y };
-      if (gridDistance(from, c) > range) continue;
       if (hasLineOfSight(map, from, c)) out.add(cellKey(c));
     }
   }
+  if (!byTerrain) {
+    // A few terrains at once (scene switches, map editor); oldest dropped first.
+    if (visCache.size >= 4) visCache.delete(visCache.keys().next().value!);
+    byTerrain = new Map();
+    visCache.set(map.cells, byTerrain);
+  }
+  if (byTerrain.size >= 4000) byTerrain.clear();
+  byTerrain.set(key, out);
   return out;
 }
+
+const visCache = new Map<string, Map<string, ReadonlySet<string>>>();
 
 const DIRS: Cell[] = [
   { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 },

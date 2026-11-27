@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { bearing, cellKey, findPath, gridDistance, hasLineOfSight, type Cell } from '@cprc/rules-core';
-import type { Signal, ViewState } from '@cprc/session';
-import { isFriendly, moveRings, occupancy, partyVision, watchCells, wedgePath, type Attack } from './tactics.js';
+import { lightingActive, lightLevels, type Intent, type Signal, type ViewState } from '@cprc/session';
+import { isFriendly, moveRings, occupancy, watchCells, wedgePath, type Attack } from './tactics.js';
 import { pct } from './odds.js';
 import { PING_MS, type Signals } from './net.js';
 import { blastCells, shellCells, tokensIn, type AreaKind } from './table/area.js';
@@ -13,6 +13,11 @@ import { usePrefersReducedMotion } from './table/layout/useMedia.js';
 import { EFFECT_MS, type Effect } from './table/effects.js';
 import { labelSpots, tokenLabels } from './table/labels.js';
 import { ALLEGIANCE, WOUND } from './table/ctx.js';
+import { clientVision, seersOf } from './map/vision.js';
+import { pendingArea } from './map/pendingArea.js';
+import { AnnotationLayer, LightingLayer, LightsLayer, PendingAreaLayer } from './map/layers.js';
+import { useMapTools } from './map/useMapTools.js';
+import { MapToolsBar } from './map/MapTools.js';
 
 export type MapMode = 'move' | 'watch' | 'place' | 'ruler' | 'area' | 'reveal';
 
@@ -60,6 +65,10 @@ interface Props {
   hoverInfo?: (c: Cell) => string | null;
   /** Aimed square awaiting confirmation: the template stays here instead of following the pointer. */
   areaLock?: Cell | null;
+  /** 'gm' or this player's id (drawing ownership). */
+  me?: string;
+  /** Sends map tool intents (drawings, lights). Without it the tools are hidden. */
+  act?: (i: Intent) => boolean;
 }
 
 /** Smallest on-screen square in compact (phone) layout, in CSS px. */
@@ -76,7 +85,8 @@ type Gesture =
   | { kind: 'drag'; id: string; start: Cell; moved: boolean }
   | { kind: 'pinch'; dist: number; box: Box; mid: { x: number; y: number } }
   | { kind: 'ruler'; from: Cell }
-  | { kind: 'reveal'; add: boolean; cells: Set<string> };
+  | { kind: 'reveal'; add: boolean; cells: Set<string> }
+  | { kind: 'tool' };
 
 export function MapView(p: Props) {
   const { view, actingId, mode } = p;
@@ -206,13 +216,11 @@ export function MapView(p: Props) {
     if (mode !== 'ruler' && ruler) { setRuler(null); p.onSignal({ kind: 'measure', from: ruler.from, to: null }); }
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Vision depends only on the map and on which friendly tokens can see. The GM's view rebuilds
-  // `actors` on every entry, so key on a signature instead of the object (LOS is the hot path).
-  const seerSig = Object.keys(map.tokens).filter((id) => {
-    const a = view.actors[id];
-    return a && isFriendly(a) && !a.public.conditions.dead && !a.public.conditions.unconscious;
-  }).sort().join(',');
-  const vision = useMemo(() => partyVision(view), [view.map, seerSig]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Vision depends only on the map and on which friendly tokens can see (and how). The GM's view
+  // rebuilds `actors` on every entry, so key on a signature instead of the object (LOS is the hot path).
+  const seerSig = useMemo(() => seersOf(view).sig, [view]);
+  const cv = useMemo(() => clientVision(view), [view.map, seerSig]); // eslint-disable-line react-hooks/exhaustive-deps
+  const vision = cv.vision;
   const showFog = !p.isGm || p.partyFog;
   const rings = useMemo(() => (actingId && p.canAct ? moveRings(view, actingId) : null), [view, actingId, p.canAct]);
   const actingAt = actingId ? map.tokens[actingId] : undefined;
@@ -221,6 +229,19 @@ export function MapView(p: Props) {
   // Seen-before squares dim; never-seen squares go dark (exploration fog).
   const fog = useMemo(() => (showFog ? fogPaths(map, vision, S) : { dim: '', dark: '' }), [vision, showFog, map.width, map.height, map.explored, S]); // eslint-disable-line react-hooks/exhaustive-deps
   const fogPath = fog.dim;
+  // Light levels: the GM's own view shades the whole map; fogged views shade what the party sees.
+  const lit = lightingActive(map);
+  const gmLevels = useMemo(() => (p.isGm && !showFog && lit ? lightLevels(map) : null), [p.isGm, showFog, lit, map]);
+  const levels = showFog ? cv.levels : gmLevels;
+  const tools = useMapTools({ map, isGm: p.isGm, me: p.me ?? (p.isGm ? 'gm' : ''), act: p.act });
+  const incoming = useMemo(() => pendingArea(view), [view.pending, view.map]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shownLights = useMemo(() => {
+    const d = tools.lightDrag;
+    const l = d ? map.lights?.[d.id] : undefined;
+    return l && d ? { ...map.lights, [d.id]: { ...l, at: d.at } } : map.lights;
+  }, [map.lights, tools.lightDrag]); // eslint-disable-line react-hooks/exhaustive-deps
+  const annList = useMemo(() => (tools.draft ? [...tools.annotations, tools.draft] : tools.annotations), [tools.annotations, tools.draft]);
+  const inSquares = (clientX: number, clientY: number) => { const pt = toMap(clientX, clientY); return pt ? { x: pt.x / S, y: pt.y / S } : null; };
 
   const toMap = (clientX: number, clientY: number) => {
     const m = svgRef.current?.getScreenCTM();
@@ -279,6 +300,8 @@ export function MapView(p: Props) {
     const c = cellAtClient(e.clientX, e.clientY);
     if (e.altKey && c) { p.onSignal({ kind: 'ping', at: c }); consumed.current = true; return; }
     clearLong();
+    const sq = tools.panel ? inSquares(e.clientX, e.clientY) : null;
+    if (sq && tools.down(sq, c)) { gesture.current = { kind: 'tool' }; return; }
     if (c) {
       longPress.current = window.setTimeout(() => {
         consumed.current = true;
@@ -295,7 +318,7 @@ export function MapView(p: Props) {
       setRevealDraft({ add, cells });
       return;
     }
-    if (tok && c && (mode === 'move' || mode === 'place') && p.canDrag(tok)) { gesture.current = { kind: 'drag', id: tok, start: c, moved: false }; return; }
+    if (tok && c && !tools.panel && (mode === 'move' || mode === 'place') && p.canDrag(tok)) { gesture.current = { kind: 'drag', id: tok, start: c, moved: false }; return; }
     gesture.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, box, moved: false, cell: c };
   };
 
@@ -310,6 +333,7 @@ export function MapView(p: Props) {
     }
     const g = gesture.current;
     if (!g) return;
+    if (g.kind === 'tool') { const sq = inSquares(e.clientX, e.clientY); if (sq) tools.move(sq, c); return; }
     if (g.kind === 'pinch' && pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       const d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
@@ -348,7 +372,8 @@ export function MapView(p: Props) {
     setDragTo(null);
     if (consumed.current) { consumed.current = false; setRevealDraft(null); return; }
     if (!g) return;
-    if (g.kind === 'pan') { if (!g.moved && g.cell) click(g.cell); return; }
+    if (g.kind === 'tool') { const sq = inSquares(e.clientX, e.clientY); tools.up(sq ?? { x: 0, y: 0 }, c); return; }
+    if (g.kind === 'pan') { if (!g.moved && g.cell && !tools.panel) click(g.cell); return; }
     if (g.kind === 'drag') {
       if (g.moved && c && (c.x !== g.start.x || c.y !== g.start.y)) p.onDrop(g.id, c, { run: runAt(c) });
       else click(g.start);
@@ -452,6 +477,8 @@ export function MapView(p: Props) {
     return nx === b.x && ny === b.y ? b : clampBox({ ...b, x: nx, y: ny }, W, H);
   });
   const onKeyDown = (e: React.KeyboardEvent<SVGSVGElement>) => {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && (tools.selAnn || tools.selLight)) { e.preventDefault(); tools.removeSelected(); return; }
+    if (e.key === 'Escape' && tools.panel) { tools.setPanel(null); return; }
     if (!kbdMode) setKbdMode(true);
     const dirs: Record<string, [number, number]> = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
     const d = dirs[e.key];
@@ -488,11 +515,11 @@ export function MapView(p: Props) {
         onKeyDown={onKeyDown}
         onFocus={() => setHasFocus(true)}
         onBlur={(e) => { if (!svgRef.current?.contains(e.relatedTarget as Node)) { setHasFocus(false); } }}
-        className={`mode-${mode}${gesture.current?.kind === 'pan' && (gesture.current as { moved: boolean }).moved ? ' panning' : ''}`}
+        className={`mode-${mode}${tools.panel ? ` tool-${tools.panel}` : ''}${gesture.current?.kind === 'pan' && (gesture.current as { moved: boolean }).moved ? ' panning' : ''}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={(e) => { pointers.current.delete(e.pointerId); gesture.current = null; clearLong(); setDragTo(null); }}
+        onPointerCancel={(e) => { pointers.current.delete(e.pointerId); if (gesture.current?.kind === 'tool') tools.up({ x: -1, y: -1 }, null); gesture.current = null; clearLong(); setDragTo(null); }}
         onPointerLeave={() => { setHover(null); setTipFor(null); if (p.shareCursor) p.onSignal({ kind: 'cursor', at: null }); }}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -519,6 +546,10 @@ export function MapView(p: Props) {
         {map.background ? <image href={map.background} x={0} y={0} width={W} height={H} preserveAspectRatio="none" /> : <rect width={W} height={H} fill="#0b1230" />}
 
         {gridLayer}
+
+        {/* Light: dim and dark squares, then the light sources' glow. */}
+        <LightingLayer map={map} levels={levels} vision={vision} scope={showFog ? 'vision' : 'map'} S={S} />
+        <LightsLayer map={map} lights={shownLights} S={S} selected={tools.panel === 'light' ? tools.selLight : null} editable={p.isGm} />
 
         {/* Movement rings: cyan = Move, yellow = Run (uses the Action). */}
         {(mode === 'move' || dragTo) && ringsLayer}
@@ -564,6 +595,10 @@ export function MapView(p: Props) {
 
         {showFog && <path d={fogPath} fill={p.isGm ? 'rgba(2,4,14,0.5)' : 'rgba(2,4,14,0.78)'} pointerEvents="none" />}
         {showFog && fog.dark && <path d={fog.dark} fill={p.isGm ? 'rgba(2,4,14,0.8)' : '#02040e'} pointerEvents="none" />}
+
+        {/* Drawings and the incoming area attack sit above the fog: both are already meant for this viewer. */}
+        <AnnotationLayer list={annList} S={S} selected={tools.panel === 'draw' ? tools.selAnn : null} isGm={p.isGm} offset={tools.annOffset} />
+        {incoming && <PendingAreaLayer area={incoming} S={S} />}
 
         {path && pathFrom && (
           <g pointerEvents="none">
@@ -741,6 +776,7 @@ export function MapView(p: Props) {
         })()}
         {hasFocus && kbdMode && kbd && <rect x={kbd.x * S + 1} y={kbd.y * S + 1} width={S - 2} height={S - 2} fill="none" stroke="#ffd400" strokeWidth={4} strokeDasharray="10 5" pointerEvents="none" className="kbd-focus" />}
       </svg>
+      {p.act && <MapToolsBar t={tools} map={map} isGm={p.isGm} nameOf={(id) => view.actors[id]?.public.name ?? 'Unknown Contact'} />}
       <div className="zoom" role="group" aria-label="Map Zoom">
         <button className="btn" onClick={() => zoomButton(1.25)} aria-label="Zoom In" title="Zoom In">+</button>
         <button className="btn" onClick={() => zoomButton(0.8)} aria-label="Zoom Out" title="Zoom Out">−</button>

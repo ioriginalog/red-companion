@@ -301,7 +301,7 @@ export function Table({ s }: { s: ClientState }) {
             showMini={showMini} onToggleMini={() => { const v = !showMini; setShowMini(v); store.set('nsc.minimap', v ? '1' : '0'); }}
             mode={effMode} areaKind={scatterPick ? 'blast' : areaKind} partyFog={partyFog} neutralTemplate={!!scatterPick}
             hoverInfo={(cell) => { const ci = view.map ? coverAt(view.map, cell) : null; return ci ? coverLabel(ci, isGm) : null; } /* */} focusId={isGm ? focusId : null} highlight={highlight}
-            shareCursor={!isGm || gmCursor}
+            shareCursor={!isGm || gmCursor} me={c.me} act={c.act}
             signals={s.signals} effects={effects} nameOf={(f) => client.nameOf(f)}
             canDrag={(id) => isGm || (mine(id) && (!enc.active || currentId === id))}
             onToken={pickToken}
