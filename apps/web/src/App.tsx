@@ -3,6 +3,7 @@ import { client } from './net.js';
 import { Table } from './Table.js';
 import { GmShell } from './editors/GmShell.js';
 import { SessionMenu } from './SessionMenu.js';
+import { DISCLAIMER } from './legal.js';
 
 // End-to-end tests drive the client through this hook; it's only set when a
 // test has opted in on this device (localStorage nsc.e2e = 1).
@@ -44,15 +45,15 @@ function Home({ busy, toast, lockedUntil }: { busy: boolean; toast: string | nul
 
         <h2>Join a Session</h2>
         <form className="stack" onSubmit={(e) => { e.preventDefault(); if (code.trim()) client.join(code, name); }}>
-          <input aria-label="Join code" placeholder="Join code" value={code} maxLength={8} onChange={(e) => setCode(e.target.value.toUpperCase())} style={{ letterSpacing: '0.2em', fontWeight: 700 }} />
-          <input aria-label="Your name" placeholder="Your name" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
+          <input aria-label="Join Code" placeholder="Join code" value={code} maxLength={8} onChange={(e) => setCode(e.target.value.toUpperCase())} style={{ letterSpacing: '0.2em', fontWeight: 700 }} />
+          <input aria-label="Your Name" placeholder="Your name" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
           <button className="cta" disabled={!code.trim() || busy}>Join</button>
         </form>
 
         <h2>Run a Session</h2>
         <div className="stack">
           {saved.length > 0 && (
-            <ul className="saved-sessions" aria-label="Your sessions on this device" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
+            <ul className="saved-sessions" aria-label="Your Sessions on This Device" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
               {saved.map((g, i) => (
                 <li key={g.sessionId} className="row" style={{ gap: 6 }}>
                   <button className={`btn${i === 0 ? ' yellow' : ''}`} style={{ flex: 1 }} disabled={busy} onClick={() => void client.resumeGm(g)}>
@@ -60,11 +61,11 @@ function Home({ busy, toast, lockedUntil }: { busy: boolean; toast: string | nul
                   </button>
                   {forgetting === g.sessionId ? (
                     <>
-                      <button className="btn danger" onClick={() => { client.forgetGm(g.sessionId); setForgetting(null); }} aria-label={`Confirm forgetting session ${g.joinCode}`}>Forget</button>
+                      <button className="btn danger" onClick={() => { client.forgetGm(g.sessionId); setForgetting(null); }} aria-label={`Confirm Forgetting Session ${g.joinCode}`}>Forget</button>
                       <button className="btn ghost" onClick={() => setForgetting(null)}>Keep</button>
                     </>
                   ) : (
-                    <button className="btn ghost" onClick={() => setForgetting(g.sessionId)} aria-label={`Forget session ${g.joinCode} on this device`} title="Remove this GM key from this device">Forget</button>
+                    <button className="btn ghost" onClick={() => setForgetting(g.sessionId)} aria-label={`Forget Session ${g.joinCode} on This Device`} title="Remove this GM key from this device.">Forget</button>
                   )}
                 </li>
               ))}
@@ -72,9 +73,9 @@ function Home({ busy, toast, lockedUntil }: { busy: boolean; toast: string | nul
           )}
           {forgetting && <div className="dim" role="status" style={{ fontSize: 13 }}>Forgetting removes the GM key from this device. Without a GM backup you can’t run that session again.</div>}
           <button className="btn" disabled={busy} onClick={() => void client.createSession()}>Create a New Session</button>
-          <button className="btn ghost" disabled={busy} onClick={() => importRef.current?.click()} title="Open a GM backup, or restore a session export as a new session">Import Session or GM Backup</button>
+          <button className="btn ghost" disabled={busy} onClick={() => importRef.current?.click()} title="Open a GM backup, or restore a session export as a new session.">Import Session or GM Backup</button>
           <input
-            ref={importRef} type="file" accept="application/json,.json" hidden aria-label="Session export or GM backup file"
+            ref={importRef} type="file" accept="application/json,.json" hidden aria-label="Session Export or GM Backup File"
             onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void client.importSession(f); }}
           />
         </div>
@@ -82,10 +83,8 @@ function Home({ busy, toast, lockedUntil }: { busy: boolean; toast: string | nul
           ? <div className="warn" role="status" aria-live="polite" style={{ marginTop: 14 }}>Too many failed attempts from this network. Retrying in {lockLeft} {lockLeft === 1 ? 'second' : 'seconds'}.</div>
           : toast && <div className="warn" style={{ marginTop: 14 }}>{toast}</div>}
 
-        <p className="fine">
-          Unofficial content provided under the Homebrew Content Policy of R. Talsorian Games and is not approved or endorsed by RTG.
-          This content references materials that are the property of R. Talsorian Games and its licensees. Free and non-commercial.
-        </p>
+        <p className="fine">{DISCLAIMER}</p>
+        <p className="fine">Free and non-commercial.</p>
       </div>
     </div>
   );

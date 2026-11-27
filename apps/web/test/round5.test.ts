@@ -52,3 +52,30 @@ describe('contrast (WCAG AA)', async () => {
     expect(css).toMatch(/\.stat:disabled[^{]*\{[^}]*opacity:\s*1/);
   });
 });
+
+describe('/check with a character name', async () => {
+  const { parseCommand, joinNames } = await import('../src/table/commands.js');
+  const rollable = [
+    { id: 'enf', name: 'Enforcer', skills: ['Brawling'] },
+    { id: 'g1', name: 'Street Ganger', skills: ['Handgun'] },
+    { id: 'g2', name: 'Street Ganger B', skills: ['Handgun'] },
+  ];
+  const ctx = { actorId: null, skills: [], recipients: [], rollable };
+  it('rolls for the named NPC', () => {
+    expect(parseCommand('/check Enforcer COOL vs 15', ctx)).toMatchObject({ kind: 'intent', intent: { type: 'rollCheck', actorId: 'enf', stat: 'COOL', dv: 15 } });
+    expect(parseCommand('/check enf Brawling', ctx)).toMatchObject({ intent: { actorId: 'enf', skill: 'Brawling' } });
+  });
+  it('prefers the exact multi-word name and reports ambiguity', () => {
+    expect(parseCommand('/check Street Ganger REF+Handgun', ctx)).toMatchObject({ intent: { actorId: 'g1' } });
+    expect(parseCommand('/check Street Ganger B REF', ctx)).toMatchObject({ intent: { actorId: 'g2' } });
+    expect(parseCommand('/check Str REF', ctx)).toMatchObject({ kind: 'error' });
+  });
+  it('still works without a name', () => {
+    expect(parseCommand('/check REF+Handgun vs 13', { ...ctx, actorId: 'g1', skills: ['Handgun'] })).toMatchObject({ intent: { actorId: 'g1', skill: 'Handgun' } });
+  });
+  it('joins lists the Chicago way', () => {
+    expect(joinNames(['A'])).toBe('A');
+    expect(joinNames(['A', 'B'])).toBe('A and B');
+    expect(joinNames(['A', 'B', 'C'])).toBe('A, B, and C');
+  });
+});

@@ -64,7 +64,7 @@ function RoleSection({ c, a, cb, can }: { c: SystemsCtx; a: ProjectedActor; cb: 
             {AWARENESS.map((d) => (
               <label key={d.key} title={d.summary} className={draft && !d.allowed(alloc[d.key] ?? 0) ? 'bad' : ''}>
                 <span>{d.name}</span>
-                <input type="number" min={0} max={10} value={alloc[d.key] ?? 0} disabled={!can} aria-label={`${d.name} points`}
+                <input type="number" min={0} max={10} value={alloc[d.key] ?? 0} disabled={!can} aria-label={`${d.name} Points`}
                   onChange={(e) => setDraft({ ...alloc, [d.key]: Math.max(0, Math.min(10, Number(e.target.value) || 0)) })} />
               </label>
             ))}

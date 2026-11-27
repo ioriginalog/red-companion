@@ -9,6 +9,7 @@ import {
   TERRAINS, tokensOnBlocked, undo, uniqueMapId, type History, MAX_SQUARES,
 } from './mapModel.js';
 import './editors.css';
+import { joinNames } from '../table/format.js';
 
 type Source = 'active' | 'library' | 'new';
 type Tool = 'brush' | 'rect' | 'fill';
@@ -136,7 +137,7 @@ export function MapEditor({ s }: { s: ClientState }) {
       if (act({ type: 'setMap', map: next })) {
         setDraft(next);
         setMsg(stuck.length
-          ? { tone: 'warn', text: `Updated the live map. ${stuck.length} token${stuck.length > 1 ? 's stand' : ' stands'} on a blocked square: ${stuck.map((id) => view.actors[id]?.public.name ?? id).join(', ')}.` }
+          ? { tone: 'warn', text: `Updated the live map. ${stuck.length} token${stuck.length > 1 ? 's stand' : ' stands'} on a blocked square: ${joinNames(stuck.map((id) => view.actors[id]?.public.name ?? id))}.` }
           : { tone: 'ok', text: 'Updated the live map. Tokens stayed where they were.' });
       }
       return;
@@ -234,7 +235,7 @@ export function MapEditor({ s }: { s: ClientState }) {
                         {COVER_MATERIALS.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.hp} HP)</option>)}
                       </select>
                     </label>
-                    <button className="btn sm" title="Set every cover square on this map to the selected material, at full HP"
+                    <button className="btn sm" title="Set every cover square on this map to the selected material, at full HP."
                       onClick={() => draft && setDraft({ ...draft, cover: allCover(cells, draft.width, coverMat) })}>Apply to All Cover</button>
                   </>
                 )}
@@ -420,7 +421,7 @@ function PaintCanvas({ map, tool, terrain, size, outline, zoom, actors, onPaint,
         height={H * zoom}
         viewBox={`0 0 ${W} ${H}`}
         role="application"
-        aria-label={`Terrain painter for ${map.name}. Use the toolbar to pick a tool and terrain.`}
+        aria-label={`Terrain Painter for ${map.name}`} aria-description="Use the toolbar to pick a tool and terrain."
         onPointerDown={(e) => {
           if (e.button !== 0) return;
           const c = cellAt(e);

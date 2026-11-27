@@ -62,7 +62,7 @@ export function ActionBar(p: ActionBarProps) {
     ...(stabilize && t ? [{ key: 'stab', label: 'Stabilize', disabled: !!usage?.actionUsed || !!view.pending, title: `Stabilize ${t.public.name} with ${stabilize} (uses your Action; must be adjacent)`, run: () => { if (actingId) c.act({ type: 'stabilize', medicId: actingId, targetId: t.id, skill: stabilize }); } }] : []),
     ...(isGm ? [
       { key: 'place', label: 'Place', on: mapMode === 'place', disabled: !view.map, title: 'Select a token, then tap a square to put it there.', run: () => toggle('place') },
-      { key: 'party', label: 'Party View', on: p.partyFog, disabled: !view.map, title: 'Show what the party can see', run: () => p.setPartyFog(!p.partyFog) },
+      { key: 'party', label: 'Party View', on: p.partyFog, disabled: !view.map, title: 'Show what the party can see.', run: () => p.setPartyFog(!p.partyFog) },
       { key: 'undo', label: 'Undo', run: () => client.undo() },
       ...(enc.active ? [{ key: 'endenc', label: 'End Encounter', run: () => { c.act({ type: 'endEncounter' }); } }] : []),
     ] : []),

@@ -46,7 +46,7 @@ export function RoleField({ value, onChange }: { value: RoleState | null; onChan
               return (
                 <label key={a.key} className={`fld aw${ok ? '' : ' bad'}`} title={a.summary}>
                   <span>{a.name}</span>
-                  <input type="number" min={0} max={10} value={v} aria-label={`${a.name} points`}
+                  <input type="number" min={0} max={10} value={v} aria-label={`${a.name} Points`}
                     onChange={(e) => onChange({ ...role, awareness: { ...role.awareness, [a.key]: Math.max(0, Math.min(10, Number(e.target.value) || 0)) } })} />
                   <small className="dim">{a.summary}</small>
                 </label>
@@ -149,7 +149,7 @@ export function CyberwareField({ value, emp, onChange }: { value: CyberwareItem[
             <label className="chip"><input type="checkbox" checked={!!item.borgware} onChange={(e) => upd(i, { borgware: e.target.checked || undefined })} /> Borgware</label>
             {item.effects.map((e, k) => (
               <span className="chip" key={k}>{effectText(e)}
-                <button className="x" aria-label={`Remove effect ${effectText(e)}`} onClick={() => upd(i, { effects: item.effects.filter((_, j) => j !== k) })}>×</button>
+                <button className="x" aria-label={`Remove Effect: ${effectText(e)}`} onClick={() => upd(i, { effects: item.effects.filter((_, j) => j !== k) })}>×</button>
               </span>
             ))}
             <EffectAdder onAdd={(e) => upd(i, { effects: [...item.effects, e] })} />

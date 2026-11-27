@@ -8,3 +8,9 @@ export function signed(n: number): string {
 }
 /** "−2" for negatives, plain otherwise. */
 export const num = (n: number) => (n < 0 ? `${MINUS}${-n}` : `${n}`);
+
+/** "A", "A and B", "A, B, and C" (Chicago: serial comma). */
+export function joinNames(names: string[]): string {
+  if (names.length <= 2) return names.join(' and ');
+  return `${names.slice(0, -1).join(', ')}, and ${names.at(-1)}`;
+}

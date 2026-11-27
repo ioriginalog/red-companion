@@ -106,7 +106,7 @@ export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor
                   <button className="btn sm" onClick={() => c.act({ type: 'addToInitiative', actorId: a.id })} title={`Roll ${a.public.name} into the Turn order`}>Add to Initiative</button>
                 )}
                 {a.public.allegiance === 'party' && (
-                  <select aria-label={`Who plays ${a.public.name}`} value={a.controller} onChange={(e) => c.act({ type: 'assignController', actorId: a.id, controller: e.target.value })}>
+                  <select aria-label={`Who Plays ${a.public.name}`} value={a.controller} onChange={(e) => c.act({ type: 'assignController', actorId: a.id, controller: e.target.value })}>
                     <option value="gm">GM</option>
                     {c.s.players.map((p) => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
                   </select>

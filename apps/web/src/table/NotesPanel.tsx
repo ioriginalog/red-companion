@@ -8,6 +8,7 @@ import type { Handout } from '@cprc/session';
 import { loadImage, prepareMapImage, scaledSize, storeImage } from '../assets.js';
 import { client } from '../net.js';
 import type { TableCtx } from './ctx.js';
+import { joinNames } from './format.js';
 
 type Draft = { id: string | null; title: string; body: string; imageUrl: string; audience: 'all' | 'gm' | string[] };
 const EMPTY: Draft = { id: null, title: '', body: '', imageUrl: '', audience: 'gm' };
@@ -17,7 +18,7 @@ const newId = () => `h-${Date.now().toString(36)}-${Math.random().toString(36).s
 export function audienceLabel(a: Handout['audience'], who: (id: string) => string): string {
   if (a === 'all') return 'Everyone';
   if (a === 'gm') return 'GM Journal';
-  return a.map(who).join(', ');
+  return joinNames(a.map(who));
 }
 
 export function NotesPanel({ c }: { c: TableCtx }) {

@@ -303,7 +303,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
                     return (
                       <label key={k.name} className={`skill${lv > 0 ? ' on' : ''}`}>
                         <span>{k.name} <span className="dim" style={{ fontSize: 11 }}>{k.stat}</span></span>
-                        <input type="number" min={0} max={SKILL_MAX} value={lv} aria-label={`${k.name} level`}
+                        <input type="number" min={0} max={SKILL_MAX} value={lv} aria-label={`${k.name} Level`}
                           onChange={(e) => set({ skills: { ...draft.skills, [k.name]: Math.max(0, Math.min(SKILL_MAX, Number(e.target.value) || 0)) } })} />
                         <span className="base" title={`${k.stat} + ${k.name}`}>{draft.stats[k.stat as StatKey] + lv}</span>
                       </label>
@@ -344,12 +344,12 @@ export function CharacterEditor({ s }: { s: ClientState }) {
                 <AmmoSelect type={w.type} value={w.ammoType} onChange={(ammoType) => upd({ ammoType })} era2070s={!!view.netrun?.quickhacks2070s} />
                 <label className="fld"><span>Damage</span>
                   <input type="number" min={1} max={10} value={w.damageDiceOverride ?? ''} placeholder={`${p.damageDice}d6`}
-                    onChange={(e) => upd({ damageDiceOverride: e.target.value ? Number(e.target.value) : null })} aria-label={`${w.name} damage dice override (d6)`} />
+                    onChange={(e) => upd({ damageDiceOverride: e.target.value ? Number(e.target.value) : null })} aria-label={`${w.name} Damage Dice Override (d6)`} />
                 </label>
                 <button className="iconbtn" aria-label={`Remove ${w.name}`} onClick={() => set({ weapons: draft.weapons.filter((_, j) => j !== i) })}>✕</button>
               </div>
               {isFirearm(w.type) && (
-                <div className="wopts" aria-label={`${w.name} attachments`}>
+                <div className="wopts" aria-label={`${w.name} Attachments`}>
                   <label title="+1 to ranged attacks when wired in through a Neural Link with Interface Plugs or a Subdermal Grip.">
                     <input type="checkbox" checked={!!w.smartgunLink} onChange={(e) => upd({ smartgunLink: e.target.checked || undefined })} /> Smartgun Link
                   </label>

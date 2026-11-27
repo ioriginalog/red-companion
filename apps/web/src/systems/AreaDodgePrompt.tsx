@@ -1,5 +1,6 @@
 /** Area-attack dodge decisions: mount with the other pending prompts (Combat panel). */
 import type { Intent, ProjectedPending, ViewState } from '@cprc/session';
+import { joinNames } from '../table/format.js';
 
 interface Props {
   view: ViewState;
@@ -31,7 +32,7 @@ export function AreaDodgePrompt({ view, isGm, mine, name, act }: Props) {
       ))}
       {isGm && (
         <div className="row" style={{ flexWrap: 'wrap' }}>
-          <span className="dim" style={{ flex: 1 }}>{open.length ? `Waiting on ${open.map(name).join(', ')}.` : 'Resolving…'}</span>
+          <span className="dim" style={{ flex: 1 }}>{open.length ? `Waiting on ${joinNames(open.map(name))}.` : 'Resolving…'}</span>
           <button className="btn" disabled={!open.length} onClick={() => act({ type: 'resolveAreaDodges', pendingId: p.id })}>Everyone Left Dodges</button>
         </div>
       )}

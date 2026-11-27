@@ -5,6 +5,7 @@ import { narrate } from '../narrate.js';
 import { COMMANDS } from './panels.js';
 import { parseCommand, type Recipient } from './commands.js';
 import type { TableCtx } from './ctx.js';
+import { joinNames } from './format.js';
 
 interface LocalLine { id: number; text: string; tone: 'error' | 'help' }
 
@@ -72,14 +73,17 @@ export function ChatPanel({ c, rollerId, onUnreadReset }: { c: TableCtx; rollerI
   useEffect(() => { if (local.length) jump(); }, [local.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = () => {
-    const r = parseCommand(text, { actorId: roller?.combatant ? roller.id : null, skills: Object.keys(roller?.combatant?.skills ?? {}), recipients });
+    const rollable = Object.values(c.view.actors)
+      .filter((a) => a.combatant && !a.placeholder && (c.isGm || a.controller === c.me))
+      .map((a) => ({ id: a.id, name: a.public.name, skills: Object.keys(a.combatant!.skills) }));
+    const r = parseCommand(text, { actorId: roller?.combatant ? roller.id : null, skills: Object.keys(roller?.combatant?.skills ?? {}), recipients, rollable });
     if (r.kind === 'empty') return;
     if (r.kind === 'help') { setLocal((l) => [...l, ...COMMANDS.map(([k, v]) => ({ id: ++n.current, text: `${k}: ${v}`, tone: 'help' as const }))]); setText(''); return; }
     if (r.kind === 'error') { setLocal((l) => [...l, { id: ++n.current, text: r.message, tone: 'error' }]); return; }
     if (c.act(r.intent)) { setHist((h) => [text, ...h].slice(0, 30)); setHIdx(-1); setText(''); }
   };
 
-  const recipientName = (ids: string[]) => ids.map((id) => (id === 'gm' ? 'GM' : id === c.me ? 'you' : c.who(id))).join(', ');
+  const recipientName = (ids: string[]) => joinNames(ids.map((id) => (id === 'gm' ? 'GM' : id === c.me ? 'you' : c.who(id))));
 
   const render = (e: CombatEvent, key: string) => {
     const whisper = e.audience && e.audience.length ? <span className="tag whisper">{e.type === 'chatMessage' ? `To ${recipientName(e.audience.filter((x) => x !== (e as { by?: string }).by))}` : 'Private'}</span> : null;

@@ -68,7 +68,7 @@ export function SessionMenu({ s }: { s: ClientState }) {
           </div>
         )}
         {confirm === 'leave' && (
-          <div className="warn" role="alertdialog" aria-label="Confirm leaving" style={{ marginTop: 12 }}>
+          <div className="warn" role="alertdialog" aria-label="Confirm Leaving" style={{ marginTop: 12 }}>
             {isGm
               ? 'Leave this session? Players stay connected and can’t act until you return. Your GM key stays saved on this device.'
               : 'Leave this session? You can rejoin as yourself with the same join code on this device.'}
@@ -79,7 +79,7 @@ export function SessionMenu({ s }: { s: ClientState }) {
           </div>
         )}
         {confirm === 'forget' && (
-          <div className="warn" role="alertdialog" aria-label="Confirm forgetting" style={{ marginTop: 12 }}>
+          <div className="warn" role="alertdialog" aria-label="Confirm Forgetting" style={{ marginTop: 12 }}>
             Remove this session’s GM key from this device? Without a backup, you won’t be able to run it again. The session itself isn’t deleted.
             <div className="row" style={{ gap: 8, marginTop: 8 }}>
               <button className="btn danger" autoFocus onClick={() => client.leave({ forget: true })}>Forget and Leave</button>
