@@ -128,16 +128,17 @@ export const AnnotationLayer = memo(function AnnotationLayer({ list, S, selected
 });
 
 /** The landing square and blast area (or shell cone) of an incoming area attack. */
-export const PendingAreaLayer = memo(function PendingAreaLayer({ area, S, part, mapH }: { area: PendingArea; S: number; part: 'area' | 'label'; mapH: number }) {
+export const PendingAreaLayer = memo(function PendingAreaLayer({ area, S, part, mapW }: { area: PendingArea; S: number; part: 'area' | 'label'; mapW: number }) {
   const cx = area.at.x * S + S / 2, cy = area.at.y * S + S / 2;
   const col = area.kind === 'scatter' ? '#dce6ff' : '#ff7a00';
   const box = area.kind === 'blast' || area.kind === 'scatter';
   if (part === 'label') {
-    // Below the area (above it at the map's bottom edge), drawn over the tokens.
-    const below = (area.at.y + (box ? 3 : 1)) * S + 18;
-    const y = below + 14 < mapH ? below : (area.at.y - (box ? 2 : 0)) * S - 16;
+    // Beside the area (right side, or left at the map's edge), drawn over the tokens.
+    const half = box ? 2.5 : 0.5;
+    const right = (area.at.x + 0.5 + half) * S + 100;
+    const x = right + 92 < mapW ? right : (area.at.x + 0.5 - half) * S - 100;
     return (
-      <g pointerEvents="none" transform={`translate(${cx},${y})`} aria-hidden>
+      <g pointerEvents="none" transform={`translate(${x},${cy})`} aria-hidden>
         <rect x={-92} y={-13} width={184} height={24} rx={3} fill="rgba(3,6,20,0.92)" stroke={col} />
         <text textAnchor="middle" dy="0.35em" className="svg-label" fill={col}>{area.label}</text>
       </g>

@@ -599,7 +599,7 @@ export function MapView(p: Props) {
 
         {/* Drawings and the incoming area attack sit above the fog: both are already meant for this viewer. */}
         <AnnotationLayer list={annList} S={S} selected={tools.panel === 'draw' ? tools.selAnn : null} isGm={p.isGm} offset={tools.annOffset} />
-        {incoming && <PendingAreaLayer area={incoming} S={S} part="area" mapH={H} />}
+        {incoming && <PendingAreaLayer area={incoming} S={S} part="area" mapW={W} />}
 
         {path && pathFrom && (
           <g pointerEvents="none">
@@ -690,7 +690,7 @@ export function MapView(p: Props) {
           );
         })}
 
-        {incoming && <PendingAreaLayer area={incoming} S={S} part="label" mapH={H} />}
+        {incoming && <PendingAreaLayer area={incoming} S={S} part="label" mapW={W} />}
 
         {/* Effects */}
         <g pointerEvents="none">
