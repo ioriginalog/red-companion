@@ -74,6 +74,7 @@ const GM_KEY = 'nsc.gm';
 const GM_SESSIONS = 'nsc.gmSessions';
 const LAST_JOIN = 'nsc.lastJoin';
 const GM_SIGNALS_KEY = 'nsc.gmSignals';
+const QUEUED_TOAST = 'Queued: Will Send When the GM Returns';
 const playerKey = (code: string) => `nsc.player.${code}`;
 
 /**
@@ -525,7 +526,7 @@ export class Client {
       case 'queued':
         this.queuedIds.add(m.clientMsgId);
         this.set({ queued: this.queuedIds.size });
-        this.toast('Queued: Will Send When the GM Returns');
+        this.toast(QUEUED_TOAST);
         return;
       case 'playerJoined': {
         const known = this.state.players.some((p) => p.playerId === m.player.playerId);
@@ -538,7 +539,7 @@ export class Client {
       case 'gmStatus':
         // Once the GM is back, held intents are delivered (or refused) by the relay.
         if (m.online) this.queuedIds.clear();
-        this.set({ gmOnline: m.online, ...(m.online ? { queued: 0 } : {}) });
+        this.set({ gmOnline: m.online, ...(m.online ? { queued: 0, ...(this.state.toast?.text === QUEUED_TOAST ? { toast: null } : {}) } : {}) });
         return;
       case 'error':
         if (m.code === 'GAP') { this.send({ t: 'fetchLog', fromSeq: 1 }); return; }

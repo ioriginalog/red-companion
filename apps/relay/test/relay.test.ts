@@ -778,4 +778,106 @@ describe('round 5: GM signals in the fog, persisted offline queue', () => {
     expect(await again.nextOf('welcome')).toMatchObject({ queued: [], settled: ['held-1'] });
     gm2.ws.close(); back.ws.close(); again.ws.close();
   });
+
+  async function startWith(s: Store, o: Partial<Parameters<typeof createRelay>[0]> = {}) {
+    await relay.close();
+    store = s;
+    relay = createRelay({ store, createPerHour: 100, ...o });
+    await new Promise<void>((r) => relay.server.listen(0, '127.0.0.1', () => r()));
+    base = `127.0.0.1:${(relay.server.address() as AddressInfo).port}`;
+  }
+
+  it('clears a GM cursor or ruler for players when it moves into the fog, instead of freezing it at the edge', async () => {
+    const { sessionId, gm, p } = await gmAndPlayer();
+    const auth = gmAuthority(gm, sessionId);
+    auth.act({ type: 'addActor', actor: npc('pc', 'gm', 'pc') });
+    auth.act({
+      type: 'setMap',
+      map: {
+        id: 'm', name: 'M', width: 10, height: 5, cellPx: 64, sightRange: 30, cells: '.....#....'.repeat(5),
+        tokens: { pc: { x: 1, y: 2 } }, watches: {}, spotted: [],
+      },
+    });
+    await p.nextOf('entries');
+    await p.nextOf('entries');
+    gm.send({ t: 'signal', signal: { kind: 'cursor', at: { x: 3, y: 1 } } });
+    expect((await p.nextOf('signal')).signal).toEqual({ kind: 'cursor', at: { x: 3, y: 1 } });
+    gm.send({ t: 'signal', signal: { kind: 'cursor', at: { x: 8, y: 1 } } }); // into the fog
+    expect((await p.nextOf('signal')).signal).toEqual({ kind: 'cursor', at: null });
+    gm.send({ t: 'signal', signal: { kind: 'cursor', at: { x: 9, y: 1 } } }); // still fogged: nothing more
+    gm.send({ t: 'signal', signal: { kind: 'measure', from: { x: 1, y: 1 }, to: { x: 3, y: 3 } } });
+    expect((await p.nextOf('signal')).signal).toEqual({ kind: 'measure', from: { x: 1, y: 1 }, to: { x: 3, y: 3 } });
+    gm.send({ t: 'signal', signal: { kind: 'measure', from: { x: 1, y: 1 }, to: { x: 7, y: 3 } } });
+    const cleared = (await p.nextOf('signal')).signal;
+    expect(cleared).toMatchObject({ kind: 'measure', to: null });
+    expect(JSON.stringify(cleared)).not.toContain('"x":7');
+    gm.ws.close(); p.ws.close();
+  });
+
+  it('tells a player who was away about held actions that expired, even across a restart', async () => {
+    let t = 7_000_000;
+    tmp = mkdtempSync(join(tmpdir(), 'relay-q-'));
+    const opts = { now: () => t, offlineQueue: { perSession: 50, perPlayer: 5, maxAgeMs: 60_000 } };
+    await startWith(new FileStore(tmp), opts);
+    const { sessionId, gmKey, joinCode, gm, p, welcome } = await gmAndPlayer();
+    gm.ws.close();
+    await gm.closed;
+    p.send({ t: 'intent', clientMsgId: 'old-1', intent: { type: 'chat', text: 'too late' } });
+    expect(await p.nextOf('queued')).toMatchObject({ clientMsgId: 'old-1' });
+    p.ws.close();
+    await p.closed;
+    // The GM comes back long after; nobody is there to hear about the drop.
+    t += 120_000;
+    const gm2 = new Client(`ws://${base}/ws`);
+    await gm2.open();
+    gm2.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'gm', sessionId, gmKey }); // empty session: flushes at once
+    await gm2.nextOf('welcome');
+    await new Promise((r) => setTimeout(r, 50));
+    gm2.ws.close();
+    await gm2.closed;
+    await startWith(new FileStore(tmp), opts);
+    const back = new Client(`ws://${base}/ws`);
+    await back.open();
+    back.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode, name: 'Nix', playerToken: (welcome as { playerToken: string }).playerToken });
+    expect(await back.nextOf('welcome')).toMatchObject({ queued: [], settled: ['old-1'] });
+    expect(await back.nextOf('queueDropped')).toMatchObject({ clientMsgId: 'old-1', reason: 'expired' });
+    back.ws.close();
+    await back.closed;
+    // Told once: the next join brings no repeat notice.
+    const again = new Client(`ws://${base}/ws`);
+    await again.open();
+    again.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode, name: 'Nix', playerToken: (welcome as { playerToken: string }).playerToken });
+    await again.nextOf('welcome');
+    expect((await again.next()).t).toBe('gmStatus');
+    again.send({ t: 'ping' });
+    expect((await again.next()).t).toBe('pong');
+    again.ws.close();
+  });
+
+  it('applies the queue bounds to a stored queue and shrugs off a corrupt file', async () => {
+    tmp = mkdtempSync(join(tmpdir(), 'relay-q-'));
+    await startWith(new FileStore(tmp), { offlineQueue: { perSession: 50, perPlayer: 3, maxAgeMs: 600_000 } });
+    const { sessionId, joinCode, gm, p, welcome } = await gmAndPlayer();
+    gm.ws.close(); p.ws.close();
+    await gm.closed; await p.closed;
+    const pid = (welcome as { playerId: string }).playerId;
+    const { writeFileSync } = await import('node:fs');
+    const file = join(tmp, 'sessions', sessionId, 'queue.json');
+    const held = Array.from({ length: 8 }, (_, i) => ({ playerId: pid, clientMsgId: `q${i}`, intent: { type: 'endTurn' }, at: Date.now() }));
+    writeFileSync(file, JSON.stringify({ queue: [...held, { playerId: pid, clientMsgId: 'bad', at: 1 }, 'junk'], settled: { [pid]: [1, 'ok'] }, unseen: {} }));
+    await startWith(new FileStore(tmp), { offlineQueue: { perSession: 50, perPlayer: 3, maxAgeMs: 600_000 } });
+    const back = new Client(`ws://${base}/ws`);
+    await back.open();
+    back.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode, name: 'Nix', playerToken: (welcome as { playerToken: string }).playerToken });
+    expect(await back.nextOf('welcome')).toMatchObject({ queued: ['q0', 'q1', 'q2'], settled: ['ok'] });
+    back.ws.close();
+    await back.closed;
+    writeFileSync(file, '{not json');
+    await startWith(new FileStore(tmp));
+    const again = new Client(`ws://${base}/ws`);
+    await again.open();
+    again.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode, name: 'Nix', playerToken: (welcome as { playerToken: string }).playerToken });
+    expect(await again.nextOf('welcome')).toMatchObject({ queued: [], settled: [] });
+    again.ws.close();
+  });
 });

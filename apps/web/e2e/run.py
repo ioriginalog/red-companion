@@ -351,6 +351,18 @@ def test_gm_signals(browser, base):
         pts = [x.get('at'), x.get('from'), x.get('to')]
         return any(isinstance(c, dict) and c.get('x', 0) >= 6 for c in pts)
     check(not any(fogged(x) for x in got), f'no GM ping, ruler or cursor from a fogged square reached the player ({[x for x in got if fogged(x)][:3]})')
+    # Show My Pings and Ruler to Players, off: nothing goes out, even in view.
+    gm.evaluate("() => window.__nsc.setGmSignals(false)")
+    gm.evaluate("() => window.__nsc.signal({ kind: 'ping', at: { x: 4, y: 1 } })")
+    time.sleep(0.2)
+    gm.evaluate("() => window.__nsc.setGmSignals(true)")
+    gm.evaluate("() => window.__nsc.signal({ kind: 'ping', at: { x: 5, y: 1 } })")
+    deadline = time.time() + 5
+    while time.time() < deadline and not any(x.get('kind') == 'ping' and x.get('at') == {'x': 5, 'y': 1} for x in sigs()):
+        time.sleep(0.1)
+    got = sigs()
+    check(any(x.get('kind') == 'ping' and x.get('at') == {'x': 5, 'y': 1} for x in got), 'GM pings reach the player again once the toggle is back on')
+    check(not any(x.get('kind') == 'ping' and x.get('at') == {'x': 4, 'y': 1} for x in got), 'with the toggle off, a GM ping in plain view stayed private')
     check(not errs, f'GM page without errors ({errs[:3]})')
     gctx.close(); actx.close()
 

@@ -181,6 +181,23 @@ describe('held actions while the GM is away (round 5 #4)', () => {
     expect(c.getState().queued).toBe(0);
     expect(c.getState().toast).toBeNull();
   });
+
+  it('clears a stale Queued toast when the GM comes back, but keeps other notices', async () => {
+    const c = await freshClient();
+    c.join('ABCDEF', 'Ana');
+    const ws = FakeWS.all.at(-1)!;
+    ws.open();
+    ws.recv(welcome());
+    ws.recv({ t: 'queued', clientMsgId: 'a' } as ServerMessage);
+    expect(c.getState().toast?.text).toBe('Queued: Will Send When the GM Returns');
+    ws.recv({ t: 'gmStatus', online: true } as ServerMessage);
+    expect(c.getState().queued).toBe(0);
+    expect(c.getState().toast).toBeNull();
+    ws.recv({ t: 'gmStatus', online: false } as ServerMessage);
+    ws.recv({ t: 'queueDropped', clientMsgId: 'z', reason: 'expired', message: 'The GM was away too long, so that action was dropped. Try it again.' } as ServerMessage);
+    ws.recv({ t: 'gmStatus', online: true } as ServerMessage);
+    expect(c.getState().toast?.text).toContain('dropped');
+  });
 });
 
 describe('GM pings and ruler toggle (round 5 #3)', () => {

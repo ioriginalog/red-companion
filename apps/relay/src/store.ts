@@ -2,16 +2,57 @@
  * Session persistence. FileStore writes to DATA_DIR (a Railway volume):
  *   <DATA_DIR>/sessions/<id>/meta.json
  *   <DATA_DIR>/sessions/<id>/log.jsonl   (one LogEntry per line, append-only except undo)
- *   <DATA_DIR>/sessions/<id>/queue.json  (player intents waiting for an absent GM)
+ *   <DATA_DIR>/sessions/<id>/queue.json  (player intents waiting for an absent GM, and what became of recent ones)
  *   <DATA_DIR>/assets/<id>/<sha256>.<ext> (uploaded images, content-addressed)
  * MemoryStore is for tests and for running without a volume (data lost on restart).
  */
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Intent, LogEntry } from '@cprc/session';
 
 /** A player intent held for an absent GM. */
 export interface QueuedIntent { playerId: string; clientMsgId: string; intent: Intent; at: number }
+
+/** A held intent that will never reach the GM. */
+export interface DropNotice { clientMsgId: string; reason: 'expired' | 'lost'; message: string }
+
+/** Everything the relay keeps about held intents for one session. */
+export interface QueueState {
+  /** Waiting for the GM, in arrival order. */
+  queue: QueuedIntent[];
+  /** Per player: recent held intents that were delivered or dropped (bounded). */
+  settled: Record<string, string[]>;
+  /** Per player: drops made while that player had no open socket, told on their next join. */
+  unseen: Record<string, DropNotice[]>;
+}
+
+export const emptyQueueState = (): QueueState => ({ queue: [], settled: {}, unseen: {} });
+const isEmptyQueueState = (q: QueueState) => !q.queue.length && !Object.keys(q.settled).length && !Object.keys(q.unseen).length;
+
+const isRec = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** Reads a queue file defensively: anything malformed is dropped, never thrown. Accepts the older bare-array format. */
+export function parseQueueState(raw: unknown): QueueState {
+  const out = emptyQueueState();
+  const q = Array.isArray(raw) ? raw : isRec(raw) ? raw.queue : [];
+  if (Array.isArray(q)) {
+    out.queue = q.filter((i): i is QueuedIntent => isRec(i) && typeof i.playerId === 'string' && typeof i.clientMsgId === 'string'
+      && typeof i.at === 'number' && isRec(i.intent) && typeof i.intent.type === 'string');
+  }
+  if (isRec(raw) && isRec(raw.settled)) {
+    for (const [pid, ids] of Object.entries(raw.settled)) {
+      if (Array.isArray(ids)) out.settled[pid] = ids.filter((x): x is string => typeof x === 'string');
+    }
+  }
+  if (isRec(raw) && isRec(raw.unseen)) {
+    for (const [pid, ns] of Object.entries(raw.unseen)) {
+      if (!Array.isArray(ns)) continue;
+      out.unseen[pid] = ns.filter((n): n is DropNotice => isRec(n) && typeof n.clientMsgId === 'string'
+        && (n.reason === 'expired' || n.reason === 'lost') && typeof n.message === 'string');
+    }
+  }
+  return out;
+}
 
 export interface PlayerRecord { playerId: string; name: string; tokenHash: string }
 export interface SessionMeta {
@@ -34,9 +75,9 @@ export interface Store {
   hasAsset(sessionId: string, name: string): boolean;
   /** Total bytes stored for a session. */
   assetBytes(sessionId: string): number;
-  /** Player intents waiting for the GM; written atomically after every change. */
-  loadQueue(sessionId: string): QueuedIntent[];
-  saveQueue(sessionId: string, queue: QueuedIntent[]): void;
+  /** Player intents held for the GM and their recent outcomes; written atomically after every change. */
+  loadQueue(sessionId: string): QueueState;
+  saveQueue(sessionId: string, queue: QueueState): void;
 }
 
 export const ASSET_NAME = /^[a-f0-9]{64}\.(webp|png|jpg)$/;
@@ -58,9 +99,9 @@ export class MemoryStore implements Store {
   getAsset(id: string, name: string) { return this.assets.get(id)?.get(name) ?? null; }
   hasAsset(id: string, name: string) { return !!this.assets.get(id)?.has(name); }
   assetBytes(id: string) { let n = 0; for (const b of this.assets.get(id)?.values() ?? []) n += b.length; return n; }
-  private queues = new Map<string, QueuedIntent[]>();
-  loadQueue(id: string) { return structuredClone(this.queues.get(id) ?? []); }
-  saveQueue(id: string, q: QueuedIntent[]) { if (q.length) this.queues.set(id, structuredClone(q)); else this.queues.delete(id); }
+  private queues = new Map<string, QueueState>();
+  loadQueue(id: string) { return structuredClone(this.queues.get(id) ?? emptyQueueState()); }
+  saveQueue(id: string, q: QueueState) { if (isEmptyQueueState(q)) this.queues.delete(id); else this.queues.set(id, structuredClone(q)); }
 }
 
 const SAFE_ID = /^[a-f0-9-]{36}$/;
@@ -121,18 +162,17 @@ export class FileStore implements Store {
   replaceLog(id: string, entries: LogEntry[]) {
     atomicWrite(join(this.dir(id), 'log.jsonl'), entries.map((e) => JSON.stringify(e) + '\n').join(''));
   }
-  loadQueue(id: string): QueuedIntent[] {
+  loadQueue(id: string): QueueState {
     const f = join(this.dir(id), 'queue.json');
-    if (!existsSync(f)) return [];
-    try {
-      const q = JSON.parse(readFileSync(f, 'utf8')) as unknown;
-      return Array.isArray(q) ? (q as QueuedIntent[]).filter((i) => i && typeof i.playerId === 'string' && typeof i.clientMsgId === 'string' && typeof i.at === 'number') : [];
-    } catch { return []; }
+    if (!existsSync(f)) return emptyQueueState();
+    try { return parseQueueState(JSON.parse(readFileSync(f, 'utf8'))); } catch { return emptyQueueState(); }
   }
-  saveQueue(id: string, q: QueuedIntent[]) {
+  saveQueue(id: string, q: QueueState) {
     const d = this.dir(id);
+    const f = join(d, 'queue.json');
+    if (isEmptyQueueState(q)) { if (existsSync(f)) rmSync(f, { force: true }); return; }
     mkdirSync(d, { recursive: true });
-    atomicWrite(join(d, 'queue.json'), JSON.stringify(q));
+    atomicWrite(f, JSON.stringify(q));
   }
 }
 
