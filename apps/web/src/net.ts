@@ -8,10 +8,15 @@
 import { cryptoDice, type Cell, type CombatEvent } from '@cprc/rules-core';
 import {
   applyEntry, applyProjectedEntry, emptySession, handleIntent, projectState, PROTOCOL_VERSION, replay,
-  type Actor, type HistoryItem, type Intent, type LogEntry, type PlayerInfo, type ServerMessage, type SessionState, type Signal, type ViewState,
+  type Actor, type HistoryItem, type Intent, type LogEntry, type PlayerInfo, type ReclaimRequest, type RosterOp, type ServerMessage, type SessionState, type Signal, type ViewState,
 } from '@cprc/session';
 import { cacheKey, idbKV, restoreFromCache, type GmCache, type KV } from './persist.js';
 
+/**
+ * One log line group. For players, `seq` counts entries this connection
+ * received (not the log's seq), and `by`/`intentType` are '' when the
+ * entry's content was partly hidden from them.
+ */
 export interface FeedItem { seq: number; by: string; intentType: string; events: CombatEvent[] }
 
 /** Ephemeral table signals (never logged). `from` = 'me', 'gm' or a player id. */
@@ -29,8 +34,8 @@ export const PING_MS = 2600;
  */
 export const FEED_CAP = 1000;
 
-const toFeed = (e: { seq: number; by: string; intentType: string; events: CombatEvent[] }): FeedItem =>
-  ({ seq: e.seq, by: e.by, intentType: e.intentType, events: e.events });
+const toFeed = (e: { seq: number; by?: string; intentType?: string; events: CombatEvent[] }): FeedItem =>
+  ({ seq: e.seq, by: e.by ?? '', intentType: e.intentType ?? '', events: e.events });
 
 /** Feed items from the GM's full log (events only, newest FEED_CAP). */
 export function feedFromLog(log: LogEntry[]): FeedItem[] {
@@ -64,6 +69,10 @@ export interface ClientState {
   lockedUntil: number | null;
   /** The session menu (GM key, backup, export, leave) is open. */
   sessionMenu: boolean;
+  /** GM: seat requests from returning players on new devices, oldest first (answer with `answerReclaim`). */
+  reclaims: ReclaimRequest[];
+  /** Player: this device asked the GM for an existing seat (pending), or the GM said no (denied). */
+  reclaim: { status: 'pending' | 'denied'; seatName: string } | null;
 }
 
 export interface GmCreds { sessionId: string; gmKey: string; joinCode: string }
@@ -107,6 +116,7 @@ export class Client {
     status: 'idle', role: null, sessionId: null, joinCode: null, playerId: null, view: null, players: [], gmOnline: false, feed: [], toast: null,
     gmSignals: store.get<boolean>(GM_SIGNALS_KEY) ?? true,
     signals: { pings: [], measures: {}, cursors: {} }, unsynced: 0, queued: 0, lockedUntil: null, sessionMenu: false,
+    reclaims: [], reclaim: null,
   };
   /** GM log cache (IndexedDB, localStorage fallback). Replaceable for tests. */
   kv: KV = idbKV();
@@ -126,6 +136,8 @@ export class Client {
   private dice = cryptoDice();
   private msgN = 0;
   private gmCreds: GmCreds | null = null;
+  /** Last forced resync after a bad entry (rate-limits reconnects). */
+  private resyncAt = 0;
 
   subscribe = (l: Listener) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
   /** Latest state; a GM view marked stale is rebuilt here, once, however many entries arrived. */
@@ -339,7 +351,7 @@ export class Client {
     this.full = null;
     this.viewDirty = false;
     this.queuedIds.clear();
-    this.set({ status: 'idle', role: null, view: null, sessionId: null, joinCode: null, feed: [], queued: 0, lockedUntil: null, sessionMenu: false });
+    this.set({ status: 'idle', role: null, view: null, sessionId: null, joinCode: null, feed: [], queued: 0, lockedUntil: null, sessionMenu: false, reclaims: [], reclaim: null });
   }
 
   private connect(hello: object) {
@@ -446,7 +458,7 @@ export class Client {
       case 'welcome':
         this.retry = 0;
         if (m.role === 'gm') {
-          this.set({ status: 'online', players: m.players, lockedUntil: null });
+          this.set({ status: 'online', players: m.players, lockedUntil: null, reclaims: m.reclaims ?? [] });
           // Always reconcile against the relay's log: it may be missing entries
           // made while we were offline, or (another device) be ahead of us.
           if (m.headSeq > 0 || this.log.length > 0) this.send({ t: 'fetchLog', fromSeq: 1 });
@@ -463,7 +475,10 @@ export class Client {
           const settled = new Set(m.settled ?? []);
           const lost = [...this.queuedIds].filter((id) => !held.has(id) && !settled.has(id)).length;
           this.queuedIds = held;
-          this.set({ status: 'online', sessionId: m.sessionId, playerId: m.playerId, view: m.view, players: m.players ?? [], feed: feedFromHistory(m.history), queued: held.size, lockedUntil: null, toast: null });
+          // A fresh welcome also follows a merge or an approved seat request (the player id may change).
+          const reclaimed = this.state.reclaim?.status === 'pending' && this.state.playerId !== null && this.state.playerId !== m.playerId;
+          this.set({ status: 'online', sessionId: m.sessionId, playerId: m.playerId, view: m.view, players: m.players ?? [], feed: feedFromHistory(m.history), queued: held.size, lockedUntil: null, toast: null, reclaim: null });
+          if (reclaimed) this.toast('The GM gave you back your seat.');
           if (lost > 0) this.toast(`${lost === 1 ? 'A queued action was' : `${lost} queued actions were`} lost before the GM got ${lost === 1 ? 'it' : 'them'}. Try again.`);
         }
         return;
@@ -493,16 +508,19 @@ export class Client {
         return;
       }
       case 'entries': {
+        // Players only get entries that show them something, so numbers may skip; already-applied ones are ignored.
+        const fresh = m.entries.filter((e) => e.seq > (this.state.view?.seq ?? 0));
+        if (!fresh.length || !this.state.view) return;
         let v = this.state.view;
         try {
-          for (const e of m.entries) v = applyProjectedEntry(v!, e);
+          for (const e of fresh) v = applyProjectedEntry(v, e);
         } catch {
-          // Missed an entry: reconnecting gets a fresh snapshot.
-          if (this.hello) this.connect(this.hello);
+          // A malformed entry: a fresh welcome resyncs, at most once per 10 s so it can't loop.
+          if (this.hello && Date.now() - this.resyncAt > 10_000) { this.resyncAt = Date.now(); this.connect(this.hello); }
           return;
         }
         this.set({ view: v });
-        this.pushFeed(m.entries.map((e) => ({ seq: e.seq, by: e.by, intentType: e.intentType, events: e.events })));
+        this.pushFeed(fresh.map(toFeed));
         return;
       }
       case 'snapshot':
@@ -534,7 +552,20 @@ export class Client {
         return;
       }
       case 'playerLeft':
-        this.set({ players: this.state.players.map((p) => (p.playerId === m.playerId ? { ...p, online: false } : p)) });
+        this.set({ players: this.state.players.map((p) => (p.playerId === m.playerId ? { ...p, online: false, lastSeen: Date.now() } : p)) });
+        return;
+      case 'players':
+        this.set({ players: m.players });
+        return;
+      case 'reclaimRequest':
+        this.set({ reclaims: [...this.state.reclaims.filter((r) => r.requestId !== m.request.requestId), m.request] });
+        return;
+      case 'reclaimClosed':
+        this.set({ reclaims: this.state.reclaims.filter((r) => r.requestId !== m.requestId) });
+        return;
+      case 'reclaim':
+        this.set({ reclaim: { status: m.status, seatName: m.seatName } });
+        if (m.status === 'denied') this.toast(`The GM didn’t give you ${m.seatName}’s seat. You’ve joined as a new player.`);
         return;
       case 'gmStatus':
         // Once the GM is back, held intents are delivered (or refused) by the relay.
@@ -558,6 +589,24 @@ export class Client {
           // Too many sockets from this network at once: back off and retry.
           const hello = this.hello;
           setTimeout(() => { if (hello && this.hello === hello) this.connect(hello); }, 3000);
+          return;
+        }
+        if (m.code === 'REMOVED') {
+          // This identity is gone: forget its token so the next join starts fresh.
+          this.hello = null;
+          this.ws = null; // the relay closes it; this isn't an outage
+          if (this.state.joinCode) store.del(playerKey(this.state.joinCode));
+          store.del(LAST_JOIN);
+          this.set({ status: 'error', role: null, view: null, feed: [] });
+          this.toast(m.message);
+          return;
+        }
+        if (m.code === 'BAD_NAME' || m.code === 'SESSION_FULL') {
+          // Refused at the door: back to the join form (a saved token, if any, is kept).
+          this.hello = null;
+          this.ws = null;
+          this.set({ status: 'error', role: null, view: null });
+          this.toast(m.message);
           return;
         }
         // A refused GM key is kept (Forget removes it): the relay may be restoring data.
@@ -622,6 +671,40 @@ export class Client {
   actAll(intents: Intent[]) {
     for (const i of intents) if (!this.act(i)) return false;
     return true;
+  }
+
+  // ----- Roster (GM) --------------------------------------------------------------
+  //
+  // Player identities live at the relay; character assignments live in the log.
+  // Remove and merge move the characters first (one `reassignPlayer` entry), then
+  // ask the relay. The relay answers with a `players` broadcast, or an error toast.
+
+  private roster(op: RosterOp): boolean {
+    if (this.state.role !== 'gm') return false;
+    if (!this.online || !this.send({ t: 'roster', op })) { this.toast('Roster changes need a connection. Try again in a moment.'); return false; }
+    return true;
+  }
+  private controls(playerId: string) { return Object.values(this.full?.actors ?? {}).some((a) => a.controller === playerId); }
+  /** GM: change a player's display name (1–40 characters, not a GM name, not already taken). */
+  renamePlayer(playerId: string, name: string) { return this.roster({ op: 'rename', playerId, name }); }
+  /** GM: forget a player; their characters go back to the GM and their devices are disconnected. */
+  removePlayer(playerId: string) {
+    if (!this.online) return this.roster({ op: 'remove', playerId });
+    if (this.controls(playerId) && !this.act({ type: 'reassignPlayer', from: playerId, to: 'gm' })) return false;
+    return this.roster({ op: 'remove', playerId });
+  }
+  /** GM: `dropId` is the same person as `keepId`; drop's characters and devices become keep's. */
+  mergePlayers(keepId: string, dropId: string) {
+    if (!this.online) return this.roster({ op: 'merge', keepId, dropId });
+    if (this.controls(dropId) && !this.act({ type: 'reassignPlayer', from: dropId, to: keepId })) return false;
+    return this.roster({ op: 'merge', keepId, dropId });
+  }
+  /** GM: answer a seat request. Approving merges the new device into the seat (and anything it was given). */
+  answerReclaim(requestId: string, approve: boolean) {
+    const q = this.state.reclaims.find((r) => r.requestId === requestId);
+    if (!q) return false;
+    if (approve && this.online && this.controls(q.playerId) && !this.act({ type: 'reassignPlayer', from: q.playerId, to: q.seatId })) return false;
+    return this.roster({ op: 'reclaim', requestId, approve });
   }
 
   /** GM: step back one log entry. */
