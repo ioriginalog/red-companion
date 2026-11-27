@@ -196,9 +196,15 @@ export type Pending =
     attack: CheckResult; damageDice: number;
   };
 
+/** A check reduced to its total, for rollers whose sheet the viewer can't see. */
+export interface RedactedCheck { total: number; redacted: true }
+
 /** What a player sees of a pending step: NPC damage dice are withheld. */
 export type ProjectedPending =
-  | Exclude<Pending, { kind: 'awaitingDamage' | 'awaitingDodge' }>
+  | Exclude<Pending, { kind: 'awaitingDamage' | 'awaitingDodge' | 'awaitingAreaDodge' | 'awaitingScatter' }>
+  // An NPC or unseen attacker's area check shows only its total.
+  | (Omit<Extract<Pending, { kind: 'awaitingAreaDodge' }>, 'attack'> & { attack: CheckResult | RedactedCheck })
+  | (Omit<Extract<Pending, { kind: 'awaitingScatter' }>, 'attack'> & { attack: CheckResult | RedactedCheck })
   // A defender sees the gun pointed at them, so players get its type (not its stats).
   | (Omit<Extract<Pending, { kind: 'awaitingDodge' }>, 'attack'> & { attack: Extract<Pending, { kind: 'awaitingDodge' }>['attack'] & { weaponType?: Weapon['type'] } })
   | (Omit<Extract<Pending, { kind: 'awaitingDamage' }>, 'spec'> & { spec?: DamageSpec });
@@ -438,11 +444,13 @@ export interface ViewState {
 }
 
 export interface ProjectedEntry {
+  /** GM: the log's seq. Players: a per-connection counter (the relay renumbers, so hidden entries can't be counted). */
   seq: number;
   id: string;
   at: string;
-  by: AuthorId;
-  intentType: IntentType;
+  /** Absent for players when the entry's content is hidden from them. */
+  by?: AuthorId;
+  intentType?: IntentType;
   events: CombatEvent[];
   patch: { actors?: Record<string, ProjectedActor | null>; encounter?: Encounter; pending?: ProjectedPending | null; map?: TacticalMap | null; library?: Library; handouts?: Record<string, Handout>; /* */ netrun?: NetView; /* */ extras?: ExtrasState };
 }

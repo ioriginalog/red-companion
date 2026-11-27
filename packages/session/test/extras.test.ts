@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { maxHP, scriptedDice, type Combatant, type Dice, type Stats } from '@cprc/rules-core';
 import {
-  applyEntry, emptySession, handleIntent, projectEntry, projectState,
+  applyEntry, CANT_DO_THAT, emptySession, handleIntent, projectEntry, projectState,
   type Actor, type ExtraOp, type Intent, type LogEntry, type SessionState, type TacticalMap, type Viewer,
 } from '../src/index.js';
 
@@ -205,7 +205,8 @@ describe('Facedowns', () => {
     const walled: TacticalMap = { ...MAP, cells: '....#...'.repeat(3) };
     t.send({ type: 'setMap', map: walled }, GM);
     const r = t.x({ kind: 'facedown', actorId: 'solo', targetId: 'far' }, P1, scriptedDice({ d10: [5, 5] }));
-    expect(r).toMatchObject({ ok: false, code: 'NO_LINE_OF_SIGHT' });
+    // Never seen by the party, so the refusal is the one for an unknown id.
+    expect(r).toMatchObject({ ok: false, code: 'NOT_FOUND', message: CANT_DO_THAT });
     expect(t.state.extras?.facedowns ?? []).toEqual([]);
     // An ally on the far side of the wall gives the party sight of the thug.
     t.send({ type: 'addActor', actor: { ...actor('ally', 'pc', 'p2'), allegiance: 'ally' } }, GM);

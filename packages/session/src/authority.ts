@@ -16,6 +16,7 @@ import {
   type Cell, type CombatEvent, type Dice, type Weapon,
 } from '@cprc/rules-core';
 import { factionOf, planMove, watchTrigger, withSpotted } from './tactical.js';
+import { canSeeFull, playerKnown } from './projection.js';
 import {
   checkAttackAction, checkOtherAction, controls, currentActorId, freshUsage, getActor, getWeapon, requireMap, SessionError, usageFor, visibilityFor,
 } from './helpers.js';
@@ -32,7 +33,7 @@ import { attackAvailability } from './availability.js';
 import { executeExtra, extrasAdjust, extrasGate, trackExtras } from './extras.js';
 import { executeGear, gearDamage, gearGate } from './gear.js';
 import { authorizeSystems, beforeDamage, executeSystems, isSystemsIntent, onTurnStart, SYSTEMS_GM_ONLY, SYSTEMS_WHILE_PENDING, wieldCheck } from './systems.js';
-import { authorizePlayLoop, executePlayLoop, isPlayLoopIntent, PLAYLOOP_WHILE_PENDING } from './playloop.js';
+import { authorizePlayLoop, executePlayLoop, isPlayLoopIntent, PLAYLOOP_GM_ONLY, PLAYLOOP_WHILE_PENDING } from './playloop.js';
 
 export { SessionError, currentActorId };
 import type {
@@ -60,6 +61,12 @@ export function authorId(v: Viewer): AuthorId {
 export function handleIntent(state: SessionState, intent: Intent, by: Viewer, ctx: AuthorityContext): Accepted | Rejection {
   const newId = ctx.newId ?? (() => globalThis.crypto.randomUUID());
   try {
+    if (by.role === 'player') {
+      // GM-only intents are refused before anything else, so their errors can't confirm an actor exists.
+      const type = (intent as { type?: unknown } | null)?.type as IntentType;
+      if (GM_ONLY.has(type) || SYSTEMS_GM_ONLY.has(type) || PLAYLOOP_GM_ONLY.has(type)) throw new SessionError('FORBIDDEN', 'Only the GM can do that.');
+      requireKnownActors(state, intent);
+    }
     validateIntent(state, intent, by);
     const effective = extrasAdjust(state, intent); // Grapple and Facedown penalties
     authorize(state, effective, by);
@@ -76,9 +83,60 @@ export function handleIntent(state: SessionState, intent: Intent, by: Viewer, ct
     };
     return { ok: true, entry };
   } catch (e) {
-    if (e instanceof RulesError || e instanceof SessionError) return { ok: false, code: e.code, message: e.message };
+    if (e instanceof RulesError || e instanceof SessionError) {
+      return { ok: false, code: e.code, message: by.role === 'player' ? playerSafeMessage(state, by, e.code, e.message) : e.message };
+    }
     throw e;
   }
+}
+
+// ----- Rejections players may read ---------------------------------------------------
+
+/** Generic refusal for anything that would name or confirm an actor the player can't see. */
+export const CANT_DO_THAT = 'You can’t do that.';
+
+/** Intent keys (at any depth) whose string value names an actor. */
+const ACTOR_REF_KEYS = new Set(['attackerId', 'defenderId', 'actorId', 'targetId', 'medicId', 'asActorId', 'after', 'vehicleId', 'heldId', 'watcherId', 'holderId']);
+const ACTOR_REF_LISTS = new Set(['actorIds', 'targetIds']);
+
+function actorRefs(v: unknown, out: string[] = [], key?: string): string[] {
+  if (typeof v === 'string') { if (key && ACTOR_REF_KEYS.has(key)) out.push(v); }
+  else if (Array.isArray(v)) { for (const x of v) if (typeof x === 'string') { if (key && ACTOR_REF_LISTS.has(key)) out.push(x); } else actorRefs(x, out); }
+  else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v as Record<string, unknown>)) actorRefs(x, out, k);
+  return out;
+}
+
+/**
+ * A player's intent may only name actors the party knows about. An unseen
+ * actor's id is refused exactly like an id that doesn't exist, so guessing
+ * ids can't confirm who is out there.
+ */
+function requireKnownActors(state: SessionState, intent: Intent) {
+  const known = playerKnown(state);
+  if (actorRefs(intent).some((id) => !known.has(id))) throw new SessionError('NOT_FOUND', CANT_DO_THAT);
+}
+
+/**
+ * Players' rejection messages never name an actor whose sheet they can't
+ * see: a refusal about one becomes generic ("You can’t do that."), and other
+ * mentions become "that character".
+ */
+export function playerSafeMessage(state: SessionState, by: Viewer, code: string, message: string): string {
+  const known = playerKnown(state);
+  const fullNames = new Set(Object.values(state.actors).filter((a) => canSeeFull(a, by)).map((a) => a.combatant.name));
+  const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let out = message;
+  for (const a of Object.values(state.actors)) {
+    if (canSeeFull(a, by)) continue;
+    const named = a.combatant.name.trim().length >= 2 && !fullNames.has(a.combatant.name)
+      && new RegExp(`(^|[^\\p{L}\\p{N}])${esc(a.combatant.name)}(?=$|[^\\p{L}\\p{N}])`, 'u').test(out);
+    const id = new RegExp(`(^|[^A-Za-z0-9_.:-])${esc(a.id)}(?=$|[^A-Za-z0-9_.:-])`).test(out);
+    if (!named && !id) continue;
+    if (id || !known.has(a.id) || code === 'FORBIDDEN' || code === 'NOT_FOUND') return CANT_DO_THAT;
+    out = out.replace(new RegExp(`(^|[^\\p{L}\\p{N}])${esc(a.combatant.name)}(?=$|[^\\p{L}\\p{N}])`, 'gu'),
+      (_m, pre: string, at: number) => `${pre}${at === 0 && pre === '' ? 'That character' : 'that character'}`);
+  }
+  return out;
 }
 
 // ----- Authorization -------------------------------------------------------------

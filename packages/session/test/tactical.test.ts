@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { maxHP, scriptedDice, type Combatant, type Dice, type Stats } from '@cprc/rules-core';
 import {
-  applyEntry, emptySession, handleIntent, projectEntry, projectState,
+  applyEntry, CANT_DO_THAT, emptySession, handleIntent, projectEntry, projectState,
   type Actor, type Intent, type LogEntry, type SessionState, type TacticalMap, type Viewer,
 } from '../src/index.js';
 
@@ -100,8 +100,10 @@ describe('line of sight and range', () => {
   it('refuses a shot with no line of sight, unless the GM rules it visible', () => {
     const t = setup();
     const shot: Intent = { type: 'rangedAttack', attackerId: 'solo', defenderId: 'ganger', weaponId: 'pistol', distance: 1 };
-    expect(t.send(shot, P1)).toMatchObject({ ok: false, code: 'NO_LINE_OF_SIGHT' });
-    expect(t.send({ ...shot, ignoreLineOfSight: true }, P1)).toMatchObject({ ok: false, code: 'FORBIDDEN' });
+    // The party has never seen the ganger: refused exactly like an id that doesn't exist.
+    expect(t.send(shot, P1)).toMatchObject({ ok: false, code: 'NOT_FOUND', message: CANT_DO_THAT });
+    expect(t.send({ ...shot, defenderId: 'no-such-actor' }, P1)).toMatchObject({ ok: false, code: 'NOT_FOUND', message: CANT_DO_THAT });
+    expect(t.send({ ...shot, ignoreLineOfSight: true }, P1)).toMatchObject({ ok: false });
     expect(t.send({ ...shot, ignoreLineOfSight: true }, GM, MISS()).ok).toBe(true);
   });
 

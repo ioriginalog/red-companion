@@ -18,7 +18,7 @@ import {
   emptyDrugs, gridDistance, hasLineOfSight, humanShieldBlocks, makeCheck, metersBetween, profileOf, qualityMods, RANGE_DV,
   rangeBandIndex, rollDamage, seatsLeft, SHIELD_TEMPLATES, shieldBlocks, shieldUp, skillLevel, spendAmmo, standingModifiers,
   VEHICLE_AIM_PENALTY, VEHICLE_TEMPLATES, vehicleDamage, wearOff, handsFree,
-  type Cell, type CombatEvent, type Combatant, type Dice, type DrugDef, type Modifier, type ShieldState,
+  type Cell, type CombatEvent, type Combatant, type Dice, type DrugDef, type GearItem, type Modifier, type ShieldState,
 } from '@cprc/rules-core';
 import { checkAttackAction, checkOtherAction, controls, currentActorId, getActor, getWeapon, SessionError, usageFor, visibilityFor } from './helpers.js';
 import { factionOf, planMove, withSpotted } from './tactical.js';
@@ -117,6 +117,34 @@ const friendly = (a: Actor) => factionOf(a) === 'friendly';
 const SEEN = new Set(['shieldHit', 'humanShield', 'corpseShield', 'vehicleDamaged', 'ram', 'equipShield', 'dropShield']);
 const ev = (a: Actor, action: string, text: string, extra: Partial<Extract<CombatEvent, { type: 'gearAction' }>> = {}): CombatEvent =>
   ({ type: 'gearAction', visibility: SEEN.has(action) ? 'public' : visibilityFor(a), combatantId: a.id, action, text, ...extra });
+
+// ----- What a character carries -----------------------------------------------------------
+//
+// Catalog shields and drugs are carried as gear entries linked to the catalog:
+// `{ name, qty, item: 'shield:<templateId>' }` or `{ ..., item: 'drug:<drugId>' }`.
+// Only the GM adds linked entries (a player's sheet edit can't add one or raise
+// its quantity). Players equip only shields and take only drugs they carry; each
+// use takes one from the gear list. Custom shields and drugs are GM-only.
+
+/** A gear entry, optionally linked to a catalog shield or drug. */
+export type OwnedGearItem = GearItem & { item?: string };
+export const GEAR_LINK = /^(shield|drug):[A-Za-z0-9_.-]{1,40}$/;
+export const gearLink = (kind: 'shield' | 'drug', id: string) => `${kind}:${id}`;
+
+/** How many of a linked item the character carries. */
+export function carried(c: Combatant, link: string): number {
+  return ((c.gear ?? []) as OwnedGearItem[]).reduce((n, g) => n + (g.item === link ? g.qty : 0), 0);
+}
+
+/** The character with one fewer of a linked item (an entry that runs out is removed). Unchanged if none is carried. */
+function takeOne(c: Combatant, link: string): Combatant {
+  const gear = (c.gear ?? []) as OwnedGearItem[];
+  const i = gear.findIndex((g) => g.item === link && g.qty > 0);
+  if (i < 0) return c;
+  const g = gear[i]!;
+  const next = g.qty > 1 ? gear.map((x, j) => (j === i ? { ...x, qty: x.qty - 1 } : x)) : gear.filter((_x, j) => j !== i);
+  return { ...c, gear: next };
+}
 
 function gmOnly(by: Viewer) { if (by.role !== 'gm') throw new SessionError('FORBIDDEN', 'Only the GM can do that.'); }
 
@@ -258,8 +286,11 @@ export function executeGear(state: SessionState, raw: unknown, by: Viewer, dice:
       if (grappleHolding(state, a.id)?.humanShield) throw new SessionError('INVALID', `${name(a)} is already holding a human shield.`);
       const t = op.templateId ? SHIELD_TEMPLATES.find((x) => x.id === op.templateId) : undefined;
       if (op.templateId && !t) throw new SessionError('NOT_FOUND', 'No such shield.');
+      if (by.role !== 'gm' && !t) throw new SessionError('FORBIDDEN', 'Only the GM can hand out a custom shield.');
+      const link = t ? gearLink('shield', t.id) : null;
+      if (by.role !== 'gm' && link && carried(a.combatant, link) < 1) throw new SessionError('INVALID', `${name(a)} isn’t carrying a ${t!.name}.`);
       const src = t ? { name: t.name, hp: t.hp } : op.shield!;
-      const c: Combatant = { ...a.combatant, shield: { name: src.name, hp: src.hp, maxHp: src.hp, raised: true } };
+      const c: Combatant = { ...(link ? takeOne(a.combatant, link) : a.combatant), shield: { name: src.name, hp: src.hp, maxHp: src.hp, raised: true } };
       // It takes a hand (a character needs one free).
       if (handsFree(a.combatant) < 1) throw new SessionError('INVALID', `${name(a)} has no free hand for a shield.`);
       const enc = checkOtherAction(state, by, a);
@@ -300,6 +331,9 @@ export function executeGear(state: SessionState, raw: unknown, by: Viewer, dice:
       if (isVehicle(t)) throw new SessionError('INVALID', 'That’s a vehicle.');
       const drug = op.drug ?? DRUG_TEMPLATES.find((d) => d.id === op.drugId);
       if (!drug) throw new SessionError('NOT_FOUND', 'No such drug.');
+      if (by.role !== 'gm' && op.drug) throw new SessionError('FORBIDDEN', 'Only the GM can hand out a custom drug.');
+      const link = op.drug ? null : gearLink('drug', drug.id);
+      if (by.role !== 'gm' && link && carried(a.combatant, link) < 1) throw new SessionError('INVALID', `${name(a)} isn’t carrying any ${drug.name}.`);
       if (t.id !== a.id) {
         // A willing target, within reach. Hostile dosing is a melee attack: the GM rules it.
         if (!controls(by, t) && by.role !== 'gm' && friendly(t) !== friendly(a)) throw new SessionError('FORBIDDEN', 'Only willing targets. Dosing an enemy is a melee attack the GM rules on.');
@@ -309,10 +343,14 @@ export function executeGear(state: SessionState, raw: unknown, by: Viewer, dice:
       }
       const enc = checkOtherAction(state, by, a);
       const r = dose(t.combatant.drugs, drug);
-      const c = applySystems({ ...t.combatant, drugs: r.drugs });
+      // The dose comes out of the giver's gear.
+      const base = t.id === a.id && link ? takeOne(t.combatant, link) : t.combatant;
+      const c = applySystems({ ...base, drugs: r.drugs });
       const takes = t.id === a.id ? `${name(a)} takes` : `${name(a)} doses ${name(t)} with`;
       const text = r.redose ? `${takes} another dose of ${drug.name}; it lasts ${drug.duration} from now.` : `${takes} ${drug.name} (${drug.duration}). ${drug.effect.note}`;
-      return out([ev(t, 'takeDrug', text, { ...(t.id !== a.id ? { targetId: a.id } : {}) })], { actors: { [t.id]: withC(t, c) } }, enc);
+      const actors: Record<string, Actor> = { [t.id]: withC(t, c) };
+      if (t.id !== a.id && link && carried(a.combatant, link) > 0) actors[a.id] = withC(a, takeOne(a.combatant, link));
+      return out([ev(t, 'takeDrug', text, { ...(t.id !== a.id ? { targetId: a.id } : {}) })], { actors }, enc);
     }
     case 'drugWearsOff': {
       gmOnly(by);

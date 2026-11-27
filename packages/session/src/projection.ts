@@ -7,11 +7,11 @@
  */
 import { getInjury, woundState, type CheckResult, type CombatEvent, type Weapon } from '@cprc/rules-core';
 import { projectPendingForPlayer } from './systems.js';
-import { allegianceOf, factionOf, projectMap } from './tactical.js';
+import { allegianceOf, factionOf, partyVision, projectMap } from './tactical.js';
 import { visibleHandouts } from './handouts.js';
 import { projectExtras } from './extras.js';
 import { projectNet } from './netrun.js';
-import type { Actor, Encounter, LogEntry, Pending, ProjectedActor, ProjectedEntry, ProjectedPending, SessionState, TacticalMap, Viewer, ViewState } from './types.js';
+import type { Actor, Encounter, LogEntry, Pending, ProjectedActor, ProjectedEntry, ProjectedPending, RedactedCheck, SessionState, TacticalMap, Viewer, ViewState } from './types.js';
 
 export interface ProjectionOptions {
   /** Players can see other PCs' sheets. Default true. */
@@ -161,17 +161,33 @@ function projectPending(p: Pending | null, viewer: Viewer, state: SessionState, 
       return { kind: p.kind, id: p.id, watcherId: kn.aliasOf(p.watcherId), targetId: kn.aliasOf(p.targetId) };
     case 'awaitingAreaDodge': {
       const f = projectPendingForPlayer(p, state) as typeof p;
+      const sees = full(p.attackerId);
+      // Built field by field (never spread), so a new field stays GM-only until it's listed here.
       return {
-        ...f, attackerId: kn.aliasOf(p.attackerId),
+        kind: p.kind, id: p.id, attackerId: kn.aliasOf(p.attackerId), areaKind: p.areaKind, at: p.at, source: p.source,
+        // An attacker whose sheet the player can't see shows only the total to beat (no STAT, skill or die).
+        attack: sees ? p.attack : totalOnly(p.attack),
+        // (NPC damage dice are stats)
+        damageDice: sees ? p.damageDice : 0,
         // Unknown targets are dropped, not aliased: a list of `hidden` entries would be a count.
         targets: f.targets.filter((t) => kn.known.has(t.id)).map((t) => ({ id: t.id })),
         decisions: Object.fromEntries(Object.entries(f.decisions).filter(([k]) => kn.known.has(k))),
       };
     }
-    // (NPC damage dice are stats)
-    case 'awaitingScatter':
-      return { ...p, attackerId: kn.aliasOf(p.attackerId), damageDice: full(p.attackerId) ? p.damageDice : 0 };
+    case 'awaitingScatter': {
+      const sees = full(p.attackerId);
+      return {
+        kind: p.kind, id: p.id, attackerId: kn.aliasOf(p.attackerId), areaKind: p.areaKind, at: p.at,
+        attack: sees ? p.attack : totalOnly(p.attack),
+        damageDice: sees ? p.damageDice : 0,
+      };
+    }
   }
+}
+
+/** What a player may know of a check whose roller's sheet they can't see: the total. */
+export function totalOnly(c: CheckResult): RedactedCheck {
+  return { total: c.total, redacted: true };
 }
 
 /** Every actor a player may see (known actors, plus the `hidden` stand-in while an unknown actor acts). */
@@ -209,7 +225,40 @@ export function projectState(state: SessionState, viewer: Viewer, opts?: Project
 
 function viewMap(state: SessionState, viewer: Viewer): TacticalMap | null {
   if (!state.map) return null;
-  return viewer.role === 'gm' ? state.map : projectMap(state.map, state.actors);
+  return viewer.role === 'gm' ? state.map : maskUnexplored(projectMap(state.map, state.actors), state.actors, state.map);
+}
+
+/** Terrain code players get for squares the party has never seen. */
+export const UNEXPLORED = '?';
+
+/**
+ * Players' terrain: squares the party has never explored (and can't see now)
+ * read `UNEXPLORED`, and their cover records are dropped, so the layout of
+ * unexplored areas never leaves the relay. Every wall that bounds what the
+ * party sees is itself seen, so the client's line of sight is unchanged.
+ */
+function maskUnexplored(view: TacticalMap, actors: SessionState['actors'], full: TacticalMap): TacticalMap {
+  const n = full.width * full.height;
+  if (full.lighting?.revealAll || full.cells.length !== n) return view;
+  const explored = full.explored && full.explored.length === n ? full.explored : null;
+  const vision = partyVision(full, actors);
+  const known = (i: number) => explored?.[i] === '1' || vision.has(`${i % full.width},${Math.floor(i / full.width)}`);
+  let cells = '';
+  let masked = false;
+  for (let i = 0; i < n; i++) {
+    if (known(i)) cells += full.cells[i];
+    else { cells += UNEXPLORED; masked = true; }
+  }
+  if (!masked) return view;
+  const out: TacticalMap = { ...view, cells };
+  if (view.cover) {
+    const cover = Object.fromEntries(Object.entries(view.cover).filter(([k]) => {
+      const [x, y] = k.split(',').map(Number);
+      return known(y! * full.width + x!);
+    }));
+    if (Object.keys(cover).length) out.cover = cover; else delete out.cover;
+  }
+  return out;
 }
 
 function eventSubject(e: CombatEvent): string | undefined {
@@ -309,13 +358,19 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 /**
  * Project one entry. `after` = state after the entry; `before` = state
- * before it (the relay always passes it, so players get exact actor diffs:
- * newly spotted NPCs appear, forgotten ones are removed, unknown ids never
- * leak). Without `before`, entries that touch the map or the encounter
- * re-send every actor the player knows.
+ * before it (the relay always passes it, so players get exact diffs: newly
+ * spotted NPCs appear, forgotten ones are removed, unknown ids never leak,
+ * and a field is sent only when the player's view of it changed). Without
+ * `before`, entries that touch the map or the encounter re-send every
+ * actor the player knows.
+ *
+ * Players: an entry whose content is hidden (no visible events, or some
+ * events withheld) carries no `by` or `intentType`. When nothing at all is
+ * visible, `playerSees` is false and the relay sends nothing, so unseen
+ * Turns, private rolls and other players' whispers can't even be counted.
  */
 export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionState, opts?: ProjectionOptions, before?: SessionState): ProjectedEntry {
-  const base = { seq: entry.seq, id: entry.id, at: entry.at, by: entry.by, intentType: entry.intent.type };
+  const base = { seq: entry.seq, id: entry.id, at: entry.at };
   if (viewer.role === 'gm') {
     const patch: ProjectedEntry['patch'] = {};
     if (entry.patch.actors) {
@@ -328,7 +383,7 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
     if (entry.patch.handouts) patch.handouts = entry.patch.handouts;
     if (entry.patch.netrun) patch.netrun = projectNet(after, viewer);
     if (entry.patch.extras) patch.extras = entry.patch.extras;
-    return { ...base, events: entry.events, patch };
+    return { ...base, by: entry.by, intentType: entry.intent.type, events: entry.events, patch };
   }
 
   const actorsAfter = after.actors;
@@ -355,17 +410,40 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
       .map((e) => (e.type === 'areaResolved' ? { ...e, targetIds: e.targetIds.filter((id) => !hidden(id)) } : e));
   }
   events = events.map((e) => scrubValue(e, sc) as CombatEvent);
+  const withheld = events.length < entry.events.length;
 
   const patch: ProjectedEntry['patch'] = {};
   const nowActors = playerActors(after, viewer, kn, opts);
   if (before) {
-    const prevActors = playerActors(before, viewer, knowledge(before), opts);
+    const knBefore = knowledge(before);
+    const prevActors = playerActors(before, viewer, knBefore, opts);
     const diff: Record<string, ProjectedActor | null> = {};
     for (const [id, a] of Object.entries(nowActors)) if (!same(prevActors[id], a)) diff[id] = a;
     for (const id of Object.keys(prevActors)) if (!nowActors[id]) diff[id] = null;
     if (Object.keys(diff).length) patch.actors = diff;
     const encNow = projectEncounter(after.encounter, kn);
-    if (entry.patch.encounter || !same(projectEncounter(before.encounter, knowledge(before)), encNow)) patch.encounter = encNow;
+    if (!same(projectEncounter(before.encounter, knBefore), encNow)) patch.encounter = encNow;
+    if ('map' in entry.patch || entry.patch.actors) {
+      const m = viewMap(after, viewer);
+      if (!same(viewMap(before, viewer), m)) patch.map = m;
+    }
+    if ('pending' in entry.patch) {
+      const p = projectPending(entry.patch.pending ?? null, viewer, after, kn, opts);
+      if (!same(projectPending(before.pending, viewer, before, knBefore, opts), p)) patch.pending = p;
+    }
+    if (entry.patch.handouts) {
+      const h = visibleHandouts(entry.patch.handouts, viewer);
+      if (!same(visibleHandouts(before.handouts ?? {}, viewer), h)) patch.handouts = h;
+    }
+    // (Turn changes move NET Actions left; controller changes move ownership.)
+    if (after.netrun && (entry.patch.netrun || entry.patch.actors || entry.patch.encounter)) {
+      const n = projectNet(after, viewer);
+      if (!before.netrun || !same(projectNet(before, viewer), n)) patch.netrun = n;
+    }
+    if (after.extras && (entry.patch.extras || entry.patch.actors || 'map' in entry.patch)) {
+      const x = projectExtras(after, viewer);
+      if (!before.extras || !same(projectExtras(before, viewer), x)) patch.extras = x;
+    }
   } else {
     const touchesKnowledge = 'map' in entry.patch || !!entry.patch.encounter;
     const ids = touchesKnowledge ? Object.keys(nowActors) : Object.keys(entry.patch.actors ?? {});
@@ -376,20 +454,31 @@ export function projectEntry(entry: LogEntry, viewer: Viewer, after: SessionStat
     }
     if (Object.keys(diff).length) patch.actors = diff;
     if (touchesKnowledge) patch.encounter = projectEncounter(after.encounter, kn);
+    if ('map' in entry.patch || (entry.patch.actors && after.map)) patch.map = viewMap(after, viewer);
+    if ('pending' in entry.patch) patch.pending = projectPending(entry.patch.pending ?? null, viewer, after, kn, opts);
+    if (entry.patch.handouts) patch.handouts = visibleHandouts(entry.patch.handouts, viewer);
+    if (after.netrun && (entry.patch.netrun || entry.patch.actors || entry.patch.encounter)) patch.netrun = projectNet(after, viewer);
+    if (after.extras && (entry.patch.extras || entry.patch.actors || 'map' in entry.patch)) patch.extras = projectExtras(after, viewer);
   }
-  if ('map' in entry.patch || (entry.patch.actors && after.map)) patch.map = viewMap(after, viewer);
-  if ('pending' in entry.patch) patch.pending = projectPending(entry.patch.pending ?? null, viewer, after, kn, opts);
-  if (entry.patch.handouts) patch.handouts = visibleHandouts(entry.patch.handouts, viewer);
-  // (Turn changes move NET Actions left; controller changes move ownership.)
-  if (after.netrun && (entry.patch.netrun || entry.patch.actors || entry.patch.encounter)) patch.netrun = projectNet(after, viewer);
-  if (after.extras && (entry.patch.extras || entry.patch.actors || 'map' in entry.patch)) patch.extras = projectExtras(after, viewer);
-  return { ...base, events, patch };
+  // Who did what is shown only when everything they did is visible (or it was the player's own entry).
+  const open = entry.by === `player:${me}` || (events.length > 0 && !withheld);
+  return { ...base, ...(open ? { by: entry.by, intentType: entry.intent.type } : {}), events, patch };
+}
+
+/** Whether a projected entry shows the player anything; the relay sends players nothing for entries that don't. */
+export function playerSees(p: ProjectedEntry): boolean {
+  return p.events.length > 0 || Object.keys(p.patch).length > 0;
 }
 
 /** Keep results a table would announce; drop numbers that reveal hidden stats or HP. */
 function redactCheck(c: CheckResult): CheckResult {
   return { base: 0, baseBreakdown: [], modifiers: [], roll: { natural: 0, kind: 'normal', value: 0 }, total: c.total, redacted: true };
 }
+
+/** NET Actions where one side of the contest is Black ICE or a Demon: which field holds its check. */
+const NET_OPPONENT_SIDE: Record<string, 'check' | 'vs'> = {
+  iceAttack: 'check', demonZap: 'check', speedCheck: 'vs', slide: 'vs', zap: 'vs', program: 'vs',
+};
 
 /** Remove keys and mark the event redacted. Narration must not print numbers from a redacted event. */
 function omit<E extends CombatEvent>(e: E, keys: readonly string[]): E {
@@ -468,9 +557,14 @@ export function redactEvent(e: CombatEvent, visible: (id: string | undefined) =>
         ...(visible(e.attackerId) ? {} : { roll: { natural: 0, kind: 'normal' as const, value: 0 }, redacted: true }),
         ...(e.defense && !visible(e.defenderId) ? { defense: redactCheck(e.defense) } : {}),
       };
-    case 'netAction':
-      if (visible(e.combatantId)) return e;
-      return omit({ ...e, ...(e.check ? { check: redactCheck(e.check) } : {}), ...(e.vs ? { vs: redactCheck(e.vs) } : {}) }, ['dice', 'amount']);
+    case 'netAction': {
+      if (!visible(e.combatantId)) return omit({ ...e, ...(e.check ? { check: redactCheck(e.check) } : {}), ...(e.vs ? { vs: redactCheck(e.vs) } : {}) }, ['dice', 'amount']);
+      // Black ICE and Demon stats are GM-only: their side of a contest shows its total.
+      const side = NET_OPPONENT_SIDE[e.action];
+      if (side === 'check' && e.check) return { ...e, check: redactCheck(e.check) };
+      if (side === 'vs' && e.vs) return { ...e, vs: redactCheck(e.vs) };
+      return e;
+    }
     case 'gearAction':
       return visible(e.combatantId) ? e : omit({ ...e, ...(e.check ? { check: redactCheck(e.check) } : {}) }, ['amount', 'hpLeft', 'dv']);
     case 'extraResolved':
@@ -486,7 +580,8 @@ export function emptyView(sessionId: string): ViewState {
 
 /** Client-side reducer for projected entries. */
 export function applyProjectedEntry(view: ViewState, entry: ProjectedEntry): ViewState {
-  if (entry.seq !== view.seq + 1) throw new Error(`Expected seq ${view.seq + 1}, got ${entry.seq}`);
+  // Players never receive entries they can't see, so seqs may skip; anything already applied is ignored.
+  if (entry.seq <= view.seq) return view;
   const actors = { ...view.actors };
   for (const [id, a] of Object.entries(entry.patch.actors ?? {})) {
     if (a === null) delete actors[id];

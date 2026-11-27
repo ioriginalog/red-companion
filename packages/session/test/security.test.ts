@@ -53,11 +53,12 @@ describe('hostile payloads (round 1 critic #1, #2)', () => {
   const shot = { type: 'rangedAttack', attackerId: 'solo', defenderId: 'ganger', weaponId: 'pistol', distance: 10, ignoreLineOfSight: undefined };
   it('refuses player-sent modifiers and rulings on attacks', () => {
     const t = setup();
+    t.send({ type: 'placeToken', actorId: 'ganger', at: { x: 7, y: 0 } }, GM); // in view, so the party knows it
     expect(t.send({ ...shot, situational: [{ label: 'x', value: 100 }] }, P1)).toMatchObject({ ok: false, code: 'FORBIDDEN' });
     expect(t.send({ type: 'meleeAttack', attackerId: 'solo', defenderId: 'ganger', with: { kind: 'brawling' }, gmDv: 1 }, P1)).toMatchObject({ ok: false, code: 'FORBIDDEN' });
     expect(t.send({ ...shot, ignoreLineOfSight: true }, P1)).toMatchObject({ ok: false, code: 'FORBIDDEN' });
     expect(t.send({ type: 'stabilize', medicId: 'solo', targetId: 'solo', skill: 'First Aid', situational: [{ label: 'x', value: 5 }] }, P1)).toMatchObject({ ok: false, code: 'FORBIDDEN' });
-    expect(t.log).toHaveLength(4);
+    expect(t.log).toHaveLength(5);
   });
   it('refuses non-numeric and out-of-bounds GM modifiers, so the log never stores a bad total', () => {
     const t = setup();

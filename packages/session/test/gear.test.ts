@@ -28,6 +28,15 @@ const MAP: TacticalMap = {
   tokens: { solo: { x: 1, y: 1 }, thug: { x: 2, y: 1 }, boss: { x: 5, y: 1 } }, watches: {}, spotted: ['thug', 'boss'],
 };
 
+/** What the solo carries: catalog shields and drugs are linked gear entries (granted by the GM). */
+const SOLO_GEAR = [
+  { name: 'Polymer Riot Slab', qty: 1, item: 'shield:riot-slab' },
+  { name: 'Folding Ballistic Wing', qty: 1, item: 'shield:fold-shield' },
+  { name: 'Glimmer', qty: 2, item: 'drug:glimmer' },
+  { name: 'Nightjar', qty: 1, item: 'drug:nightjar' },
+  { name: 'Rope', qty: 1 },
+] as Combatant['gear'];
+
 function table() {
   let state: SessionState = emptySession('s');
   const log: LogEntry[] = [];
@@ -43,7 +52,7 @@ function table() {
     g(op: GearOp | Record<string, unknown>, by: Viewer, dice?: Dice) { return t.send({ type: 'gear', op: op as GearOp }, by, dice); },
     x(op: ExtraOp | Record<string, unknown>, by: Viewer, dice?: Dice) { return t.send({ type: 'extra', op: op as ExtraOp }, by, dice); },
   };
-  t.send({ type: 'addActor', actor: actor('solo', 'pc', 'p1') }, GM);
+  t.send({ type: 'addActor', actor: actor('solo', 'pc', 'p1', { gear: SOLO_GEAR }) }, GM);
   t.send({ type: 'addActor', actor: actor('thug', 'npc', 'gm') }, GM);
   t.send({ type: 'addActor', actor: actor('boss', 'npc', 'gm') }, GM);
   t.send({ type: 'setMap', map: MAP }, GM);
@@ -78,7 +87,7 @@ describe('shields', () => {
 
   it('a shield takes a hand: no two-handed weapons until it’s dropped (an Action)', () => {
     const t = table();
-    t.g({ op: 'equipShield', actorId: 'solo', shield: { name: 'Trash Can Lid', hp: 5 } }, P1);
+    t.g({ op: 'equipShield', actorId: 'solo', shield: { name: 'Trash Can Lid', hp: 5 } }, GM); // custom shields come from the GM
     expect(t.send({ type: 'rangedAttack', attackerId: 'solo', defenderId: 'thug', weaponId: 'rifle', distance: 2 }, P1)).toMatchObject({ ok: false, code: 'INVALID' });
     expect(t.g({ op: 'raiseShield', actorId: 'solo', raised: false }, P1).ok).toBe(true);
     expect(c(t, 'solo').shield!.raised).toBe(false);
@@ -204,11 +213,56 @@ describe('drugs', () => {
     expect(t.g({ op: 'takeDrug', actorId: 'solo', targetId: 'pal', drugId: 'nightjar' }, P1)).toMatchObject({ ok: false, code: 'OUT_OF_REACH' });
     expect(t.g({ op: 'takeDrug', actorId: 'solo', targetId: 'thug', drugId: 'nightjar' }, P1)).toMatchObject({ ok: false, code: 'FORBIDDEN' });
     const custom: DrugDef = { id: 'homebrew', name: 'Homebrew', duration: '1 hour', addictionDv: 12, effect: { note: 'Ours.', stats: { COOL: 2 } }, secondary: { note: 'Ours.', stats: { COOL: -1 } } };
-    expect(t.g({ op: 'takeDrug', actorId: 'solo', drug: custom }, P1).ok).toBe(true);
+    expect(t.g({ op: 'takeDrug', actorId: 'solo', drug: custom }, P1)).toMatchObject({ ok: false, code: 'FORBIDDEN' });
+    expect(t.g({ op: 'takeDrug', actorId: 'solo', drug: custom }, GM).ok).toBe(true);
     expect(effectiveStat(c(t, 'solo'), 'COOL')).toBe(8);
     for (const drug of [{ ...custom, effect: { note: 'x', stats: { COOL: 99 } } }, { ...custom, id: '<script>' }, { ...custom, sneaky: 1 }, { ...custom, effect: { note: 'x', stats: { HP: 1 } } }] as unknown[]) {
       expect(t.g({ op: 'takeDrug', actorId: 'solo', drug } as Record<string, unknown>, P1)).toMatchObject({ ok: false, code: 'INVALID' });
     }
+  });
+});
+
+describe('owned shields and drugs', () => {
+  const linked = (t: ReturnType<typeof table>, item: string) => ((c(t, 'solo').gear ?? []) as { item?: string; qty: number }[]).filter((g) => g.item === item).reduce((n, g) => n + g.qty, 0);
+  it('players equip only shields their character carries, and equipping takes it from the gear list', () => {
+    const t = table();
+    expect(t.g({ op: 'equipShield', actorId: 'solo', templateId: 'door-panel' }, P1)).toMatchObject({ ok: false, code: 'INVALID', message: 'solo isn’t carrying a Salvaged Car Door.' });
+    expect(t.g({ op: 'equipShield', actorId: 'solo', shield: { name: 'Homemade', hp: 50 } }, P1)).toMatchObject({ ok: false, code: 'FORBIDDEN' });
+    expect(t.g({ op: 'equipShield', actorId: 'solo', templateId: 'riot-slab' }, P1).ok).toBe(true);
+    expect(linked(t, 'shield:riot-slab')).toBe(0);
+    expect(c(t, 'solo').gear!.some((g) => g.name === 'Polymer Riot Slab')).toBe(false);
+    t.g({ op: 'dropShield', actorId: 'solo' }, P1);
+    expect(t.g({ op: 'equipShield', actorId: 'solo', templateId: 'riot-slab' }, P1)).toMatchObject({ ok: false, code: 'INVALID' });
+    // The GM referees: any shield, carried or not.
+    expect(t.g({ op: 'equipShield', actorId: 'solo', templateId: 'door-panel' }, GM).ok).toBe(true);
+  });
+  it('players take only drugs they carry; each dose comes out of the giver’s gear', () => {
+    const t = table();
+    expect(t.g({ op: 'takeDrug', actorId: 'solo', drugId: 'brickwall' }, P1)).toMatchObject({ ok: false, code: 'INVALID', message: 'solo isn’t carrying any Brickwall.' });
+    expect(t.g({ op: 'takeDrug', actorId: 'solo', drugId: 'glimmer' }, P1).ok).toBe(true);
+    expect(linked(t, 'drug:glimmer')).toBe(1);
+    t.send({ type: 'addActor', actor: actor('pal', 'pc', 'p2') }, GM);
+    t.send({ type: 'placeToken', actorId: 'pal', at: { x: 1, y: 2 } }, GM);
+    expect(t.g({ op: 'takeDrug', actorId: 'solo', targetId: 'pal', drugId: 'glimmer' }, P1).ok).toBe(true);
+    expect(linked(t, 'drug:glimmer')).toBe(0);
+    expect(t.state.actors.pal!.combatant.drugs!.active.map((d) => d.id)).toEqual(['glimmer']);
+    expect(t.g({ op: 'takeDrug', actorId: 'solo', drugId: 'glimmer' }, P1)).toMatchObject({ ok: false, code: 'INVALID' });
+  });
+  it('a player’s sheet edit can drop catalog gear but never add it or raise its count', () => {
+    const t = table();
+    const gear = c(t, 'solo').gear!;
+    const edit = (g: unknown[]) => t.send({ type: 'editOwnSheet', actorId: 'solo', gear: g as Combatant['gear'] }, P1);
+    expect(edit([...gear, { name: 'Brickwall', qty: 5, item: 'drug:brickwall' }])).toMatchObject({ ok: false, code: 'FORBIDDEN' });
+    expect(edit(gear.map((g) => (g.name === 'Glimmer' ? { ...g, qty: 9 } : g)))).toMatchObject({ ok: false, code: 'FORBIDDEN' });
+    expect(edit([...gear, { name: 'Glimmer', qty: 1, item: 'drug:glimmer' }])).toMatchObject({ ok: false, code: 'FORBIDDEN' });
+    expect(edit([...gear, { name: 'Odd', qty: 1, item: 'gun:x' }])).toMatchObject({ ok: false, code: 'INVALID' });
+    // Renaming, notes and using some up are fine; links survive the edit.
+    expect(edit(gear.map((g) => (g.name === 'Glimmer' ? { ...g, name: 'Glim', qty: 1, notes: 'Last ones' } : g))).ok).toBe(true);
+    expect(linked(t, 'drug:glimmer')).toBe(1);
+    expect(t.g({ op: 'takeDrug', actorId: 'solo', drugId: 'glimmer' }, P1).ok).toBe(true);
+    // The GM hands out more.
+    expect(t.send({ type: 'editOwnSheet', actorId: 'solo', gear: [...c(t, 'solo').gear!, { name: 'Brickwall', qty: 2, item: 'drug:brickwall' } as never] }, GM).ok).toBe(true);
+    expect(t.g({ op: 'takeDrug', actorId: 'solo', drugId: 'brickwall' }, P1).ok).toBe(true);
   });
 });
 

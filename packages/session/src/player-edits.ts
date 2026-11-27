@@ -3,7 +3,8 @@
  * skills, HP, weapons or cyberware). The GM may use it too. Payloads are
  * validated here; the shared validator passes this intent type through.
  */
-import type { CombatEvent, GearItem } from '@cprc/rules-core';
+import type { CombatEvent } from '@cprc/rules-core';
+import { GEAR_LINK, type OwnedGearItem } from './gear.js';
 import { SessionError } from './helpers.js';
 import type { Intent, SessionState, StatePatch, Viewer } from './types.js';
 
@@ -13,7 +14,7 @@ export const PLAYER_EDIT_INTENTS: ReadonlySet<string> = new Set(['editOwnSheet']
 const MAX_NOTES = 8000;
 const MAX_GEAR = 100;
 
-function cleanGear(v: unknown): GearItem[] {
+function cleanGear(v: unknown): OwnedGearItem[] {
   if (!Array.isArray(v)) throw new SessionError('INVALID', 'Gear must be a list.');
   if (v.length > MAX_GEAR) throw new SessionError('INVALID', `At most ${MAX_GEAR} gear items.`);
   return v.map((raw, i) => {
@@ -24,8 +25,16 @@ function cleanGear(v: unknown): GearItem[] {
     if (!Number.isInteger(g.qty) || (g.qty as number) < 0 || (g.qty as number) > 9999) throw new SessionError('INVALID', `${name}: quantity must be a whole number from 0 to 9,999.`);
     if (g.notes !== undefined && (typeof g.notes !== 'string' || g.notes.length > 500)) throw new SessionError('INVALID', `${name}: notes are limited to 500 characters.`);
     const notes = typeof g.notes === 'string' ? g.notes.trim() : '';
-    return { name, qty: g.qty as number, ...(notes ? { notes } : {}) };
+    if (g.item !== undefined && (typeof g.item !== 'string' || !GEAR_LINK.test(g.item))) throw new SessionError('INVALID', `${name}: unknown catalog item.`);
+    return { name, qty: g.qty as number, ...(notes ? { notes } : {}), ...(typeof g.item === 'string' ? { item: g.item } : {}) };
   });
+}
+
+/** Totals of catalog-linked gear (shields and drugs a character carries). */
+function linkedTotals(gear: OwnedGearItem[] | undefined): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const g of gear ?? []) if (g.item) out.set(g.item, (out.get(g.item) ?? 0) + g.qty);
+  return out;
 }
 
 export function executePlayerEdit(state: SessionState, intent: EditOwnSheetIntent, by: Viewer): { events: CombatEvent[]; patch: StatePatch } {
@@ -42,6 +51,13 @@ export function executePlayerEdit(state: SessionState, intent: EditOwnSheetInten
     throw new SessionError('INVALID', `Notes are limited to ${MAX_NOTES.toLocaleString('en-US')} characters.`);
   }
   const gear = intent.gear === undefined ? undefined : cleanGear(intent.gear);
+  // Catalog shields and drugs come from the GM: a player may use them up or drop them, never add more.
+  if (gear && by.role !== 'gm') {
+    const had = linkedTotals(a.combatant.gear as OwnedGearItem[] | undefined);
+    for (const [item, n] of linkedTotals(gear)) {
+      if (n > (had.get(item) ?? 0)) throw new SessionError('FORBIDDEN', 'Only the GM can add catalog shields or drugs to a character’s gear.');
+    }
+  }
   const notes = intent.notes === undefined ? a.notes : intent.notes.trim() || undefined;
   const { notes: _old, ...rest } = a;
   const next = {

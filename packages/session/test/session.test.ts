@@ -175,7 +175,9 @@ describe('projection', () => {
     expect(dmgEntry.events.some((e) => e.type === 'damageApplied')).toBe(false);
     expect(serialized).not.toContain('"hpAfter":30');
     expect(serialized).not.toContain('"currentSP"');
-    expect(projectEntry(t.log[2]!, P1, t.state).intentType).toBe('addActor');
+    // No visible events: who did it and what kind of intent it was stay hidden.
+    expect(projectEntry(t.log[2]!, P1, t.state).intentType).toBeUndefined();
+    expect(projectEntry(t.log[2]!, P1, t.state).by).toBeUndefined();
     expect(JSON.stringify(projectEntry(t.log[2]!, P1, t.state))).not.toContain('"skills"');
   });
   it('GM projection is complete', () => {
