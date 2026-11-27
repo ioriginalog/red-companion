@@ -26,6 +26,7 @@ import { useLayout } from './table/layout/useMedia.js';
 import { AreaConfirm } from './table/AreaConfirm.js';
 import { clearPlacement, prunePlacement, shiftPlacement, usePlacementQueue } from './table/placement.js';
 import { requiredPrompt } from './table/required.js';
+import { defaultTerrainStyle, rubbleFrom, type TerrainStyle } from './map/terrain.js';
 
 type Tab = 'combat' | 'sheet' | 'chat' | 'notes' | 'net' | 'scene';
 /** Bottom sheet height on phones and portrait tablets. */
@@ -73,6 +74,14 @@ export function Table({ s }: { s: ClientState }) {
   const [announce, setAnnounce] = useState('');
   const [notesUnread, setNotesUnread] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  // Terrain style: the GM's choice per map (Scene tab, Show Terrain); players get the map's default.
+  const terrainKey = view.map ? `nsc.terrain.${view.map.id}` : '';
+  const [terrainPick, setTerrainPick] = useState<Record<string, TerrainStyle>>({});
+  const storedTerrain = terrainKey ? (terrainPick[terrainKey] ?? (store.get(terrainKey) as TerrainStyle | null)) : null;
+  const terrainStyle: TerrainStyle | undefined = view.map
+    ? (isGm && (storedTerrain === 'full' || storedTerrain === 'outline') ? storedTerrain : defaultTerrainStyle(view.map)) : undefined;
+  const setTerrainStyle = (t: TerrainStyle) => { if (!terrainKey) return; store.set(terrainKey, t); setTerrainPick((m) => ({ ...m, [terrainKey]: t })); };
+  const rubble = useMemo(() => (view.map ? rubbleFrom(s.feed.flatMap((f) => f.events), view.map) : undefined), [s.feed, view.map?.cells, view.map?.width]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { warmSplitChunks(); }, []);
 
   const mine = useCallback((id: string | null | undefined) => !!id && (isGm || view.actors[id]?.controller === me), [isGm, view.actors, me]);
@@ -321,7 +330,7 @@ export function Table({ s }: { s: ClientState }) {
             showMini={showMini} onToggleMini={() => { const v = !showMini; setShowMini(v); store.set('nsc.minimap', v ? '1' : '0'); }}
             mode={effMode} areaKind={scatterPick ? 'blast' : areaKind} partyFog={partyFog} neutralTemplate={!!scatterPick}
             hoverInfo={(cell) => { const ci = view.map ? coverAt(view.map, cell) : null; return ci ? coverLabel(ci, isGm) : null; }} focusId={isGm ? focusId : null} highlight={highlight}
-            shareCursor={!isGm || gmCursor} me={c.me} act={c.act}
+            shareCursor={!isGm || gmCursor} me={c.me} act={c.act} terrainStyle={terrainStyle} rubble={rubble}
             signals={s.signals} effects={effects} nameOf={(f) => client.nameOf(f)}
             canDrag={(id) => isGm || (mine(id) && (!enc.active || currentId === id))}
             onToken={pickToken}
@@ -438,7 +447,7 @@ export function Table({ s }: { s: ClientState }) {
           {tab === 'notes' && <NotesPanel c={c} />}
           {tab === 'net' && showNet && <NetPanel view={view} actorId={netActorId} isGm={isGm} canAct={mine(netActorId)} act={(i) => client.act(i)} feed={s.feed} />}
           {tab === 'chat' && <ChatPanel c={c} rollerId={isGm ? (focusId ?? actingId) : (actingId ?? ownIds[0] ?? null)} onUnreadReset={() => setUnread(0)} />}
-          {tab === 'scene' && isGm && <ScenePanel c={c} mapMode={mapMode} setMapMode={setMapMode} shareCursor={gmCursor} setShareCursor={(v) => { setGmCursor(v); if (!v) client.signal({ kind: 'cursor', at: null }); }} onFocus={(id) => { setFocusId(id); setTab('combat'); }} />}
+          {tab === 'scene' && isGm && <ScenePanel c={c} mapMode={mapMode} setMapMode={setMapMode} terrainStyle={terrainStyle} setTerrainStyle={setTerrainStyle} shareCursor={gmCursor} setShareCursor={(v) => { setGmCursor(v); if (!v) client.signal({ kind: 'cursor', at: null }); }} onFocus={(id) => { setFocusId(id); setTab('combat'); }} />}
           {tab === 'scene' && isGm && <GmSystemsPanel c={c} />}
         </div>
       </aside>

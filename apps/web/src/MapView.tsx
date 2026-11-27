@@ -18,6 +18,8 @@ import { pendingArea } from './map/pendingArea.js';
 import { AnnotationLayer, LightingLayer, LightsLayer, PendingAreaLayer } from './map/layers.js';
 import { useMapTools } from './map/useMapTools.js';
 import { MapToolsBar } from './map/MapTools.js';
+import { defaultTerrainStyle, knownSquares, terrainPlan, type TerrainStyle } from './map/terrain.js';
+import { TerrainLayer } from './map/TerrainLayer.js';
 
 export type MapMode = 'move' | 'watch' | 'place' | 'ruler' | 'area' | 'reveal';
 
@@ -69,6 +71,10 @@ interface Props {
   me?: string;
   /** Sends map tool intents (drawings, lights). Without it the tools are hidden. */
   act?: (i: Intent) => boolean;
+  /** Terrain drawing: solid ('full') or a light trace over painted art ('outline'). Default from the map. */
+  terrainStyle?: TerrainStyle;
+  /** Destroyed cover squares ("x,y") to draw as rubble. */
+  rubble?: Set<string>;
 }
 
 /** Smallest on-screen square in compact (phone) layout, in CSS px. */
@@ -230,6 +236,12 @@ export function MapView(p: Props) {
   // Seen-before squares dim; never-seen squares go dark (exploration fog).
   const fog = useMemo(() => (showFog ? fogPaths(map, vision, S) : { dim: '', dark: '' }), [vision, showFog, map.width, map.height, map.explored, S]); // eslint-disable-line react-hooks/exhaustive-deps
   const fogPath = fog.dim;
+  // Terrain: players only get squares the party knows, so the layer never maps unexplored rooms.
+  const tStyle = p.terrainStyle ?? defaultTerrainStyle(map);
+  const terrain = useMemo(
+    () => terrainPlan(map, S, knownSquares(map, vision, p.isGm), { isGm: p.isGm, rubble: p.rubble }),
+    [map.cells, map.cover, map.width, map.height, map.explored, vision, p.isGm, p.rubble, S], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   // Light levels: the GM's own view shades the whole map; fogged views shade what the party sees.
   const lit = lightingActive(map);
   const gmLevels = useMemo(() => (p.isGm && !showFog && lit ? lightLevels(map) : null), [p.isGm, showFog, lit, map]);
@@ -547,6 +559,8 @@ export function MapView(p: Props) {
         {map.background ? <image href={map.background} x={0} y={0} width={W} height={H} preserveAspectRatio="none" /> : <rect width={W} height={H} fill="#0b1230" />}
 
         {gridLayer}
+
+        <TerrainLayer plan={terrain} S={S} style={tStyle} />
 
         {/* Light: dim and dark squares, then the light sources' glow. */}
         <LightingLayer map={map} levels={levels} vision={vision} scope={showFog ? 'vision' : 'map'} S={S} nightEyes={nightEyes} />
