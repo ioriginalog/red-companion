@@ -25,8 +25,8 @@ export function GmSystemsPanel({ c }: { c: SystemsCtx }) {
       <div className="ttl">Downtime and Upkeep</div>
       <div className="sys-gm">
         <div className="sys-sub">Rest</div>
-        <div className="row" style={{ flexWrap: 'wrap' }}>
-          <label className="row"><span className="dim">Days</span><input type="number" min={1} max={60} value={days} onChange={(e) => setDays(Math.max(1, Math.min(60, Number(e.target.value) || 1)))} style={{ width: 64 }} /></label>
+        <div className="row u-wrap">
+          <label className="row"><span className="dim">Days</span><input className="u-w-64" type="number" min={1} max={60} value={days} onChange={(e) => setDays(Math.max(1, Math.min(60, Number(e.target.value) || 1)))} /></label>
           <select value={care} onChange={(e) => setCare(e.target.value as Care)} aria-label="Where They Rest">
             <option value="home">At Home (BODY per Day)</option>
             <option value="hospital">Hospital Bed (BODY × 2)</option>
@@ -35,22 +35,22 @@ export function GmSystemsPanel({ c }: { c: SystemsCtx }) {
           <button className="btn" disabled={fighting} title={fighting ? 'End the encounter first.' : undefined} onClick={() => c.act({ type: 'rest', days, care })}>Rest Everyone</button>
         </div>
 
-        <div className="sys-sub" style={{ marginTop: 10 }}>Character</div>
+        <div className="sys-sub u-mt-10">Character</div>
         <select value={who} onChange={(e) => setWho(e.target.value)} aria-label="Character">
           {actors.map((a) => <option key={a.id} value={a.id}>{a.public.name}</option>)}
         </select>
-        {target?.humanity && <div className="dim" style={{ fontSize: 13 }}>Humanity {target.humanity.current} / {target.humanity.max}</div>}
+        {target?.humanity && <div className="dim u-fs-13">Humanity {target.humanity.current} / {target.humanity.max}</div>}
 
-        <div className="row" style={{ flexWrap: 'wrap', marginTop: 6 }}>
+        <div className="row u-wrap u-mt-6">
           <select value={kind} onChange={(e) => setKind(e.target.value as 'standard' | 'extreme')} aria-label="Therapy">
             <option value="standard">Standard Therapy (DV {THERAPY.standard.dv}, Humanity 40+)</option>
             <option value="extreme">Extreme Therapy (DV {THERAPY.extreme.dv}, Below 40)</option>
           </select>
-          <label className="row"><span className="dim">Therapist</span><input type="number" min={0} max={40} value={base} onChange={(e) => setBase(Math.max(0, Math.min(40, Number(e.target.value) || 0)))} style={{ width: 56 }} aria-label="Therapist STAT plus Skill" /></label>
+          <label className="row"><span className="dim">Therapist</span><input className="u-w-56" type="number" min={0} max={40} value={base} onChange={(e) => setBase(Math.max(0, Math.min(40, Number(e.target.value) || 0)))} aria-label="Therapist STAT plus Skill" /></label>
           <button className="btn" disabled={!target?.humanity} onClick={() => c.act({ type: 'therapy', actorId: who, kind, therapistBase: base })}>Run a Week of Therapy</button>
         </div>
 
-        <div className="row" style={{ flexWrap: 'wrap', marginTop: 6 }}>
+        <div className="row u-wrap u-mt-6">
           <select value={item} onChange={(e) => setItem(e.target.value)} aria-label="Cyberware">
             {groups.map((g, a) => (
               <optgroup key={g.label} label={g.label}>

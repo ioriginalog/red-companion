@@ -8,6 +8,8 @@
  *   /w Name message           whisper to a player (player or character name; a unique prefix works)
  *   anything else             chat
  */
+import { joinNames } from './format.js';
+export { joinNames };
 import type { Modifier } from '@cprc/rules-core';
 import type { DiceExpr, Intent, StatKeyName } from '@cprc/session';
 import { ALL_SKILLS } from '../data/skills.js';
@@ -26,6 +28,8 @@ export interface CommandContext {
   recipients: Recipient[];
   /** Speak as this character in plain chat. */
   asActorId?: string;
+  /** Characters this viewer may roll for by name (the GM: everyone with a sheet). */
+  rollable?: { id: string; name: string; skills: string[] }[];
 }
 
 export type Parsed =
@@ -131,7 +135,30 @@ export function resolveSkill(term: string, own: string[]): { skill: string } | {
   return { error: ranked.length ? `Unknown skill “${term.trim()}”. Did you mean ${ranked.join(' or ')}?` : `Unknown skill “${term.trim()}”. Type /help for the format.` };
 }
 
+/**
+ * "/check Enforcer COOL vs 15": a leading character name (exact, or a unique
+ * prefix) picks who rolls. Returns the rest of the spec and that character.
+ */
+export function splitRoller(spec: string, rollable: NonNullable<CommandContext['rollable']>): { rest: string; actor: { id: string; skills: string[] } } | { error: string } | null {
+  const words = spec.trim().split(/\s+/);
+  for (let n = words.length - 1; n >= 1; n--) {
+    const cand = words.slice(0, n).join(' ').toLowerCase();
+    if (STATS.includes(words[0]!.toUpperCase() as StatKeyName)) return null;
+    const exact = rollable.filter((a) => a.name.toLowerCase() === cand);
+    const pre = exact.length ? exact : rollable.filter((a) => a.name.toLowerCase().startsWith(cand));
+    if (pre.length === 1) return { rest: words.slice(n).join(' '), actor: pre[0]! };
+    if (pre.length > 1 && n === 1) return { error: `“${words[0]}” matches ${joinNames(pre.map((a) => a.name))}. Type more of the name.` };
+  }
+  return null;
+}
+
+
 function parseCheck(spec: string, ctx: CommandContext, priv: boolean): Parsed {
+  if (ctx.rollable?.length) {
+    const who = splitRoller(spec, ctx.rollable);
+    if (who && 'error' in who) return { kind: 'error', message: who.error };
+    if (who) return parseCheck(who.rest, { ...ctx, actorId: who.actor.id, skills: who.actor.skills, rollable: undefined }, priv);
+  }
   let s = spec.trim();
   let label: string | undefined;
   const colon = s.indexOf(':');

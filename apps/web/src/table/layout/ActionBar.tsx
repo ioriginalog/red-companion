@@ -6,6 +6,7 @@ import { isFriendly, type Attack } from '../../tactics.js';
 import { pct } from '../../odds.js';
 import type { MapMode } from '../../MapView.js';
 import type { TableCtx } from '../ctx.js';
+import type { Required } from '../required.js';
 
 export interface ActionBarProps {
   c: TableCtx;
@@ -24,8 +25,11 @@ export interface ActionBarProps {
   canEndTurn: boolean;
   partyFog: boolean;
   setPartyFog: (v: boolean) => void;
-  /** Extra primary actions (e.g. Delay/Hold from the play-loop track), shown in both layouts. */
+  /** Extra primary actions (e.g. Delay), shown in both layouts. */
   extra?: ReactNode;
+  /** Something this viewer must answer first (Death Save, dodge…): takes over the bar. */
+  required?: Required | null;
+  onOpenPanel?: () => void;
 }
 
 interface Item { key: string; label: string; on?: boolean; disabled?: boolean; title?: string; tone?: 'yellow' | 'danger'; run: () => void }
@@ -51,14 +55,14 @@ export function ActionBar(p: ActionBarProps) {
     : null;
 
   const secondary: Item[] = [
-    { key: 'watch', label: 'Watch', on: mapMode === 'watch', disabled: !canAct || !view.map || !!usage?.actionUsed, title: 'House rule: spend your Action to watch a 90° cone until your next Turn. (W)', run: () => toggle('watch') },
+    { key: 'watch', label: 'Watch', on: mapMode === 'watch', disabled: !canAct || !view.map || !!usage?.actionUsed, title: 'House rule: spend your Action to watch a 90° cone until your next Turn (W).', run: () => toggle('watch') },
     { key: 'ruler', label: 'Ruler', on: mapMode === 'ruler', disabled: !view.map, title: 'Ruler (R)', run: () => toggle('ruler') },
     { key: 'reload', label: 'Reload', disabled: !canAct || !weapon?.ammo || weapon.ammo.loaded === weapon.ammo.capacity, run: () => { if (actingId && weapon) c.act({ type: 'reload', actorId: actingId, weaponId: weapon.id }); } },
     { key: 'brawl', label: 'Brawl', disabled: !canAct || !targetId, run: () => { if (actingId && targetId) c.act({ type: 'meleeAttack', attackerId: actingId, defenderId: targetId, with: { kind: 'brawling' } }); } },
-    ...(stabilize && t ? [{ key: 'stab', label: 'Stabilize', disabled: !!usage?.actionUsed || !!view.pending, title: `Stabilize ${t.public.name} with ${stabilize} (uses your Action; must be adjacent)`, run: () => { if (actingId) c.act({ type: 'stabilize', medicId: actingId, targetId: t.id, skill: stabilize }); } }] : []),
+    ...(stabilize && t ? [{ key: 'stab', label: 'Stabilize', disabled: !!usage?.actionUsed || !!view.pending, title: `Stabilize ${t.public.name} with ${stabilize} (uses your Action; must be adjacent).`, run: () => { if (actingId) c.act({ type: 'stabilize', medicId: actingId, targetId: t.id, skill: stabilize }); } }] : []),
     ...(isGm ? [
       { key: 'place', label: 'Place', on: mapMode === 'place', disabled: !view.map, title: 'Select a token, then tap a square to put it there.', run: () => toggle('place') },
-      { key: 'party', label: 'Party View', on: p.partyFog, disabled: !view.map, title: 'Show what the party can see', run: () => p.setPartyFog(!p.partyFog) },
+      { key: 'party', label: 'Party View', on: p.partyFog, disabled: !view.map, title: 'Show what the party can see.', run: () => p.setPartyFog(!p.partyFog) },
       { key: 'undo', label: 'Undo', run: () => client.undo() },
       ...(enc.active ? [{ key: 'endenc', label: 'End Encounter', run: () => { c.act({ type: 'endEncounter' }); } }] : []),
     ] : []),
@@ -70,6 +74,23 @@ export function ActionBar(p: ActionBarProps) {
   const showEndTurn = enc.active && (isGm || mine(currentId));
   const fireLabel = weapon && profileOf(weapon).melee ? 'Strike' : 'Fire';
   const chance = p.attack?.ok && p.attack.chance != null ? pct(p.attack.chance) : null;
+
+  const req = p.required;
+  if (req) {
+    // Nothing else can happen until this is answered: the bar becomes the prompt.
+    return (
+      <footer className={`actions${compact ? ' dock' : ''} dock-required`} aria-label={`Action Required: ${req.title}`} role="region">
+        <span className="req-title h"><span aria-hidden>! </span>{req.title}</span>
+        <div className="spacer" />
+        {req.choices.map((ch) => (
+          <button key={ch.label} className={`btn${ch.tone === 'yellow' ? ' yellow req-main' : ''}`} onClick={() => c.act(ch.intent)}>{ch.label}</button>
+        ))}
+        {(req.choices.length === 0 || !compact) && p.onOpenPanel && (
+          <button className="btn ghost" onClick={p.onOpenPanel}>{req.choices.length === 0 ? 'Answer in Panel' : 'Details'}</button>
+        )}
+      </footer>
+    );
+  }
 
   if (!compact) {
     return (
@@ -102,7 +123,7 @@ export function ActionBar(p: ActionBarProps) {
       {p.extra}
       <div className="spacer" />
       {canAct && weapon && enc.active && (
-        <button className="btn yellow dock-fire" disabled={!p.fireNow} onClick={p.onFire} title="Fire (F)" aria-label={targetId ? `${fireLabel}${chance ? `, ${chance} to hit` : ''}` : `${fireLabel}: pick a target first`}>
+        <button className="btn yellow dock-fire" disabled={!p.fireNow} onClick={p.onFire} title="Fire (F)" aria-label={targetId ? `${fireLabel}${chance ? `, ${chance} to Hit` : ''}` : `${fireLabel}: Pick a Target First`}>
           {fireLabel}{chance && targetId && <span className="sub mono">{chance}</span>}
         </button>
       )}

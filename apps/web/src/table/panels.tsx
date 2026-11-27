@@ -6,6 +6,7 @@ import { dodgeContext, isFriendly } from '../tactics.js';
 import { pct } from '../odds.js';
 import { isMuted, setMuted } from './sound.js';
 import type { TableCtx } from './ctx.js';
+import { joinNames } from './format.js';
 
 export function Portrait({ a, big, small, active }: { a: ProjectedActor; big?: boolean; small?: boolean; active?: boolean }) {
   return (
@@ -28,10 +29,10 @@ export function TopBar({ c, onHelp }: { c: TableCtx; onHelp: () => void }) {
     <header className="topbar">
       <div className="brand h"><span className="slash" />Night Shift <b>Companion</b></div>
       <div className="h dim scene-name">{view.map?.name ?? 'No Map Loaded'}</div>
-      {enc.active && <span className="chip" style={{ color: 'var(--yellow)' }}>Round {enc.round}</span>}
+      {enc.active && <span className="chip u-yellow">Round {enc.round}</span>}
       <div className="spacer" />
       {isGm && s.joinCode && (
-        <button className="chip code" onClick={invite} title="Copy an invite link for your players">
+        <button className="chip code" onClick={invite} title="Copy an invite link for your players.">
           {copied ? 'Link Copied' : `Invite · ${s.joinCode}`}
         </button>
       )}
@@ -42,14 +43,14 @@ export function TopBar({ c, onHelp }: { c: TableCtx; onHelp: () => void }) {
           Queued: {s.queued} {s.queued === 1 ? 'Action' : 'Actions'}
         </span>
       )}
-      <span className={`chip${s.unsynced > 0 ? ' warn-chip' : ''}`} role="status" title={s.unsynced > 0 ? `${s.unsynced} ${s.unsynced === 1 ? 'action' : 'actions'} will sync when the connection returns` : s.status === 'online' ? 'Synced' : 'Reconnecting'}>
+      <span className={`chip${s.unsynced > 0 ? ' warn-chip' : ''}`} role="status" title={s.unsynced > 0 ? `${s.unsynced} ${s.unsynced === 1 ? 'action' : 'actions'} will sync when the connection returns.` : s.status === 'online' ? 'Synced' : 'Reconnecting'}>
         <span className={`dot ${s.status === 'online' && !s.unsynced ? 'on' : 'off'}`} />
         <span className={s.unsynced > 0 ? '' : 'hide-sm'}>{s.unsynced > 0
           ? `${s.status === 'online' ? 'Syncing' : 'Offline'}: ${s.unsynced} ${s.unsynced === 1 ? 'Action' : 'Actions'} Will Sync`
           : s.status === 'online' ? 'Synced' : s.status === 'connecting' ? 'Connecting' : 'Offline'}</span>
       </span>
       <button className="btn ghost icon" onClick={() => { setMuted(!muted); setM(!muted); }} aria-pressed={!muted} aria-label={muted ? 'Sound Off' : 'Sound On'} title={muted ? 'Sound Off' : 'Sound On'}>{muted ? 'Muted' : 'Sound'}</button>
-      <button className="btn ghost icon" onClick={onHelp} title="Help, Shortcuts and About (?)" aria-label="Help and About">?</button>
+      <button className="btn ghost icon" onClick={onHelp} title="Help, Shortcuts, and About (?)" aria-label="Help and About">?</button>
       {/* The session menu holds Leave (with confirmation), the GM key, backup and export. */}
       <button className="btn ghost hide-sm" onClick={() => client.openSessionMenu()}>{isGm ? 'Session' : 'Leave'}</button>
     </header>
@@ -112,7 +113,7 @@ export function Prompts({ c, onPickScatter, scatterPicking }: { c: TableCtx; onP
         <p>{name(pending.attackerId)}’s {pending.areaKind === 'launcher' ? 'shot' : 'grenade'} missed. Where does it land?</p>
         <div className="row">
           <button className={`btn yellow${scatterPicking ? ' on' : ''}`} aria-pressed={!!scatterPicking} onClick={() => onPickScatter?.(!scatterPicking)}>{scatterPicking ? 'Tap the Map…' : 'Pick on Map'}</button>
-          <button className="btn" onClick={() => act({ type: 'placeScatter', pendingId: pending.id })} title="A random square within the blast area around the aim point">Roll It</button>
+          <button className="btn" onClick={() => act({ type: 'placeScatter', pendingId: pending.id })} title="A random square within the blast area around the aim point.">Roll It</button>
         </div>
       </div>,
     );
@@ -128,7 +129,7 @@ export function Prompts({ c, onPickScatter, scatterPicking }: { c: TableCtx; onP
       out.push(
         <div className="card prompt" key="late">
           <div className="ttl">Not in Initiative</div>
-          <p>{late.map(name).join(', ')} {late.length > 1 ? 'are' : 'is'} on the map but not in the Turn order.</p>
+          <p>{joinNames(late.map(name))} {late.length > 1 ? 'are' : 'is'} on the map but not in the Turn order.</p>
           <div className="row">
             <button className="btn yellow" onClick={() => { for (const id of late) if (!act({ type: 'addToInitiative', actorId: id })) break; }}>{late.length > 1 ? 'Roll Them All In' : 'Roll Them In'}</button>
             <button className="btn" onClick={() => setDismissed([...dismissed, ...late])}>Not Now</button>
@@ -258,19 +259,21 @@ function DodgePrompt({ c, pending }: { c: TableCtx; pending: Extract<NonNullable
   );
 }
 
-export const DISCLAIMER = 'This is unofficial content provided under the Homebrew Content Policy of R. Talsorian Games and is not approved or endorsed by RTG. This content references materials that are the property of R. Talsorian Games and its licensees.';
+export { DISCLAIMER } from '../legal.js';
+import { DISCLAIMER } from '../legal.js';
 
 export const SHORTCUTS: [string, string][] = [
-  ['M', 'Move mode'], ['W', 'Watch (spend your Action)'], ['F', 'Fire at the target'], ['R', 'Ruler'], ['E', 'End your Turn'],
-  ['Esc', 'Cancel the current tool'], ['?', 'This help'], ['Alt + Click', 'Ping a square'], ['Long Press', 'Ping (touch)'],
-  ['Wheel / Pinch', 'Zoom'], ['Drag Empty Space', 'Pan'], ['Drag a Token', 'Move it'], ['Right-Click a Token', 'GM inspector'],
-  ['Tab (on the Map)', 'Cycle through visible tokens'], ['Arrow Keys (on the Map)', 'Move the focus square'],
-  ['Enter (on the Map)', 'Act on the focus square: move there or target the token'], ['G (on the Map)', 'Focus the map'],
+  ['M', 'Move Mode'], ['W', 'Watch (Spend Your Action)'], ['F', 'Fire at the Target'], ['R', 'Ruler'], ['E', 'End Your Turn'],
+  ['Esc', 'Cancel the Current Tool'], ['?', 'This Help'], ['Alt + Click', 'Ping a Square'], ['Long Press', 'Ping (Touch)'],
+  ['Wheel / Pinch', 'Zoom'], ['Drag Empty Space', 'Pan'], ['Drag a Token', 'Move It'], ['Right-Click a Token', 'GM Inspector'],
+  ['Tab (on the Map)', 'Cycle through Visible Tokens'], ['Arrow Keys (on the Map)', 'Move the Focus Square'],
+  ['Enter (on the Map)', 'Act on the Focus Square: Move There or Target the Token'], ['G (on the Map)', 'Focus the Map'],
 ];
 export const COMMANDS: [string, string][] = [
-  ['/r 2d6+3 Label', 'Roll dice (d6 or d10)'], ['/check REF+Handgun vs 15', 'Skill check for your character (vs, dv or against)'],
-  ['/check 12 vs 15', 'Raw check: a base number plus 1d10'], ['/gm /r 1d10', 'Private roll (only you and the GM see it)'],
-  ['/gm message', 'Whisper to the GM'], ['/w Name message', 'Whisper by player or character name (a unique prefix works)'],
+  ['/r 2d6+3 Label', 'Roll Dice (d6 or d10)'], ['/check REF+Handgun vs 15', 'Skill Check for Your Character (vs, dv, or against)'],
+  ['/check Enforcer COOL vs 15', 'GM: Check for a Named Character'],
+  ['/check 12 vs 15', 'Raw Check: A Base Number plus 1d10'], ['/gm /r 1d10', 'Private Roll (Only You and the GM See It)'],
+  ['/gm message', 'Whisper to the GM'], ['/w Name message', 'Whisper by Player or Character Name (A Unique Prefix Works)'],
 ];
 
 export function HelpOverlay({ onClose }: { onClose: () => void }) {
@@ -279,12 +282,12 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
       <div className="card help" onClick={(e) => e.stopPropagation()}>
         <div className="ttl">Shortcuts</div>
         <dl>{SHORTCUTS.map(([k, v]) => <div key={k}><dt><kbd>{k}</kbd></dt><dd>{v}</dd></div>)}</dl>
-        <div className="ttl" style={{ marginTop: 14 }}>Chat Commands</div>
+        <div className="ttl u-mt-14">Chat Commands</div>
         <dl>{COMMANDS.map(([k, v]) => <div key={k}><dt><code>{k}</code></dt><dd>{v}</dd></div>)}</dl>
-        <div className="ttl" style={{ marginTop: 14 }}>About and Legal</div>
+        <div className="ttl u-mt-14">About and Legal</div>
         <p className="small legal">{DISCLAIMER}</p>
         <p className="small dim">Night Shift Companion is a free, non-commercial fan tool. Map and portrait art was generated for this project; it contains no R. Talsorian Games or CD PROJEKT RED art.</p>
-        <button className="btn" onClick={onClose} style={{ marginTop: 12 }}>Close</button>
+        <button className="btn u-mt-12" onClick={onClose}>Close</button>
       </div>
     </div>
   );

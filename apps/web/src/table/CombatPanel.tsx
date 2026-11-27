@@ -74,7 +74,7 @@ export function CombatPanel(p: Props) {
           <div className="ttl">{p.currentId === actingId ? 'Acting Now' : 'Selected'}</div>
           <div className="row">
             <Portrait a={acting} big active={p.currentId === actingId} />
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="u-grow u-minw-0">
               <div className="h name-lg">{acting.public.name}</div>
               <div className="dim h sub">{ALLEGIANCE[acting.public.allegiance]} · {WOUND[acting.public.woundState]}</div>
               {hp && <>
@@ -113,13 +113,13 @@ export function CombatPanel(p: Props) {
             <div className="modes">
               {weapon && area !== 'blast' && view.map && p.setCoverPick && (
                 <button className={`mode${p.coverPick ? ' sel' : ''}`} disabled={actionGone && !(usage?.attackWith === weapon.id)} aria-pressed={!!p.coverPick}
-                  onClick={() => p.setCoverPick!(!p.coverPick)} title="Shoot a cover square to wear it down (uses your Action)">
+                  onClick={() => p.setCoverPick!(!p.coverPick)} title="Shoot a cover square to wear it down (uses your Action).">
                   Shoot Cover
                 </button>
               )}
               {area && (
                 <button className={`mode${p.mapMode === 'area' ? ' sel' : ''}`} disabled={actionGone} onClick={() => p.setMapMode(p.mapMode === 'area' ? 'move' : 'area')}
-                  title={area === 'blast' ? 'Aim a 10 × 10 m/yds blast' : 'Fire a shell: 6 m/yds cone'}>
+                  title={area === 'blast' ? 'Aim a 10 × 10 m/yds blast.' : 'Fire a shell: 6 m/yds cone.'}>
                   {area === 'blast' ? 'Blast Template' : 'Shell Template'}
                 </button>
               )}
@@ -132,20 +132,26 @@ export function CombatPanel(p: Props) {
               )}
             </div>
           )}
-          {p.mapMode === 'area' && <p className="dim small" style={{ marginTop: 8 }}>Tap a square to fire. Orange squares are hit; hatched squares are shielded by cover.</p>}
-          {p.coverPick && <p className="dim small" style={{ marginTop: 8 }}>Tap a cover square to shoot it. Destroyed cover becomes open ground.</p>}
+          {p.mapMode === 'area' && <p className="dim small u-mt-8">Tap a square to fire. Orange squares are hit; hatched squares are shielded by cover.</p>}
+          {p.coverPick && <p className="dim small u-mt-8">Tap a cover square to shoot it. Destroyed cover becomes open ground.</p>}
         </section>
       )}
 
       {canAct && (
         <section className="card">
-          <div className="ttl row" style={{ justifyContent: 'space-between' }}>
+          <div className="ttl row u-between">
             <span>Target</span>
-            {actingId && <button className="link" onClick={() => p.setTargetId(nearestTarget(view, actingId))}>Nearest</button>}
+            {actingId && (() => {
+              const near = nearestTarget(view, actingId);
+              return (
+                <button className="link" disabled={!near} onClick={() => near && p.setTargetId(near)}
+                  title={near ? 'Target the closest enemy in line of sight.' : 'No enemy is in this character’s line of sight.'}>Nearest</button>
+              );
+            })()}
           </div>
           {area === 'blast' ? <p className="dim">{weapon?.name ?? 'This weapon'} fires at a square, not a person. Use the Blast Template.</p> : !target ? <p className="dim">{p.targetHint ?? 'Tap an enemy on the map.'}</p> : (
             <>
-              <div className="row" style={{ marginBottom: 10 }}>
+              <div className="row u-mb-10">
                 <Portrait a={target} />
                 <div>
                   <div className="h name-md">{target.public.name}</div>
@@ -157,9 +163,9 @@ export function CombatPanel(p: Props) {
                 <div><div className="k">Chance to Hit</div><div className={`v mono ${attack?.ok && attack.chance !== null ? (attack.chance >= 0.6 ? 'good' : attack.chance >= 0.35 ? 'mid' : 'bad') : ''}`}>{attack?.ok && attack.chance !== null ? pct(attack.chance) : '—'}</div></div>
                 <div><div className="k">Action Cost</div><div className="v cost">{attack?.ok ? (attack.perAction > 1 ? `1 of ${attack.perAction}` : 'Full Action') : '—'}</div></div>
               </div>
-              {attack && !attack.ok && <div className="warn" style={{ marginTop: 10 }}>{attack.reason}</div>}
+              {attack && !attack.ok && <div className="warn u-mt-10">{attack.reason}</div>}
               {attack?.ok && (
-                <div className="breakdown" style={{ marginTop: 10 }}>
+                <div className="breakdown u-mt-10">
                   <span>{attack.baseLabel} + {attack.skill}</span><span className="mono">{attack.base}</span>
                   {attack.modifiers.map((m, i) => <Fragment key={i}><span>{m.label}</span><span className="mono">{signed(m.value)}</span></Fragment>)}
                   <span>+ 1d10</span><span />
@@ -168,7 +174,7 @@ export function CombatPanel(p: Props) {
                   {p.mode === 'autofire' && <span className="dim full">Uses 10 rounds. Damage is 2d6 × how much you beat the DV by (capped).</span>}
                 </div>
               )}
-              <div style={{ marginTop: 12 }}>
+              <div className="u-mt-12">
                 <button className="cta" disabled={fireBlocked(p, !!view.pending)} onClick={p.onFire} title="Fire (F)">
                   {weapon && profileOf(weapon).melee ? 'Strike' : 'Fire'}
                 </button>

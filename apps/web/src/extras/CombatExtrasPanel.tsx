@@ -63,7 +63,7 @@ export function CombatExtrasPanel({ c, actingId, targetId, canAct }: { c: Extras
             <span className="dim">Both sides take −2 to all Actions and can’t use two-handed weapons.</span>
           </div>
         )}
-        {!usable ? <p className="dim" style={{ margin: 0 }}>Nothing to do here right now.</p> : (
+        {!usable ? <p className="dim u-m-0">Nothing to do here right now.</p> : (
           <div className="ex-grid">
             {holding ? (
               <>
@@ -104,8 +104,8 @@ export function CombatExtrasPanel({ c, actingId, targetId, canAct }: { c: Extras
           </div>
         )}
         {usable && c.isGm && t?.weapons?.length && !holding && !heldBy ? (
-          <label className="ex-form" style={{ marginTop: 8 }}>
-            <span className="dim" style={{ fontSize: 12 }}>Item to Snatch (GM)</span>
+          <label className="ex-form u-mt-8">
+            <span className="dim u-fs-12">Item to Snatch (GM)</span>
             <select value={itemId} onChange={(e) => setItemId(e.target.value)}>
               <option value="">GM Decides Later</option>
               {t.weapons.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -117,11 +117,11 @@ export function CombatExtrasPanel({ c, actingId, targetId, canAct }: { c: Extras
       {usable && forms.length > 0 && (
         <section className="card">
           <div className="ttl">Martial Arts</div>
-          <div className="row" style={{ gap: 8, marginBottom: 6 }}>
+          <div className="row u-gap-8 u-mb-6">
             <select aria-label="Martial Arts Form" value={pickedForm} onChange={(e) => setForm(e.target.value)}>
               {forms.map((f) => <option key={f} value={f}>{f} {formLevel(ac, f)}</option>)}
             </select>
-            <label className="row" style={{ gap: 4, fontSize: 13 }}><input type="checkbox" checked={aimHead} onChange={(e) => setAimHead(e.target.checked)} />Aim at the Head (−8)</label>
+            <label className="row u-gap-4 u-fs-13"><input type="checkbox" checked={aimHead} onChange={(e) => setAimHead(e.target.checked)} />Aim at the Head (−8)</label>
           </div>
           {SPECIAL_MOVES.filter((m) => m.form === pickedForm).map((m) => {
             const why = moveRequirementProblem(ac, m) ?? (m.kind === 'attack' && !t ? 'Pick a target.' : null);
@@ -139,7 +139,7 @@ export function CombatExtrasPanel({ c, actingId, targetId, canAct }: { c: Extras
               </div>
             );
           })}
-          {SPECIAL_MOVES.every((m) => m.form !== pickedForm) && <p className="dim" style={{ margin: 0 }}>No Special Moves are listed for {pickedForm}. The GM can still rule on one.</p>}
+          {SPECIAL_MOVES.every((m) => m.form !== pickedForm) && <p className="dim u-m-0">No Special Moves are listed for {pickedForm}. The GM can still rule on one.</p>}
         </section>
       )}
 
@@ -157,7 +157,7 @@ function FacedownCard({ c }: { c: ExtrasCtx }) {
         {list.map((f) => (
           <li key={f.id}>
             <div><b>{c.name(f.winnerId)}</b> stared down <b>{c.name(f.loserId)}</b>{f.status === 'fighting' ? ' (fighting on at −2)' : ''}.</div>
-            <div className="row" style={{ gap: 6, marginTop: 4 }}>
+            <div className="row u-gap-6 u-mt-4">
               {f.status === 'choosing' && (c.isGm || c.mine(f.loserId)) && <>
                 <button className="btn sm" onClick={() => send(c, { kind: 'facedownChoice', facedownId: f.id, choice: 'backDown' })}>Back Down</button>
                 <button className="btn sm" onClick={() => send(c, { kind: 'facedownChoice', facedownId: f.id, choice: 'fight' })}>Fight On at −2</button>

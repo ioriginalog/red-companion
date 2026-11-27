@@ -15,12 +15,12 @@ export function NotesAndGear({ c, a, canEdit }: { c: TableCtx; a: ProjectedActor
     if (!a.notes && !a.gmNotes && !canEdit) return null;
     return (
       <section className="card">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="row u-between">
           <div className="ttl">Notes</div>
           {canEdit && <button className="btn sm ghost" onClick={() => setDraft({ notes: a.notes ?? '', gear: toRows(a.combatant?.gear) })}>Edit Notes and Gear</button>}
         </div>
         {a.notes ? <p className="notes">{a.notes}</p> : <p className="dim small">No notes yet.</p>}
-        {c.isGm && a.gmNotes && (<><div className="ttl" style={{ marginTop: 8 }}>GM Notes</div><p className="notes dim">{a.gmNotes}</p></>)}
+        {c.isGm && a.gmNotes && (<><div className="ttl u-mt-8">GM Notes</div><p className="notes dim">{a.gmNotes}</p></>)}
       </section>
     );
   }
@@ -34,17 +34,17 @@ export function NotesAndGear({ c, a, canEdit }: { c: TableCtx; a: ProjectedActor
       <label className="fld"><span>Notes</span>
         <textarea value={draft.notes} maxLength={8000} rows={4} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} aria-label="Notes" />
       </label>
-      <div className="ttl" style={{ marginTop: 8 }}>Gear</div>
+      <div className="ttl u-mt-8">Gear</div>
       {draft.gear.length === 0 && <p className="dim small">No gear listed.</p>}
       {draft.gear.map((r, i) => (
         <div key={i} className="gear-row">
           <input aria-label={`Gear ${i + 1} Name`} value={r.name} maxLength={80} placeholder="Item" onChange={(e) => set(i, { name: e.target.value })} />
-          <input aria-label={`Gear ${i + 1} Quantity`} type="number" min={0} max={9999} value={r.qty} onChange={(e) => set(i, { qty: Number(e.target.value) })} style={{ width: 70 }} />
+          <input className="u-w-70" aria-label={`Gear ${i + 1} Quantity`} type="number" min={0} max={9999} value={r.qty} onChange={(e) => set(i, { qty: Number(e.target.value) })} />
           <input aria-label={`Gear ${i + 1} Notes`} value={r.notes} maxLength={500} placeholder="Notes" onChange={(e) => set(i, { notes: e.target.value })} />
           <button className="btn sm ghost" aria-label={`Remove ${r.name || 'Item'}`} onClick={() => setDraft({ ...draft, gear: draft.gear.filter((_, j) => j !== i) })}>Remove</button>
         </div>
       ))}
-      <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+      <div className="row u-gap-8 u-mt-8 u-wrap">
         <button className="btn sm" disabled={draft.gear.length >= 100} onClick={() => setDraft({ ...draft, gear: [...draft.gear, { name: '', qty: 1, notes: '' }] })}>Add Item</button>
         <span className="spacer" />
         <button className="btn ghost" onClick={() => setDraft(null)}>Cancel</button>

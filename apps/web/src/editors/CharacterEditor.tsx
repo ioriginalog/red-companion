@@ -208,29 +208,29 @@ export function CharacterEditor({ s }: { s: ClientState }) {
         <ListSection title="Starter Templates" empty="">
           {STARTER_TEMPLATES.map((t) => (
             <button key={t.key} className={`li${sel.kind === 'starter' && sel.key === t.key ? ' sel' : ''}`} onClick={() => load({ ...t.draft, id: '' }, { kind: 'starter', key: t.key })}>
-              <span style={{ minWidth: 0 }}><span className="nm" style={{ display: 'block' }}>{t.label}</span><span className="meta">{t.blurb}</span></span>
+              <span className="u-minw-0"><span className="nm u-block">{t.label}</span><span className="meta">{t.blurb}</span></span>
             </button>
           ))}
         </ListSection>
       </aside>
 
       <main className="ed-col ed-main">
-        <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <div className="row u-between u-wrap">
           <h1 className="ed-h">{draft.name.trim() || 'Unnamed'}</h1>
-          <span className="note">{title}{dirty ? ' · Unsaved changes' : ''}</span>
+          <span className="note">{title}{dirty ? ' · Unsaved Changes' : ''}</span>
         </div>
 
         <section className="card">
           <div className="ttl">Identity</div>
-          <div className="row" style={{ alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
-            <div style={{ display: 'grid', gap: 6, justifyItems: 'center' }}>
+          <div className="row u-ai-start u-gap-14 u-wrap">
+            <div className="u-grid u-gap-6 u-ji-center">
               <div className="pf big" data-al={draft.allegiance}>
                 {draft.portrait ? <img src={draft.portrait} alt="" /> : <div className="ini">{draft.name.slice(0, 1) || '?'}</div>}
               </div>
               <button className="btn sm" onClick={() => void choosePortrait()}>{draft.portrait ? 'Change Portrait' : 'Add Portrait'}</button>
               {draft.portrait && <button className="btn sm ghost" onClick={() => set({ portrait: null })}>Remove</button>}
             </div>
-            <div style={{ flex: 1, display: 'grid', gap: 10, minWidth: 240 }}>
+            <div className="u-grow u-grid u-gap-10 u-minw-240">
               <label className="fld"><span>Name</span><input value={draft.name} maxLength={40} onChange={(e) => set({ name: e.target.value })} placeholder="Character name" /></label>
               <div className="grid2">
                 <label className="fld"><span>Allegiance</span>
@@ -238,7 +238,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
                     {ALLEGIANCES.map((a) => <option key={a.v} value={a.v}>{a.label}</option>)}
                   </select>
                 </label>
-                <label className="fld"><span>Played by</span>
+                <label className="fld"><span>Played By</span>
                   <select value={draft.allegiance === 'party' ? draft.controller : 'gm'} disabled={draft.allegiance !== 'party'} onChange={(e) => set({ controller: e.target.value })}>
                     <option value="gm">GM</option>
                     {s.players.map((p) => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}
@@ -260,27 +260,27 @@ export function CharacterEditor({ s }: { s: ClientState }) {
               </div>
             ))}
           </div>
-          <div className="derived" style={{ marginTop: 10 }}>
+          <div className="derived u-mt-10">
             <div><div className="k">Hit Points</div><div className="v mono">{d.maxHp}</div></div>
-            <div><div className="k">Seriously Wounded</div><div className="v mono" style={{ fontSize: 16 }}>Below {d.seriouslyBelow}</div></div>
-            <div><div className="k">Death Save</div><div className="v mono" style={{ fontSize: 16 }}>Roll Under {d.deathSaveUnder}</div></div>
-            <div><div className="k">Move</div><div className="v mono" style={{ fontSize: 16 }}>{draft.stats.MOVE} Sq · {d.moveMeters} m</div></div>
+            <div><div className="k">Seriously Wounded</div><div className="v mono u-fs-16">Below {d.seriouslyBelow}</div></div>
+            <div><div className="k">Death Save</div><div className="v mono u-fs-16">Roll Under {d.deathSaveUnder}</div></div>
+            <div><div className="k">Move</div><div className="v mono u-fs-16">{draft.stats.MOVE} Sq · {d.moveMeters} m</div></div>
           </div>
-          <div className="note" style={{ marginTop: 6 }}>HP = 10 + 5 × (BODY + WILL) ÷ 2, rounded up. Typical STATs run 2 to 8.</div>
+          <div className="note u-mt-6">HP = 10 + 5 × (BODY + WILL) ÷ 2, rounded up. Typical STATs run 2 to 8.</div>
         </section>
 
         <RoleField value={draft.role} onChange={(role) => set({ role })} />
 
         <section className="card">
           <div className="ttl">Skills</div>
-          <div className="row" style={{ marginBottom: 8, flexWrap: 'wrap' }}>
-            <input placeholder="Filter skills" aria-label="Filter Skills" value={skillFilter} onChange={(e) => setSkillFilter(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
-            <label className="lbl" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={onlyTrained} onChange={(e) => setOnlyTrained(e.target.checked)} />Trained Only</label>
+          <div className="row u-mb-8 u-wrap">
+            <input className="u-grow u-minw-160" placeholder="Filter skills" aria-label="Filter Skills" value={skillFilter} onChange={(e) => setSkillFilter(e.target.value)} />
+            <label className="lbl u-flex u-gap-6 u-ai-center"><input type="checkbox" checked={onlyTrained} onChange={(e) => setOnlyTrained(e.target.checked)} />Trained Only</label>
           </div>
           {(draft.skills['Martial Arts'] ?? 0) > 0 && (
-            <div className="warn" role="alert" style={{ marginBottom: 8 }}>
+            <div className="warn u-mb-8" role="alert">
               Martial Arts is learned per Form. This character has an untyped Martial Arts {draft.skills['Martial Arts']}, which can’t be used for strikes or Special Moves.{' '}
-              <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>Move It to
+              <label className="u-iflex u-gap-6 u-ai-center">Move It to
                 <select aria-label="Martial Arts Form for the Untyped Skill" defaultValue="" onChange={(e) => {
                   if (!e.target.value) return;
                   const { 'Martial Arts': lv = 0, ...rest } = draft.skills;
@@ -302,8 +302,8 @@ export function CharacterEditor({ s }: { s: ClientState }) {
                     const lv = draft.skills[k.name] ?? 0;
                     return (
                       <label key={k.name} className={`skill${lv > 0 ? ' on' : ''}`}>
-                        <span>{k.name} <span className="dim" style={{ fontSize: 11 }}>{k.stat}</span></span>
-                        <input type="number" min={0} max={SKILL_MAX} value={lv} aria-label={`${k.name} level`}
+                        <span>{k.name} <span className="dim u-fs-11">{k.stat}</span></span>
+                        <input type="number" min={0} max={SKILL_MAX} value={lv} aria-label={`${k.name} Level`}
                           onChange={(e) => set({ skills: { ...draft.skills, [k.name]: Math.max(0, Math.min(SKILL_MAX, Number(e.target.value) || 0)) } })} />
                         <span className="base" title={`${k.stat} + ${k.name}`}>{draft.stats[k.stat as StatKey] + lv}</span>
                       </label>
@@ -344,12 +344,12 @@ export function CharacterEditor({ s }: { s: ClientState }) {
                 <AmmoSelect type={w.type} value={w.ammoType} onChange={(ammoType) => upd({ ammoType })} era2070s={!!view.netrun?.quickhacks2070s} />
                 <label className="fld"><span>Damage</span>
                   <input type="number" min={1} max={10} value={w.damageDiceOverride ?? ''} placeholder={`${p.damageDice}d6`}
-                    onChange={(e) => upd({ damageDiceOverride: e.target.value ? Number(e.target.value) : null })} aria-label={`${w.name} damage dice override (d6)`} />
+                    onChange={(e) => upd({ damageDiceOverride: e.target.value ? Number(e.target.value) : null })} aria-label={`${w.name} Damage Dice Override (d6)`} />
                 </label>
                 <button className="iconbtn" aria-label={`Remove ${w.name}`} onClick={() => set({ weapons: draft.weapons.filter((_, j) => j !== i) })}>✕</button>
               </div>
               {isFirearm(w.type) && (
-                <div className="wopts" aria-label={`${w.name} attachments`}>
+                <div className="wopts" aria-label={`${w.name} Attachments`}>
                   <label title="+1 to ranged attacks when wired in through a Neural Link with Interface Plugs or a Subdermal Grip.">
                     <input type="checkbox" checked={!!w.smartgunLink} onChange={(e) => upd({ smartgunLink: e.target.checked || undefined })} /> Smartgun Link
                   </label>
@@ -368,7 +368,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
               </Fragment>
             );
           })}
-          <div className="row" style={{ marginTop: 8 }}>
+          <div className="row u-mt-8">
             <select aria-label="Weapon Type to Add" id="add-weapon" defaultValue="heavyPistol">
               <optgroup label="Ranged">{RANGED.map((t) => <option key={t} value={t}>{WEAPON_TYPES[t].displayName}</option>)}</optgroup>
               <optgroup label="Thrown">{THROWN.map((t) => <option key={t} value={t}>{WEAPON_TYPES[t].displayName}</option>)}</optgroup>
@@ -379,7 +379,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
               set({ weapons: [...draft.weapons, newWeaponDraft(t, draft.weapons)] });
             }}>Add Weapon</button>
           </div>
-          <div className="note" style={{ marginTop: 6 }}>Damage overrides are for exotic or homebrew gear; leave blank to use the weapon type.</div>
+          <div className="note u-mt-6">Damage overrides are for exotic or homebrew gear; leave blank to use the weapon type.</div>
         </section>
 
         <section className="card">
@@ -389,7 +389,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
               <ArmorField key={loc} label={loc === 'head' ? 'Head' : 'Body'} value={draft.armor[loc]} onChange={(v) => set({ armor: { ...draft.armor, [loc]: v } })} />
             ))}
           </div>
-          <div className="note" style={{ marginTop: 6 }}>The worst armor penalty applies to REF, DEX and MOVE.</div>
+          <div className="note u-mt-6">The worst armor penalty applies to REF, DEX and MOVE.</div>
         </section>
 
         <CyberwareField value={draft.cyberware} emp={draft.stats.EMP} onChange={(cyberware) => set({ cyberware })} />
@@ -398,9 +398,9 @@ export function CharacterEditor({ s }: { s: ClientState }) {
 
         <section className="card">
           <div className="ttl">Notes (Visible to Players)</div>
-          <textarea aria-label="Notes (Visible to Players)" value={draft.notes} maxLength={2000} onChange={(e) => set({ notes: e.target.value })} placeholder="Background, look, gear the party knows about…" style={{ width: '100%' }} />
-          <div className="ttl" style={{ marginTop: 10 }}>GM Notes</div>
-          <textarea aria-label="GM Notes" value={draft.gmNotes} maxLength={4000} onChange={(e) => set({ gmNotes: e.target.value })} placeholder="Secrets, tactics, loot, motives. Never sent to players." style={{ width: '100%' }} />
+          <textarea className="u-w-full" aria-label="Notes (Visible to Players)" value={draft.notes} maxLength={2000} onChange={(e) => set({ notes: e.target.value })} placeholder="Background, look, gear the party knows about…" />
+          <div className="ttl u-mt-10">GM Notes</div>
+          <textarea className="u-w-full" aria-label="GM Notes" value={draft.gmNotes} maxLength={4000} onChange={(e) => set({ gmNotes: e.target.value })} placeholder="Secrets, tactics, loot, motives. Never sent to players." />
         </section>
       </main>
 
@@ -408,21 +408,21 @@ export function CharacterEditor({ s }: { s: ClientState }) {
         {msg && <div className={msg.tone === 'ok' ? 'ok' : 'warn'} role="status">{msg.text}</div>}
         <section className="card">
           <div className="ttl">{title}</div>
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div className="u-grid u-gap-8">
             {sel.kind === 'session' && (
               <>
-                <button className="cta" style={{ fontSize: 18, padding: 10 }} disabled={!dirty && !reset} onClick={saveSession}>Save Changes</button>
-                <label className="lbl" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={reset} onChange={(e) => setReset(e.target.checked)} />Reset Health, Armor and Ammo</label>
+                <button className="cta u-fs-18 u-p-10" disabled={!dirty && !reset} onClick={saveSession}>Save Changes</button>
+                <label className="lbl u-flex u-gap-6 u-ai-center"><input type="checkbox" checked={reset} onChange={(e) => setReset(e.target.checked)} />Reset Health, Armor and Ammo</label>
                 <button className="btn full" onClick={() => saveTemplate(true)}>Save as Template</button>
                 <button className="btn full mag" onClick={removeCurrent}>Remove from Session</button>
               </>
             )}
             {sel.kind === 'library' && (
               <>
-                <button className="cta" style={{ fontSize: 18, padding: 10 }} onClick={addToSession}>Add to Session</button>
+                <button className="cta u-fs-18 u-p-10" onClick={addToSession}>Add to Session</button>
                 <div className="row">
-                  <input type="number" min={1} max={20} value={copies} aria-label="Number of Copies" onChange={(e) => setCopies(Number(e.target.value) || 1)} style={{ width: 70 }} />
-                  <button className="btn" style={{ flex: 1 }} onClick={spawnCopies}>Spawn Copies</button>
+                  <input className="u-w-70" type="number" min={1} max={20} value={copies} aria-label="Number of Copies" onChange={(e) => setCopies(Number(e.target.value) || 1)} />
+                  <button className="btn u-grow" onClick={spawnCopies}>Spawn Copies</button>
                 </div>
                 <button className="btn full" disabled={!dirty} onClick={() => saveTemplate(false)}>Save Template</button>
                 <button className="btn full mag" onClick={removeCurrent}>Delete Template</button>
@@ -430,7 +430,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
             )}
             {(sel.kind === 'starter' || sel.kind === 'new') && (
               <>
-                <button className="cta" style={{ fontSize: 18, padding: 10 }} onClick={addToSession}>Add to Session</button>
+                <button className="cta u-fs-18 u-p-10" onClick={addToSession}>Add to Session</button>
                 <button className="btn full" onClick={() => saveTemplate(true)}>Save as Template</button>
               </>
             )}
@@ -480,7 +480,7 @@ function armorSp(c: ArmorChoice): number {
 function ArmorField({ label, value, onChange }: { label: string; value: ArmorChoice; onChange: (v: ArmorChoice) => void }) {
   const sel = value.kind === 'type' ? value.typeId : value.kind;
   return (
-    <div style={{ display: 'grid', gap: 6 }}>
+    <div className="u-grid u-gap-6">
       <label className="fld"><span>{label}</span>
         <select value={sel} onChange={(e) => {
           const v = e.target.value;
@@ -506,7 +506,7 @@ function ListSection({ title, empty, children }: { title: string; empty: string;
   return (
     <div>
       <div className="ed-sub">{title}</div>
-      <div style={{ display: 'grid', gap: 6 }}>{children.length ? children : empty ? <div className="ed-empty">{empty}</div> : null}</div>
+      <div className="u-grid u-gap-6">{children.length ? children : empty ? <div className="ed-empty">{empty}</div> : null}</div>
     </div>
   );
 }
@@ -519,8 +519,8 @@ function ActorItem({ a, sel, onClick }: { a: ItemActor; sel: boolean; onClick: (
       <div className="pf" data-al={a.public.allegiance}>
         {a.public.portrait ? <img src={a.public.portrait} alt="" /> : <div className="ini">{a.public.name.slice(0, 1)}</div>}
       </div>
-      <span style={{ minWidth: 0 }}>
-        <span className="nm" style={{ display: 'block' }}>{a.public.name}</span>
+      <span className="u-minw-0">
+        <span className="nm u-block">{a.public.name}</span>
         <span className="meta"><span className={`tag al-${a.public.allegiance}`}>{ALLEGIANCE_TAG[a.public.allegiance]}</span>{a.public.conditions.dead ? ' · Dead' : ''}</span>
       </span>
     </button>
