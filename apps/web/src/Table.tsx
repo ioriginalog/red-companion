@@ -26,6 +26,8 @@ import { useLayout } from './table/layout/useMedia.js';
 import { AreaConfirm } from './table/AreaConfirm.js';
 import { clearPlacement, prunePlacement, shiftPlacement, usePlacementQueue } from './table/placement.js';
 import { requiredPrompt } from './table/required.js';
+import { defaultTerrainStyle, rubbleFrom, type TerrainStyle } from './map/terrain.js';
+import { noTargetHint } from './table/hints.js';
 
 type Tab = 'combat' | 'sheet' | 'chat' | 'notes' | 'net' | 'scene';
 /** Bottom sheet height on phones and portrait tablets. */
@@ -73,6 +75,14 @@ export function Table({ s }: { s: ClientState }) {
   const [announce, setAnnounce] = useState('');
   const [notesUnread, setNotesUnread] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  // Terrain style: the GM's choice per map (Scene tab, Show Terrain); players get the map's default.
+  const terrainKey = view.map ? `nsc.terrain.${view.map.id}` : '';
+  const [terrainPick, setTerrainPick] = useState<Record<string, TerrainStyle>>({});
+  const storedTerrain = terrainKey ? (terrainPick[terrainKey] ?? (store.get(terrainKey) as TerrainStyle | null)) : null;
+  const terrainStyle: TerrainStyle | undefined = view.map
+    ? (isGm && (storedTerrain === 'full' || storedTerrain === 'outline') ? storedTerrain : defaultTerrainStyle(view.map)) : undefined;
+  const setTerrainStyle = (t: TerrainStyle) => { if (!terrainKey) return; store.set(terrainKey, t); setTerrainPick((m) => ({ ...m, [terrainKey]: t })); };
+  const rubble = useMemo(() => (view.map ? rubbleFrom(s.feed.flatMap((f) => f.events), view.map) : undefined), [s.feed, view.map?.cells, view.map?.width]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { warmSplitChunks(); }, []);
 
   const mine = useCallback((id: string | null | undefined) => !!id && (isGm || view.actors[id]?.controller === me), [isGm, view.actors, me]);
@@ -270,10 +280,10 @@ export function Table({ s }: { s: ClientState }) {
   const fireNow = canAct && !!targetId && !!weapon && !fireBlocked({ attack, usage, weapon }, !!view.pending);
   const chips = useMemo(() => (canAct ? targetChips(view, actingId, chances) : []), [view, actingId, chances, canAct]);
   const anyShot = useMemo(() => (canAct && actingId ? nearestTarget(view, actingId) !== null : false), [view, actingId, canAct]);
-  const targetHint = !canAct ? undefined
-    : chips.length === 0 ? 'No enemies in sight. Move to find a line of sight.'
-      : !anyShot ? `The party can see enemies, but none is in ${acting ? name(acting.id) : 'this character'}’s line of sight. Move for a clear shot.`
-        : layout.compact || layout.sheet ? 'Tap an enemy on the map or in the target strip.' : 'Click an enemy on the map.';
+  const targetHint = noTargetHint({
+    canAct, opponents: chips.length, anyShot, actingName: acting ? name(acting.id) : null,
+    friendly: acting ? isFriendly(acting) : true, touch: layout.compact || layout.sheet,
+  });
   // Turn banner: your own characters (for the GM, the NPCs the GM runs).
   const bannerTitle = currentId && view.actors[currentId] && !view.actors[currentId]!.placeholder && mine(currentId) && (!isGm || view.actors[currentId]!.controller === 'gm')
     ? (isGm ? `${name(currentId)}’s Turn` : 'Your Turn') : null;
@@ -321,7 +331,7 @@ export function Table({ s }: { s: ClientState }) {
             showMini={showMini} onToggleMini={() => { const v = !showMini; setShowMini(v); store.set('nsc.minimap', v ? '1' : '0'); }}
             mode={effMode} areaKind={scatterPick ? 'blast' : areaKind} partyFog={partyFog} neutralTemplate={!!scatterPick}
             hoverInfo={(cell) => { const ci = view.map ? coverAt(view.map, cell) : null; return ci ? coverLabel(ci, isGm) : null; }} focusId={isGm ? focusId : null} highlight={highlight}
-            shareCursor={!isGm || gmCursor} me={c.me} act={c.act}
+            shareCursor={!isGm || gmCursor} me={c.me} act={c.act} terrainStyle={terrainStyle} rubble={rubble}
             signals={s.signals} effects={effects} nameOf={(f) => client.nameOf(f)}
             canDrag={(id) => isGm || (mine(id) && (!enc.active || currentId === id))}
             onToken={pickToken}
@@ -370,7 +380,7 @@ export function Table({ s }: { s: ClientState }) {
         {view.map && (
           <div className="legend">
             <span><i className="sw-move" />Move</span>
-            <span><i className="sw-run" />Run (Uses Action)</span>
+            <span><i className="sw-run" />Run (uses the Action)</span>
             <span><i className="sw-watch" />Watch</span>
             <span><i className="sw-unseen" />Unseen</span>
           </div>
@@ -437,8 +447,8 @@ export function Table({ s }: { s: ClientState }) {
           {tab === 'sheet' && <SheetPanel c={c} preferId={isGm ? (focusId ?? actingId) : actingId} />}
           {tab === 'notes' && <NotesPanel c={c} />}
           {tab === 'net' && showNet && <NetPanel view={view} actorId={netActorId} isGm={isGm} canAct={mine(netActorId)} act={(i) => client.act(i)} feed={s.feed} />}
-          {tab === 'chat' && <ChatPanel c={c} rollerId={isGm ? (focusId ?? actingId) : (actingId ?? ownIds[0] ?? null)} onUnreadReset={() => setUnread(0)} />}
-          {tab === 'scene' && isGm && <ScenePanel c={c} mapMode={mapMode} setMapMode={setMapMode} shareCursor={gmCursor} setShareCursor={(v) => { setGmCursor(v); if (!v) client.signal({ kind: 'cursor', at: null }); }} onFocus={(id) => { setFocusId(id); setTab('combat'); }} />}
+          {tab === 'chat' && <ChatPanel c={c} rollerId={isGm ? (focusId ?? actingId) : (canAct ? actingId : ownIds[0] ?? null)} onUnreadReset={() => setUnread(0)} />}
+          {tab === 'scene' && isGm && <ScenePanel c={c} mapMode={mapMode} setMapMode={setMapMode} terrainStyle={terrainStyle} setTerrainStyle={setTerrainStyle} shareCursor={gmCursor} setShareCursor={(v) => { setGmCursor(v); if (!v) client.signal({ kind: 'cursor', at: null }); }} onFocus={(id) => { setFocusId(id); setTab('combat'); }} />}
           {tab === 'scene' && isGm && <GmSystemsPanel c={c} />}
         </div>
       </aside>

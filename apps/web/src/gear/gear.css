@@ -2,7 +2,10 @@
 .gear .gear-block { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px; }
 .gear .gear-block:first-of-type { border-top: 0; padding-top: 0; }
 .gear-sub { font: 700 13px var(--head); text-transform: uppercase; letter-spacing: 0.1em; color: var(--magenta); margin: 4px 0 6px; }
-.gear-row { gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
+.gear .gear-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; min-width: 0; }
+/* Selects shrink and the buttons wrap under them: nothing may push the side panel sideways. */
+.gear .gear-row select { flex: 1 1 150px; min-width: 0; }
+.gear .gear-row select.gear-wide { flex-basis: 100%; }
 .gear-line { margin: 0 0 6px; font-size: 13px; }
 .gear-tag { font: 700 11px var(--head); text-transform: uppercase; padding: 1px 5px; border-radius: 2px; border: 1px solid var(--line-hi); color: var(--dim); }
 .gear-tag.good { background: #06331d; color: #c9ffe0; border-color: var(--green); }
@@ -11,3 +14,4 @@
 .gear-picker svg { display: block; max-width: 100%; height: auto; border: 1px solid var(--line-hi); background: #050a22; }
 .gear select { max-width: 100%; }
 .gear-dose .gear-note { flex-basis: 100%; font-size: 12px; }
+.gear-why { font-size: 12px; color: var(--yellow); }

@@ -2,8 +2,11 @@ import { useState } from 'react';
 import type { ConditionKey } from '@cprc/session';
 import { client } from '../net.js';
 import type { MapMode } from '../MapView.js';
+import type { TerrainStyle } from '../map/terrain.js';
 import { ALLEGIANCE, WOUND, type TableCtx } from './ctx.js';
 import { Portrait } from './panels.js';
+import { RosterCard } from './RosterCard.js';
+import { playerAdmin } from './roster.js';
 
 const CONDITIONS: [ConditionKey, string][] = [['prone', 'Prone'], ['unconscious', 'Unconscious'], ['stabilized', 'Stabilized'], ['dead', 'Dead']];
 
@@ -51,8 +54,9 @@ export function Inspector({ c, id, onClose, onTarget }: { c: TableCtx; id: strin
 }
 
 /** GM scene controls: lighting and the roster. */
-export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor, onFocus }: {
+export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor, onFocus, terrainStyle, setTerrainStyle }: {
   c: TableCtx; mapMode: MapMode; setMapMode: (m: MapMode) => void; shareCursor: boolean; setShareCursor: (v: boolean) => void; onFocus: (id: string) => void;
+  terrainStyle?: TerrainStyle; setTerrainStyle?: (t: TerrainStyle) => void;
 }) {
   const { view } = c;
   const lighting = view.map?.lighting ?? {};
@@ -81,6 +85,21 @@ export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor
           </p>
         </section>
       )}
+      {view.map && terrainStyle && setTerrainStyle && (
+        <section className="card">
+          <div className="ttl">Terrain</div>
+          <div className="modes">
+            <button className={`mode${terrainStyle === 'full' ? ' sel' : ''}`} aria-pressed={terrainStyle === 'full'}
+              onClick={() => setTerrainStyle(terrainStyle === 'full' ? 'outline' : 'full')}>Show Terrain</button>
+          </div>
+          <p className="dim small u-mt-8">
+            {terrainStyle === 'full'
+              ? 'Walls, cover by material and difficult ground are drawn solid on your map.'
+              : 'A light outline over the painted art. Damaged cover and rubble still show.'}
+            {view.map.background ? ' Players see the outline over painted art.' : ' Players see solid terrain on maps without art.'}
+          </p>
+        </section>
+      )}
       {/* House rule switch */}
       {view.map && (
         <section className="card">
@@ -93,9 +112,10 @@ export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor
           <p className="dim small u-mt-8">Delay isn’t a RED Core rule. With it on, the acting character can take their Turn later this Round, before they move or act.</p>
         </section>
       )}
+      <RosterCard c={c} admin={playerAdmin(client)} />
       {actors.length > 0 && (
         <section className="card">
-          <div className="ttl">Roster</div>
+          <div className="ttl">Characters</div>
           <div className="roster">
             {actors.map((a) => (
               <div key={a.id} className="row roster-row">

@@ -30,7 +30,7 @@ export function GmSystemsPanel({ c }: { c: SystemsCtx }) {
           <select value={care} onChange={(e) => setCare(e.target.value as Care)} aria-label="Where They Rest">
             <option value="home">At Home (BODY per Day)</option>
             <option value="hospital">Hospital Bed (BODY × 2)</option>
-            <option value="street">On the Street (No Healing)</option>
+            <option value="street">On the Street (no healing)</option>
           </select>
           <button className="btn" disabled={fighting} title={fighting ? 'End the encounter first.' : undefined} onClick={() => c.act({ type: 'rest', days, care })}>Rest Everyone</button>
         </div>

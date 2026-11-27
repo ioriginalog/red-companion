@@ -6,8 +6,8 @@ import { COMMANDS } from './panels.js';
 import { parseCommand, type Recipient } from './commands.js';
 import type { TableCtx } from './ctx.js';
 import { joinNames } from './format.js';
+import { mergeLocal, type LocalLine } from './hints.js';
 
-interface LocalLine { id: number; text: string; tone: 'error' | 'help' }
 
 function Die({ v, sides, crit }: { v: number; sides: number; crit?: 'hi' | 'lo' }) {
   const k = crit ?? (sides === 10 && v === 10 ? 'hi' : sides === 10 && v === 1 ? 'lo' : sides === 6 && v === 6 ? 'hi' : undefined);
@@ -46,7 +46,9 @@ export function ChatPanel({ c, rollerId, onUnreadReset }: { c: TableCtx; rollerI
     return out;
   }, [isGm, s.players, view.actors, c.me]);
 
-  const roller = rollerId ? view.actors[rollerId] : undefined;
+  // Players only roll for (and get suggestions about) characters they control.
+  const roller0 = rollerId ? view.actors[rollerId] : undefined;
+  const roller = roller0 && (isGm || roller0.controller === c.me) ? roller0 : undefined;
   const items = useMemo(
     () => liveFeed(s.feed, view.seq).flatMap((f) => f.events.map((e, i) => ({ key: `${f.seq}-${i}`, seq: f.seq, e }))).slice(-200),
     [s.feed, view.seq],
@@ -78,8 +80,10 @@ export function ChatPanel({ c, rollerId, onUnreadReset }: { c: TableCtx; rollerI
       .map((a) => ({ id: a.id, name: a.public.name, skills: Object.keys(a.combatant!.skills) }));
     const r = parseCommand(text, { actorId: roller?.combatant ? roller.id : null, skills: Object.keys(roller?.combatant?.skills ?? {}), recipients, rollable });
     if (r.kind === 'empty') return;
-    if (r.kind === 'help') { setLocal((l) => [...l, ...COMMANDS.map(([k, v]) => ({ id: ++n.current, text: `${k}: ${v}`, tone: 'help' as const }))]); setText(''); return; }
-    if (r.kind === 'error') { setLocal((l) => [...l, { id: ++n.current, text: r.message, tone: 'error' }]); return; }
+    // Local lines sit after the newest log line at the time, so later log lines go under them.
+    const after = items.at(-1)?.seq ?? 0;
+    if (r.kind === 'help') { setLocal((l) => [...l, ...COMMANDS.map(([k, v]) => ({ id: ++n.current, text: `${k}: ${v}`, tone: 'help' as const, after }))].slice(-60)); setText(''); return; }
+    if (r.kind === 'error') { setLocal((l) => [...l, { id: ++n.current, text: r.message, tone: 'error' as const, after }].slice(-60)); return; }
     if (c.act(r.intent)) { setHist((h) => [text, ...h].slice(0, 30)); setHIdx(-1); setText(''); }
   };
 
@@ -89,7 +93,13 @@ export function ChatPanel({ c, rollerId, onUnreadReset }: { c: TableCtx; rollerI
     const whisper = e.audience && e.audience.length ? <span className="tag whisper">{e.type === 'chatMessage' ? `To ${recipientName(e.audience.filter((x) => x !== (e as { by?: string }).by))}` : 'Private'}</span> : null;
     if (e.type === 'chatMessage') {
       const author = e.asCombatantId ? c.name(e.asCombatantId) : c.who(e.by);
-      return <div key={key} className={`msg chat${e.by === c.me ? ' mine' : ''}`}><b>{author}</b>{whisper} <span>{e.text}</span></div>;
+      // `by` is set by the authority, so only the real GM gets the badge (a player named "GM" doesn't).
+      const fromGm = e.by === 'gm';
+      return (
+        <div key={key} className={`msg chat${e.by === c.me ? ' mine' : ''}${fromGm ? ' from-gm' : ''}`}>
+          {fromGm && <span className="gm-badge" title="The GM">GM</span>}{fromGm && !e.asCombatantId ? null : <b>{author}</b>}{whisper} <span>{e.text}</span>
+        </div>
+      );
     }
     if (e.type === 'checkRolled') {
       const who = e.combatantId ? c.name(e.combatantId) : c.who(e.by);
@@ -121,8 +131,9 @@ export function ChatPanel({ c, rollerId, onUnreadReset }: { c: TableCtx; rollerI
         stuck.current = isNearBottom(e.currentTarget);
         if (stuck.current && behind) { setBehind(0); onUnreadReset?.(); }
       }}>
-        {items.map(({ key, e }) => render(e, key))}
-        {local.map((l) => <div key={`l${l.id}`} className={`msg ${l.tone}`}>{l.text}</div>)}
+        {mergeLocal(items, local).map((x) => (x.kind === 'item'
+          ? render(x.item.e, x.item.key)
+          : <div key={`l${x.line.id}`} className={`msg ${x.line.tone}`} role={x.line.tone === 'error' ? 'alert' : undefined}>{x.line.text}</div>))}
         {items.length === 0 && local.length === 0 && <span className="dim">Nothing yet. Type /help for commands.</span>}
       </div>
       {behind > 0 && <button className="btn yellow new-msgs" onClick={jump}>{behind} New {behind === 1 ? 'Message' : 'Messages'}</button>}

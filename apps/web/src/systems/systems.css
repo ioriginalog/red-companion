@@ -12,6 +12,8 @@
 .sys-fire { border-color: #ff8a00; background: linear-gradient(180deg, rgba(255, 138, 0, 0.16), rgba(255, 138, 0, 0.04)); }
 .sys-fire > .ttl { color: #ffb15c; }
 .sys-gm { display: grid; gap: 6px; }
+.sys-gm > * { min-width: 0; }
+.sys-gm select { max-width: 100%; min-width: 0; }
 .sys-gm select, .sys-gm input { padding: 5px 8px; }
 .btn.sm { padding: 4px 8px; font-size: 12px; }
 .sys-sub { font: 700 12px var(--head); text-transform: uppercase; letter-spacing: 0.1em; color: var(--cyan); }

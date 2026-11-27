@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { profileOf, type Weapon } from '@cprc/rules-core';
 import type { ProjectedActor } from '@cprc/session';
 import { client } from '../net.js';
@@ -7,12 +7,22 @@ import { pct } from '../odds.js';
 import { isMuted, setMuted } from './sound.js';
 import type { TableCtx } from './ctx.js';
 import { joinNames } from './format.js';
+import { lastTurnStart, startOfTurnItems } from './turnStart.js';
 
 export function Portrait({ a, big, small, active }: { a: ProjectedActor; big?: boolean; small?: boolean; active?: boolean }) {
   return (
     <div className={`pf${big ? ' big' : ''}${small ? ' small' : ''}${active ? ' active' : ''}${a.public.conditions.dead ? ' dead' : ''}`} data-al={a.public.allegiance}>
       {a.public.portrait ? <img src={a.public.portrait} alt="" draggable={false} /> : <div className="ini">{a.public.name.slice(0, 1)}</div>}
     </div>
+  );
+}
+
+function SpeakerIcon({ muted }: { muted: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 6h3l4-3v10l-4-3H2z" fill="currentColor" />
+      {muted ? <path d="M11 6l4 4M15 6l-4 4" /> : <path d="M11.5 5.5a3.5 3.5 0 0 1 0 5M13.5 3.5a6.5 6.5 0 0 1 0 9" />}
+    </svg>
   );
 }
 
@@ -39,8 +49,17 @@ export function TopBar({ c, onHelp }: { c: TableCtx; onHelp: () => void }) {
       {isGm && <span className="chip hide-sm">{s.players.filter((p) => p.online).length} Online</span>}
       {!isGm && <span className="chip hide-sm"><span className={`dot ${s.gmOnline ? 'on' : 'off'}`} />GM {s.gmOnline ? 'Online' : 'Offline'}</span>}
       {!isGm && s.queued > 0 && (
-        <span className="chip warn-chip" role="status" title="These go to the GM as soon as they return.">
+        <span className="chip warn-chip hide-sm" role="status" title="These go to the GM as soon as they return.">
           Queued: {s.queued} {s.queued === 1 ? 'Action' : 'Actions'}
+        </span>
+      )}
+      {/* Phones: one short chip, only when it matters (the GM is away, or actions wait for them). */}
+      {!isGm && (!s.gmOnline || s.queued > 0) && (
+        <span className="chip warn-chip only-sm gm-sm" role="status" title={s.queued > 0 ? 'Queued actions go to the GM as soon as they return.' : 'The GM is offline.'}
+          aria-label={`GM ${s.gmOnline ? 'Online' : 'Offline'}${s.queued > 0 ? `, ${s.queued} ${s.queued === 1 ? 'Action' : 'Actions'} Queued` : ''}`}>
+          {!s.gmOnline && <><span className="dot off" />GM Offline</>}
+          {!s.gmOnline && s.queued > 0 && ' · '}
+          {s.queued > 0 && `${s.queued} Queued`}
         </span>
       )}
       <span className={`chip${s.unsynced > 0 ? ' warn-chip' : ''}`} role="status" title={s.unsynced > 0 ? `${s.unsynced} ${s.unsynced === 1 ? 'action' : 'actions'} will sync when the connection returns.` : s.status === 'online' ? 'Synced' : 'Reconnecting'}>
@@ -49,7 +68,7 @@ export function TopBar({ c, onHelp }: { c: TableCtx; onHelp: () => void }) {
           ? `${s.status === 'online' ? 'Syncing' : 'Offline'}: ${s.unsynced} ${s.unsynced === 1 ? 'Action' : 'Actions'} Will Sync`
           : s.status === 'online' ? 'Synced' : s.status === 'connecting' ? 'Connecting' : 'Offline'}</span>
       </span>
-      <button className="btn ghost icon" onClick={() => { setMuted(!muted); setM(!muted); }} aria-pressed={!muted} aria-label={muted ? 'Sound Off' : 'Sound On'} title={muted ? 'Sound Off' : 'Sound On'}>{muted ? 'Muted' : 'Sound'}</button>
+      <button className="btn ghost icon" onClick={() => { setMuted(!muted); setM(!muted); }} aria-pressed={!muted} aria-label={muted ? 'Sound Off' : 'Sound On'} title={muted ? 'Sound Off' : 'Sound On'}><span className="hide-sm">{muted ? 'Muted' : 'Sound'}</span><span className="only-sm" aria-hidden><SpeakerIcon muted={muted} /></span></button>
       <button className="btn ghost icon" onClick={onHelp} title="Help, Shortcuts, and About (?)" aria-label="Help and About">?</button>
       {/* The session menu holds Leave (with confirmation), the GM key, backup and export. */}
       <button className="btn ghost hide-sm" onClick={() => client.openSessionMenu()}>{isGm ? 'Session' : 'Leave'}</button>
@@ -138,22 +157,20 @@ export function Prompts({ c, onPickScatter, scatterPicking }: { c: TableCtx; onP
       );
     }
   }
-  // R4 automation hooks ---
-  // Turn-start reminders for whoever is acting now (from the entry that started this Turn).
+  // Start of Turn: what applies to whoever is acting, from the current state (table/turnStart.ts).
   const currentId = enc.active ? enc.order[enc.turnIndex] ?? null : null;
   const feed = c.s.feed;
-  let turnStart = -1;
-  for (let i = feed.length - 1; i >= 0; i--) {
-    const t = feed[i]!.intentType;
-    if (t === 'endTurn' || t === 'startEncounter' || t === 'delayTurn' || t === 'removeFromInitiative') { turnStart = i; break; }
-  }
-  const reminders = turnStart >= 0 && currentId && (isGm || mine(currentId))
-    ? feed.slice(turnStart).flatMap((f) => f.events).filter((e): e is Extract<typeof e, { type: 'turnReminders' }> => e.type === 'turnReminders' && e.combatantId === currentId)
-    : [];
-  const items = reminders.at(-1)?.items ?? [];
+  const turnKey = currentId ? `${enc.round}:${enc.turnIndex}:${currentId}` : '';
+  const seen = useRef<{ key: string; seq: number | null }>({ key: turnKey, seq: null });
+  // A Turn that starts while we watch: its own entry is the one that just arrived.
+  if (seen.current.key !== turnKey) seen.current = { key: turnKey, seq: view.seq };
+  // The Death Save prompt below says it with a button; the card doesn't repeat it.
+  const items0 = currentId && (isGm || mine(currentId)) ? startOfTurnItems(view, currentId, feed, seen.current.seq) : [];
+  const items = items0.some((r) => r.key !== 'deathSave' && r.key !== 'injury') ? items0.filter((r) => r.key !== 'deathSave') : [];
+  const turnStart = lastTurnStart(feed);
   if (items.length) {
     out.push(
-      <div className="card prompt" key="reminders">
+      <div className="card prompt" key="reminders" role="status" aria-label={`Start of Turn: ${name(currentId!)}`}>
         <div className="ttl">Start of Turn: {name(currentId!)}</div>
         <ul className="reminders">{items.map((r, i) => <li key={i}>{r.text}</li>)}</ul>
       </div>,
@@ -212,7 +229,7 @@ export function Prompts({ c, onPickScatter, scatterPicking }: { c: TableCtx; onP
     out.push(
       <div className="card prompt" key="ds">
         <div className="ttl">Death Save</div>
-        <p>{name(id)} is Mortally Wounded and must roll under BODY before acting.</p>
+        <p>{view.actors[id]?.public.woundState === 'mortally' ? `${name(id)} is Mortally Wounded and must roll under BODY before acting.` : `${name(id)} began this Turn Mortally Wounded and must still roll under BODY before acting.`}</p>
         <button className="cta" onClick={() => act({ type: 'deathSave', actorId: id })}>Roll Death Save</button>
       </div>,
     );
@@ -263,7 +280,7 @@ export { DISCLAIMER } from '../legal.js';
 import { DISCLAIMER } from '../legal.js';
 
 export const SHORTCUTS: [string, string][] = [
-  ['M', 'Move Mode'], ['W', 'Watch (Spend Your Action)'], ['F', 'Fire at the Target'], ['R', 'Ruler'], ['E', 'End Your Turn'],
+  ['M', 'Move Mode'], ['W', 'Watch (spends your Action)'], ['F', 'Fire at the Target'], ['R', 'Ruler'], ['E', 'End Your Turn'],
   ['Esc', 'Cancel the Current Tool'], ['?', 'This Help'], ['Alt + Click', 'Ping a Square'], ['Long Press', 'Ping (Touch)'],
   ['Wheel / Pinch', 'Zoom'], ['Drag Empty Space', 'Pan'], ['Drag a Token', 'Move It'], ['Right-Click a Token', 'GM Inspector'],
   ['Tab (on the Map)', 'Cycle through Visible Tokens'], ['Arrow Keys (on the Map)', 'Move the Focus Square'],
@@ -272,8 +289,8 @@ export const SHORTCUTS: [string, string][] = [
 export const COMMANDS: [string, string][] = [
   ['/r 2d6+3 Label', 'Roll Dice (d6 or d10)'], ['/check REF+Handgun vs 15', 'Skill Check for Your Character (vs, dv, or against)'],
   ['/check Enforcer COOL vs 15', 'GM: Check for a Named Character'],
-  ['/check 12 vs 15', 'Raw Check: A Base Number plus 1d10'], ['/gm /r 1d10', 'Private Roll (Only You and the GM See It)'],
-  ['/gm message', 'Whisper to the GM'], ['/w Name message', 'Whisper by Player or Character Name (A Unique Prefix Works)'],
+  ['/check 12 vs 15', 'Raw Check: A Base Number plus 1d10'], ['/gm /r 1d10', 'Private Roll (only you and the GM see it)'],
+  ['/gm message', 'Whisper to the GM'], ['/w Name message', 'Whisper by Player or Character Name (a unique prefix works)'],
 ];
 
 export function HelpOverlay({ onClose }: { onClose: () => void }) {

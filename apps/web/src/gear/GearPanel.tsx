@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { DRUG_TEMPLATES, gridDistance, QUALITY_LABEL, SHIELD_TEMPLATES, VEHICLE_AIM_PENALTY, VEHICLE_TEMPLATES, type Cell } from '@cprc/rules-core';
 import type { GearOp, Intent, TacticalMap, ViewState } from '@cprc/session';
+import { actionSpent } from '../table/hints.js';
 import './gear.css';
 
 export interface GearCtx {
@@ -47,7 +48,7 @@ export function GearPanel({ c, actingId, targetId, canAct }: { c: GearCtx; actin
     <div className="gear-block">
       <div className="gear-sub">Vehicles</div>
       <div className="row gear-row">
-        <select aria-label="Vehicle" value={spawn.templateId} onChange={(e) => setSpawn({ ...spawn, templateId: e.target.value })}>
+        <select className="gear-wide" aria-label="Vehicle" value={spawn.templateId} onChange={(e) => setSpawn({ ...spawn, templateId: e.target.value })}>
           {VEHICLE_TEMPLATES.map((v) => <option key={v.id} value={v.id}>{v.name} (SDP {v.sdp}, {v.seats} {v.seats === 1 ? 'Seat' : 'Seats'}, MOVE {v.move})</option>)}
         </select>
         <select aria-label="Vehicle Allegiance" value={spawn.allegiance} onChange={(e) => setSpawn({ ...spawn, allegiance: e.target.value as typeof spawn.allegiance })}>
@@ -78,10 +79,16 @@ export function GearPanel({ c, actingId, targetId, canAct }: { c: GearCtx; actin
     );
   }
   const shield = ac.shield;
+  // Shield and drug actions take the Action: once it's spent, say so instead of offering them.
+  const spent = actionSpent(view.encounter, ac.id);
+  const needsAction = !canAct || spent;
+  const SPENT = 'Your Action is spent this Turn.';
+  const spentNote = spent && canAct ? <p className="gear-line gear-why" role="note">Action spent this Turn. Shield and drug actions wait until the next Turn.</p> : null;
 
   return (
     <section className="card gear" aria-label={`${ac.name} Gear`}>
       <div className="ttl">Gear · {ac.name}</div>
+      {spentNote}
 
       <div className="gear-block">
         <div className="gear-sub">Shield</div>
@@ -96,7 +103,7 @@ export function GearPanel({ c, actingId, targetId, canAct }: { c: GearCtx; actin
             <div className="row gear-row">
               {shield.hp > 0 && <button className="btn" disabled={!canAct && !c.mine(ac.id)} onClick={() => gear(c, { op: 'raiseShield', actorId: ac.id, raised: !shield.raised })}
                 title={shield.raised ? 'Lowered, it blocks nothing and you can dodge again.' : 'Raised, it takes the hits and you can’t dodge them.'}>{shield.raised ? 'Lower Shield' : 'Raise Shield'}</button>}
-              <button className="btn ghost" disabled={!canAct} onClick={() => gear(c, { op: 'dropShield', actorId: ac.id })} title="Uses your Action.">Drop Shield</button>
+              <button className="btn ghost" disabled={needsAction} onClick={() => gear(c, { op: 'dropShield', actorId: ac.id })} title={spent ? SPENT : 'Uses your Action.'}>Drop Shield</button>
             </div>
           </>
         ) : (
@@ -104,9 +111,9 @@ export function GearPanel({ c, actingId, targetId, canAct }: { c: GearCtx; actin
             <select aria-label="Shield" value={shieldId} onChange={(e) => setShieldId(e.target.value)}>
               {SHIELD_TEMPLATES.map((s) => <option key={s.id} value={s.id}>{s.name} (HP {s.hp})</option>)}
             </select>
-            <button className="btn" disabled={!canAct} onClick={() => gear(c, { op: 'equipShield', actorId: ac.id, templateId: shieldId })} title="Uses your Action and one hand.">Equip Shield</button>
+            <button className="btn" disabled={needsAction} onClick={() => gear(c, { op: 'equipShield', actorId: ac.id, templateId: shieldId })} title={spent ? SPENT : 'Uses your Action and one hand.'}>Equip Shield</button>
             {grappling && !grappling.humanShield && (
-              <button className="btn" disabled={!canAct} onClick={() => gear(c, { op: 'humanShield', actorId: ac.id })} title="Uses your Action. Blocks ranged attacks, except head shots.">
+              <button className="btn" disabled={needsAction} onClick={() => gear(c, { op: 'humanShield', actorId: ac.id })} title={spent ? SPENT : 'Uses your Action. Blocks ranged attacks, except head shots.'}>
                 Use {c.name(grappling.heldId)} as a Human Shield
               </button>
             )}
@@ -121,9 +128,9 @@ export function GearPanel({ c, actingId, targetId, canAct }: { c: GearCtx; actin
           <select aria-label="Drug" value={drugId} onChange={(e) => setDrugId(e.target.value)}>
             {DRUG_TEMPLATES.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.duration})</option>)}
           </select>
-          <button className="btn" disabled={!canAct} onClick={() => gear(c, { op: 'takeDrug', actorId: ac.id, drugId })} title="Uses your Action.">Take a Dose</button>
+          <button className="btn" disabled={needsAction} onClick={() => gear(c, { op: 'takeDrug', actorId: ac.id, drugId })} title={spent ? SPENT : 'Uses your Action.'}>Take a Dose</button>
           {t && !t.public.vehicle && t.public.allegiance !== 'hostile' && (
-            <button className="btn" disabled={!canAct} onClick={() => gear(c, { op: 'takeDrug', actorId: ac.id, targetId: t.id, drugId })} title="A willing target next to you. Uses your Action.">Dose {t.public.name}</button>
+            <button className="btn" disabled={needsAction} onClick={() => gear(c, { op: 'takeDrug', actorId: ac.id, targetId: t.id, drugId })} title={spent ? SPENT : 'A willing target next to you. Uses your Action.'}>Dose {t.public.name}</button>
           )}
         </div>
         <p className="gear-line dim">{DRUG_TEMPLATES.find((d) => d.id === drugId)?.effect.note}</p>
