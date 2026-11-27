@@ -9,6 +9,7 @@ import {
   TERRAINS, tokensOnBlocked, undo, uniqueMapId, type History, MAX_SQUARES,
 } from './mapModel.js';
 import './editors.css';
+import { joinNames } from '../table/format.js';
 
 type Source = 'active' | 'library' | 'new';
 type Tool = 'brush' | 'rect' | 'fill' | 'light';
@@ -138,7 +139,7 @@ export function MapEditor({ s }: { s: ClientState }) {
       if (act({ type: 'setMap', map: next })) {
         setDraft(next);
         setMsg(stuck.length
-          ? { tone: 'warn', text: `Updated the live map. ${stuck.length} token${stuck.length > 1 ? 's stand' : ' stands'} on a blocked square: ${stuck.map((id) => view.actors[id]?.public.name ?? id).join(', ')}.` }
+          ? { tone: 'warn', text: `Updated the live map. ${stuck.length} token${stuck.length > 1 ? 's stand' : ' stands'} on a blocked square: ${joinNames(stuck.map((id) => view.actors[id]?.public.name ?? id))}.` }
           : { tone: 'ok', text: 'Updated the live map. Tokens stayed where they were.' });
       }
       return;
@@ -190,7 +191,7 @@ export function MapEditor({ s }: { s: ClientState }) {
         </div>
         <div>
           <div className="ed-sub">Library</div>
-          <div style={{ display: 'grid', gap: 6 }}>
+          <div className="u-grid u-gap-6">
             {Object.values(library).length === 0 && <div className="ed-empty">Saved maps appear here.</div>}
             {Object.values(library).map((m) => (
               <MapItem key={m.id} m={m} sel={source === 'library' && draft?.id === m.id} live={active?.id === m.id} onClick={() => open(m, 'library')} />
@@ -208,9 +209,9 @@ export function MapEditor({ s }: { s: ClientState }) {
           : blank ? <BlankSetup b={blank} setB={setBlank} onCreate={() => { open(newMap({ name: blank.name, width: blank.w, height: blank.h, cellPx: 64, taken: takenIds }), 'new'); }} onCancel={() => setBlank(null)} />
           : current ? (
             <>
-              <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+              <div className="row u-between u-wrap u-gap-8 u-mb-8">
                 <h1 className="ed-h">{current.name}</h1>
-                <span className="note">{source === 'active' ? 'Editing the live map' : source === 'library' ? 'Editing a library map' : 'Unsaved new map'}{dirty ? ' · Unsaved changes' : ''}</span>
+                <span className="note">{source === 'active' ? 'Editing the Live Map' : source === 'library' ? 'Editing a Library Map' : 'Unsaved New Map'}{dirty ? ' · Unsaved Changes' : ''}</span>
               </div>
               <div className="toolbar" role="toolbar" aria-label="Terrain Tools">
                 {(Object.keys(TOOL_LABEL) as Tool[]).map((t) => (
@@ -236,7 +237,7 @@ export function MapEditor({ s }: { s: ClientState }) {
                         {COVER_MATERIALS.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.hp} HP)</option>)}
                       </select>
                     </label>
-                    <button className="btn sm" title="Set every cover square on this map to the selected material, at full HP"
+                    <button className="btn sm" title="Set every cover square on this map to the selected material, at full HP."
                       onClick={() => draft && setDraft({ ...draft, cover: allCover(cells, draft.width, coverMat) })}>Apply to All Cover</button>
                   </>
                 )}
@@ -262,9 +263,9 @@ export function MapEditor({ s }: { s: ClientState }) {
               </div>
             </>
           ) : (
-            <div className="card" style={{ maxWidth: 520 }}>
+            <div className="card u-maxw-520">
               <div className="ttl">Map Editor</div>
-              <p style={{ marginTop: 0 }}>Upload a top-down battle map, set the grid, then paint walls and cover so line of sight and movement work. Start from the warehouse to see how it’s set up.</p>
+              <p className="u-mt-0">Upload a top-down battle map, set the grid, then paint walls and cover so line of sight and movement work. Start from the warehouse to see how it’s set up.</p>
               <div className="btnrow"><button className="btn yellow" onClick={() => void startFromImage()}>New from Image</button></div>
             </div>
           )}
@@ -276,7 +277,7 @@ export function MapEditor({ s }: { s: ClientState }) {
           <>
             <section className="card">
               <div className="ttl">Map Settings</div>
-              <div style={{ display: 'grid', gap: 10 }}>
+              <div className="u-grid u-gap-10">
                 <label className="fld"><span>Name</span>
                   <input value={draft!.name} maxLength={60} onChange={(e) => setDraft({ ...draft!, name: e.target.value })} />
                 </label>
@@ -300,8 +301,8 @@ export function MapEditor({ s }: { s: ClientState }) {
             </section>
             <section className="card">
               <div className="ttl">Save and Use</div>
-              <div style={{ display: 'grid', gap: 8 }}>
-                <button className="cta" style={{ fontSize: 18, padding: 10 }} onClick={useNow}>{source === 'active' ? 'Update Live Map' : 'Use This Map Now'}</button>
+              <div className="u-grid u-gap-8">
+                <button className="cta u-fs-18 u-p-10" onClick={useNow}>{source === 'active' ? 'Update Live Map' : 'Use This Map Now'}</button>
                 <button className="btn full" onClick={() => saveToLibrary()}>Save to Library</button>
                 <div className="btnrow">
                   <button className="btn sm" onClick={duplicate}>Duplicate</button>
@@ -331,8 +332,8 @@ function MapItem({ m, sel, live, onClick }: { m: TacticalMap; sel?: boolean; liv
   return (
     <button className={`li${sel ? ' sel' : ''}`} onClick={onClick} aria-current={sel ? 'true' : undefined}>
       {m.background ? <img className="thumb" src={m.background} alt="" loading="lazy" /> : <span className="thumb" />}
-      <span style={{ minWidth: 0 }}>
-        <span className="nm" style={{ display: 'block' }}>{m.name}</span>
+      <span className="u-minw-0">
+        <span className="nm u-block">{m.name}</span>
         <span className="meta">{m.width} × {m.height} squares {live && <span className="tag live">Live</span>}</span>
       </span>
     </button>
@@ -344,10 +345,10 @@ function ImageSetup({ p, setP, busy, onCreate, onCancel }: { p: Pending; setP: (
   const fit = fitGrid(w, h, p.cellPx);
   const across = fit.width;
   return (
-    <div className="card" style={{ maxWidth: 680 }}>
+    <div className="card u-maxw-680">
       <div className="ttl">Set Up the Grid</div>
       <img className="preview-img" src={p.preview} alt="Uploaded map preview" />
-      <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+      <div className="u-grid u-gap-10 u-mt-10">
         <label className="fld"><span>Map Name</span><input value={p.name} maxLength={60} onChange={(e) => setP({ ...p, name: e.target.value })} /></label>
         <div className="grid2">
           <label className="fld"><span>Square Size (Px)</span>
@@ -373,9 +374,9 @@ function ImageSetup({ p, setP, busy, onCreate, onCancel }: { p: Pending; setP: (
 
 function BlankSetup({ b, setB, onCreate, onCancel }: { b: { name: string; w: number; h: number }; setB: (b: { name: string; w: number; h: number }) => void; onCreate: () => void; onCancel: () => void }) {
   return (
-    <div className="card" style={{ maxWidth: 480 }}>
+    <div className="card u-maxw-480">
       <div className="ttl">New Blank Map</div>
-      <div style={{ display: 'grid', gap: 10 }}>
+      <div className="u-grid u-gap-10">
         <label className="fld"><span>Map Name</span><input value={b.name} maxLength={60} onChange={(e) => setB({ ...b, name: e.target.value })} /></label>
         <div className="grid2">
           <label className="fld"><span>Width (Squares)</span><input type="number" min={2} max={100} value={b.w} onChange={(e) => setB({ ...b, w: Math.max(2, Math.min(100, Number(e.target.value) || 2)) })} /></label>
@@ -435,7 +436,7 @@ function PaintCanvas({ map, tool, terrain, size, outline, zoom, actors, onPaint,
         height={H * zoom}
         viewBox={`0 0 ${W} ${H}`}
         role="application"
-        aria-label={`Terrain painter for ${map.name}. Use the toolbar to pick a tool and terrain.`}
+        aria-label={`Terrain Painter for ${map.name}`} aria-description="Use the toolbar to pick a tool and terrain."
         onPointerDown={(e) => {
           if (e.button !== 0) return;
           const c = cellAt(e);

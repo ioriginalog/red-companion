@@ -244,7 +244,7 @@ describe('static web client and origin policy', () => {
     expect((await fetch(`${base}/api/sessions`, { method: 'POST', headers: { Origin: 'https://good.example' } })).status).toBe(201);
     const ws = new WebSocket(`${base.replace('http', 'ws')}/ws`, { headers: { Origin: 'https://evil.example' } });
     const code = await new Promise<string>((r) => { ws.on('unexpected-response', (_q, res) => r(String(res.statusCode))); ws.on('open', () => r('open')); });
-    expect(code).toBe('401');
+    expect(code).toBe('403');
   });
 });
 
@@ -423,7 +423,7 @@ describe('round 2 hardening', () => {
     expect(evil.status).toBe(403);
     const ws = new WebSocket(`ws://${base}/ws`, { headers: { Origin: 'https://evil.example' } });
     const code = await new Promise<string>((r) => { ws.on('unexpected-response', (_q, res) => r(String(res.statusCode))); ws.on('open', () => r('open')); });
-    expect(code).toBe('401');
+    expect(code).toBe('403');
   });
 
   it('gives players a player directory and tells them when others join or leave (critic #10)', async () => {
@@ -618,8 +618,8 @@ describe('round 3: lockout, history, offline queue', () => {
     expect(await p.nextOf('rejected')).toMatchObject({ clientMsgId: 'c', code: 'QUEUE_FULL' });
     t += 120_000;
     const { c: gm } = await hello({ t: 'hello', v: H, role: 'gm', sessionId, gmKey }); // empty session: flushes at once
-    expect(await p.nextOf('rejected')).toMatchObject({ clientMsgId: 'a', code: 'EXPIRED' });
-    expect(await p.nextOf('rejected')).toMatchObject({ clientMsgId: 'b', code: 'EXPIRED' });
+    expect(await p.nextOf('queueDropped')).toMatchObject({ clientMsgId: 'a', reason: 'expired' });
+    expect(await p.nextOf('queueDropped')).toMatchObject({ clientMsgId: 'b', reason: 'expired' });
     gm.ws.close(); p.ws.close();
   });
 });
@@ -701,5 +701,183 @@ describe('round 4: pre-hello hardening, rate limits, log headroom, rewind', () =
     expect(rw.toSeq).toBe(1);
     expect(rw.view.seq).toBe(1);
     expect(rw.history.map((h) => h.seq)).toEqual([1]);
+  });
+});
+
+describe('round 5: GM signals in the fog, persisted offline queue', () => {
+  async function gmAndPlayer() {
+    const { sessionId, gmKey, joinCode } = await createSession();
+    const gm = new Client(`ws://${base}/ws`);
+    await gm.open();
+    gm.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'gm', sessionId, gmKey });
+    await gm.nextOf('welcome');
+    const p = new Client(`ws://${base}/ws`);
+    await p.open();
+    p.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode, name: 'Nix' });
+    const welcome = await p.nextOf('welcome');
+    await gm.nextOf('playerJoined');
+    return { sessionId, gmKey, joinCode, gm, p, welcome };
+  }
+
+  it('drops GM pings, cursors and ruler lines that point into the fog; players’ own signals and clears still pass', async () => {
+    const { sessionId, gm, p } = await gmAndPlayer();
+    const auth = gmAuthority(gm, sessionId);
+    auth.act({ type: 'addActor', actor: npc('pc', 'gm', 'pc') });
+    auth.act({
+      type: 'setMap',
+      map: {
+        id: 'm', name: 'M', width: 10, height: 5, cellPx: 64, sightRange: 30, cells: '.....#....'.repeat(5),
+        tokens: { pc: { x: 1, y: 2 } }, watches: {}, spotted: [],
+      },
+    });
+    await p.nextOf('entries');
+    await p.nextOf('entries');
+    gm.send({ t: 'signal', signal: { kind: 'ping', at: { x: 8, y: 2 } } }); // behind the wall
+    gm.send({ t: 'signal', signal: { kind: 'measure', from: { x: 8, y: 2 }, to: { x: 1, y: 2 } } });
+    gm.send({ t: 'signal', signal: { kind: 'cursor', at: { x: 9, y: 4 } } });
+    gm.send({ t: 'signal', signal: { kind: 'ping', at: { x: 3, y: 2 } } }); // in view
+    expect((await p.nextOf('signal')).signal).toEqual({ kind: 'ping', at: { x: 3, y: 2 } });
+    gm.send({ t: 'signal', signal: { kind: 'measure', from: { x: 8, y: 2 }, to: null } });
+    expect((await p.nextOf('signal')).signal).toMatchObject({ kind: 'measure', to: null });
+    // A player's own ping goes to the GM wherever it is.
+    p.send({ t: 'signal', signal: { kind: 'ping', at: { x: 8, y: 2 } } });
+    expect((await gm.nextOf('signal')).signal).toEqual({ kind: 'ping', at: { x: 8, y: 2 } });
+    gm.ws.close(); p.ws.close();
+  });
+
+  it('keeps held intents across a relay restart (FileStore) and tells a returning player what is still held', async () => {
+    await relay.close();
+    tmp = mkdtempSync(join(tmpdir(), 'relay-q-'));
+    await start(new FileStore(tmp));
+    const { sessionId, gmKey, joinCode, gm, p, welcome } = await gmAndPlayer();
+    gmAuthority(gm, sessionId).act({ type: 'chat', text: 'Setup.' });
+    await new Promise((r) => setTimeout(r, 50));
+    gm.ws.close();
+    await gm.closed;
+    p.send({ t: 'intent', clientMsgId: 'held-1', intent: { type: 'chat', text: 'while away' } });
+    expect(await p.nextOf('queued')).toMatchObject({ clientMsgId: 'held-1' });
+    p.ws.close();
+    await p.closed;
+    await relay.close();
+    await start(new FileStore(tmp));
+    const back = new Client(`ws://${base}/ws`);
+    await back.open();
+    back.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode, name: 'Nix', playerToken: (welcome as { playerToken: string }).playerToken });
+    expect(await back.nextOf('welcome')).toMatchObject({ queued: ['held-1'] });
+    const gm2 = new Client(`ws://${base}/ws`);
+    await gm2.open();
+    gm2.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'gm', sessionId, gmKey });
+    await gm2.nextOf('welcome');
+    gm2.send({ t: 'fetchLog', fromSeq: 1 });
+    await gm2.nextOf('log');
+    expect(await gm2.nextOf('intent')).toMatchObject({ clientMsgId: 'held-1', from: (welcome as { playerId: string }).playerId });
+    // Delivered: a later reconnect lists it as settled, not held.
+    const again = new Client(`ws://${base}/ws`);
+    await again.open();
+    again.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode, name: 'Nix', playerToken: (welcome as { playerToken: string }).playerToken });
+    expect(await again.nextOf('welcome')).toMatchObject({ queued: [], settled: ['held-1'] });
+    gm2.ws.close(); back.ws.close(); again.ws.close();
+  });
+
+  async function startWith(s: Store, o: Partial<Parameters<typeof createRelay>[0]> = {}) {
+    await relay.close();
+    store = s;
+    relay = createRelay({ store, createPerHour: 100, ...o });
+    await new Promise<void>((r) => relay.server.listen(0, '127.0.0.1', () => r()));
+    base = `127.0.0.1:${(relay.server.address() as AddressInfo).port}`;
+  }
+
+  it('clears a GM cursor or ruler for players when it moves into the fog, instead of freezing it at the edge', async () => {
+    const { sessionId, gm, p } = await gmAndPlayer();
+    const auth = gmAuthority(gm, sessionId);
+    auth.act({ type: 'addActor', actor: npc('pc', 'gm', 'pc') });
+    auth.act({
+      type: 'setMap',
+      map: {
+        id: 'm', name: 'M', width: 10, height: 5, cellPx: 64, sightRange: 30, cells: '.....#....'.repeat(5),
+        tokens: { pc: { x: 1, y: 2 } }, watches: {}, spotted: [],
+      },
+    });
+    await p.nextOf('entries');
+    await p.nextOf('entries');
+    gm.send({ t: 'signal', signal: { kind: 'cursor', at: { x: 3, y: 1 } } });
+    expect((await p.nextOf('signal')).signal).toEqual({ kind: 'cursor', at: { x: 3, y: 1 } });
+    gm.send({ t: 'signal', signal: { kind: 'cursor', at: { x: 8, y: 1 } } }); // into the fog
+    expect((await p.nextOf('signal')).signal).toEqual({ kind: 'cursor', at: null });
+    gm.send({ t: 'signal', signal: { kind: 'cursor', at: { x: 9, y: 1 } } }); // still fogged: nothing more
+    gm.send({ t: 'signal', signal: { kind: 'measure', from: { x: 1, y: 1 }, to: { x: 3, y: 3 } } });
+    expect((await p.nextOf('signal')).signal).toEqual({ kind: 'measure', from: { x: 1, y: 1 }, to: { x: 3, y: 3 } });
+    gm.send({ t: 'signal', signal: { kind: 'measure', from: { x: 1, y: 1 }, to: { x: 7, y: 3 } } });
+    const cleared = (await p.nextOf('signal')).signal;
+    expect(cleared).toMatchObject({ kind: 'measure', to: null });
+    expect(JSON.stringify(cleared)).not.toContain('"x":7');
+    gm.ws.close(); p.ws.close();
+  });
+
+  it('tells a player who was away about held actions that expired, even across a restart', async () => {
+    let t = 7_000_000;
+    tmp = mkdtempSync(join(tmpdir(), 'relay-q-'));
+    const opts = { now: () => t, offlineQueue: { perSession: 50, perPlayer: 5, maxAgeMs: 60_000 } };
+    await startWith(new FileStore(tmp), opts);
+    const { sessionId, gmKey, joinCode, gm, p, welcome } = await gmAndPlayer();
+    gm.ws.close();
+    await gm.closed;
+    p.send({ t: 'intent', clientMsgId: 'old-1', intent: { type: 'chat', text: 'too late' } });
+    expect(await p.nextOf('queued')).toMatchObject({ clientMsgId: 'old-1' });
+    p.ws.close();
+    await p.closed;
+    // The GM comes back long after; nobody is there to hear about the drop.
+    t += 120_000;
+    const gm2 = new Client(`ws://${base}/ws`);
+    await gm2.open();
+    gm2.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'gm', sessionId, gmKey }); // empty session: flushes at once
+    await gm2.nextOf('welcome');
+    await new Promise((r) => setTimeout(r, 50));
+    gm2.ws.close();
+    await gm2.closed;
+    await startWith(new FileStore(tmp), opts);
+    const back = new Client(`ws://${base}/ws`);
+    await back.open();
+    back.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode, name: 'Nix', playerToken: (welcome as { playerToken: string }).playerToken });
+    expect(await back.nextOf('welcome')).toMatchObject({ queued: [], settled: ['old-1'] });
+    expect(await back.nextOf('queueDropped')).toMatchObject({ clientMsgId: 'old-1', reason: 'expired' });
+    back.ws.close();
+    await back.closed;
+    // Told once: the next join brings no repeat notice.
+    const again = new Client(`ws://${base}/ws`);
+    await again.open();
+    again.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode, name: 'Nix', playerToken: (welcome as { playerToken: string }).playerToken });
+    await again.nextOf('welcome');
+    expect((await again.next()).t).toBe('gmStatus');
+    again.send({ t: 'ping' });
+    expect((await again.next()).t).toBe('pong');
+    again.ws.close();
+  });
+
+  it('applies the queue bounds to a stored queue and shrugs off a corrupt file', async () => {
+    tmp = mkdtempSync(join(tmpdir(), 'relay-q-'));
+    await startWith(new FileStore(tmp), { offlineQueue: { perSession: 50, perPlayer: 3, maxAgeMs: 600_000 } });
+    const { sessionId, joinCode, gm, p, welcome } = await gmAndPlayer();
+    gm.ws.close(); p.ws.close();
+    await gm.closed; await p.closed;
+    const pid = (welcome as { playerId: string }).playerId;
+    const { writeFileSync } = await import('node:fs');
+    const file = join(tmp, 'sessions', sessionId, 'queue.json');
+    const held = Array.from({ length: 8 }, (_, i) => ({ playerId: pid, clientMsgId: `q${i}`, intent: { type: 'endTurn' }, at: Date.now() }));
+    writeFileSync(file, JSON.stringify({ queue: [...held, { playerId: pid, clientMsgId: 'bad', at: 1 }, 'junk'], settled: { [pid]: [1, 'ok'] }, unseen: {} }));
+    await startWith(new FileStore(tmp), { offlineQueue: { perSession: 50, perPlayer: 3, maxAgeMs: 600_000 } });
+    const back = new Client(`ws://${base}/ws`);
+    await back.open();
+    back.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode, name: 'Nix', playerToken: (welcome as { playerToken: string }).playerToken });
+    expect(await back.nextOf('welcome')).toMatchObject({ queued: ['q0', 'q1', 'q2'], settled: ['ok'] });
+    back.ws.close();
+    await back.closed;
+    writeFileSync(file, '{not json');
+    await startWith(new FileStore(tmp));
+    const again = new Client(`ws://${base}/ws`);
+    await again.open();
+    again.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode, name: 'Nix', playerToken: (welcome as { playerToken: string }).playerToken });
+    expect(await again.nextOf('welcome')).toMatchObject({ queued: [], settled: [] });
+    again.ws.close();
   });
 });

@@ -5,6 +5,7 @@ import { narrate } from '../narrate.js';
 import { COMMANDS } from './panels.js';
 import { parseCommand, type Recipient } from './commands.js';
 import type { TableCtx } from './ctx.js';
+import { joinNames } from './format.js';
 
 interface LocalLine { id: number; text: string; tone: 'error' | 'help' }
 
@@ -72,14 +73,17 @@ export function ChatPanel({ c, rollerId, onUnreadReset }: { c: TableCtx; rollerI
   useEffect(() => { if (local.length) jump(); }, [local.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = () => {
-    const r = parseCommand(text, { actorId: roller?.combatant ? roller.id : null, skills: Object.keys(roller?.combatant?.skills ?? {}), recipients });
+    const rollable = Object.values(c.view.actors)
+      .filter((a) => a.combatant && !a.placeholder && (c.isGm || a.controller === c.me))
+      .map((a) => ({ id: a.id, name: a.public.name, skills: Object.keys(a.combatant!.skills) }));
+    const r = parseCommand(text, { actorId: roller?.combatant ? roller.id : null, skills: Object.keys(roller?.combatant?.skills ?? {}), recipients, rollable });
     if (r.kind === 'empty') return;
     if (r.kind === 'help') { setLocal((l) => [...l, ...COMMANDS.map(([k, v]) => ({ id: ++n.current, text: `${k}: ${v}`, tone: 'help' as const }))]); setText(''); return; }
     if (r.kind === 'error') { setLocal((l) => [...l, { id: ++n.current, text: r.message, tone: 'error' }]); return; }
     if (c.act(r.intent)) { setHist((h) => [text, ...h].slice(0, 30)); setHIdx(-1); setText(''); }
   };
 
-  const recipientName = (ids: string[]) => ids.map((id) => (id === 'gm' ? 'GM' : id === c.me ? 'you' : c.who(id))).join(', ');
+  const recipientName = (ids: string[]) => joinNames(ids.map((id) => (id === 'gm' ? 'GM' : id === c.me ? 'you' : c.who(id))));
 
   const render = (e: CombatEvent, key: string) => {
     const whisper = e.audience && e.audience.length ? <span className="tag whisper">{e.type === 'chatMessage' ? `To ${recipientName(e.audience.filter((x) => x !== (e as { by?: string }).by))}` : 'Private'}</span> : null;
@@ -122,7 +126,14 @@ export function ChatPanel({ c, rollerId, onUnreadReset }: { c: TableCtx; rollerI
         {items.length === 0 && local.length === 0 && <span className="dim">Nothing yet. Type /help for commands.</span>}
       </div>
       {behind > 0 && <button className="btn yellow new-msgs" onClick={jump}>{behind} New {behind === 1 ? 'Message' : 'Messages'}</button>}
-      <form className="chat-input" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+      <div className="quick-rolls">
+        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '1d10', dice: { count: 1, sides: 10, bonus: 0 } })}>1d10</button>
+        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '1d6', dice: { count: 1, sides: 6, bonus: 0 } })}>1d6</button>
+        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '2d6', dice: { count: 2, sides: 6, bonus: 0 } })}>2d6</button>
+        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '3d6', dice: { count: 3, sides: 6, bonus: 0 } })}>3d6</button>
+        {isGm && <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '1d10 (Private)', dice: { count: 1, sides: 10, bonus: 0 }, private: true })}>GM 1d10</button>}
+      </div>
+      <form className="chat-input pinned" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <input
           aria-label="Chat or Command" value={text} maxLength={520}
           placeholder={roller?.combatant ? `Chat, /r 2d6, /check REF+Handgun (${roller.public.name})` : 'Chat, /r 2d6, /w Name message'}
@@ -134,13 +145,6 @@ export function ChatPanel({ c, rollerId, onUnreadReset }: { c: TableCtx; rollerI
         />
         <button className="btn yellow" disabled={!text.trim()}>Send</button>
       </form>
-      <div className="quick-rolls">
-        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '1d10', dice: { count: 1, sides: 10, bonus: 0 } })}>1d10</button>
-        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '1d6', dice: { count: 1, sides: 6, bonus: 0 } })}>1d6</button>
-        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '2d6', dice: { count: 2, sides: 6, bonus: 0 } })}>2d6</button>
-        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '3d6', dice: { count: 3, sides: 6, bonus: 0 } })}>3d6</button>
-        {isGm && <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '1d10 (Private)', dice: { count: 1, sides: 10, bonus: 0 }, private: true })}>GM 1d10</button>}
-      </div>
     </section>
   );
 }

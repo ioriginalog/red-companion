@@ -3,19 +3,18 @@ import { profileOf, type Cell, type Weapon } from '@cprc/rules-core';
 import type { Intent } from '@cprc/session';
 import { client, type ClientState } from './net.js';
 import { MapView, type MapMode } from './MapView.js';
-import { aimOf, isFriendly, previewAttack, type AttackMode } from './tactics.js';
+import { aimOf, isFriendly, nearestTarget, previewAttack, type AttackMode } from './tactics.js';
 import { demoIntents } from './demo.js';
 import type { TableCtx } from './table/ctx.js';
 import { HelpOverlay, InitiativeStrip, Prompts, TopBar } from './table/panels.js';
 import { coverAt, coverLabel } from './table/cover.js';
 import { CombatPanel, fireBlocked } from './table/CombatPanel.js';
 import { SheetPanel } from './table/SheetPanel.js';
-import { AreaDodgePrompt, GmSystemsPanel } from './systems/index.js';
-import { CombatExtrasPanel } from './extras/index.js';
+import { AreaDodgePrompt } from './systems/AreaDodgePrompt.js';
+import { CombatExtrasPanel, GmSystemsPanel, NetPanel, warmSplitChunks } from './table/lazy.js';
 import { ChatPanel } from './table/ChatPanel.js';
 import { Inspector, ScenePanel } from './table/GmPanels.js';
 import { NotesPanel } from './table/NotesPanel.js';
-import { NetPanel } from './netrun/index.js';
 import { narrate } from './narrate.js';
 import { areaKindFor } from './table/area.js';
 import { EFFECT_MS, effectsFor, type Effect } from './table/effects.js';
@@ -26,6 +25,7 @@ import { TurnBanner } from './table/layout/TurnBanner.js';
 import { useLayout } from './table/layout/useMedia.js';
 import { AreaConfirm } from './table/AreaConfirm.js';
 import { clearPlacement, prunePlacement, shiftPlacement, usePlacementQueue } from './table/placement.js';
+import { requiredPrompt } from './table/required.js';
 
 type Tab = 'combat' | 'sheet' | 'chat' | 'notes' | 'net' | 'scene';
 /** Bottom sheet height on phones and portrait tablets. */
@@ -73,6 +73,7 @@ export function Table({ s }: { s: ClientState }) {
   const [announce, setAnnounce] = useState('');
   const [notesUnread, setNotesUnread] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { warmSplitChunks(); }, []);
 
   const mine = useCallback((id: string | null | undefined) => !!id && (isGm || view.actors[id]?.controller === me), [isGm, view.actors, me]);
   const name = useCallback((id: string) => view.actors[id]?.public.name ?? 'Unknown Contact', [view.actors]);
@@ -235,6 +236,19 @@ export function Table({ s }: { s: ClientState }) {
 
   const openTab = (t: Tab) => { setTab(t); setSheetOpen(true); if (t === 'chat') setUnread(0); if (t === 'notes') setNotesUnread(0); };
 
+  // A prompt this viewer must answer takes over the action bar, and the panel opens to it once.
+  const required = useMemo(() => requiredPrompt(view, me), [view, me]);
+  const lastRequired = useRef<string | null>(null);
+  useEffect(() => {
+    const key = required?.key ?? null;
+    if (key && key !== lastRequired.current) {
+      setTab('combat');
+      if (layout.sheet || layout.compact) setSheet((sh) => (sh === 'closed' ? 'half' : sh));
+      else setSideCollapsed(false);
+    }
+    lastRequired.current = key;
+  }, [required?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const pickToken = (id: string) => {
     const a = view.actors[id];
     if (!a || a.placeholder) return;
@@ -255,9 +269,11 @@ export function Table({ s }: { s: ClientState }) {
   const tabs: [Tab, string][] = [['combat', 'Combat'], ['sheet', 'Sheet'], ['chat', 'Chat'], ['notes', 'Notes'], ...(showNet ? [['net', 'NET'] as [Tab, string]] : []), ...(isGm ? [['scene', 'Scene'] as [Tab, string]] : [])];
   const fireNow = canAct && !!targetId && !!weapon && !fireBlocked({ attack, usage, weapon }, !!view.pending);
   const chips = useMemo(() => (canAct ? targetChips(view, actingId, chances) : []), [view, actingId, chances, canAct]);
+  const anyShot = useMemo(() => (canAct && actingId ? nearestTarget(view, actingId) !== null : false), [view, actingId, canAct]);
   const targetHint = !canAct ? undefined
     : chips.length === 0 ? 'No enemies in sight. Move to find a line of sight.'
-      : layout.compact || layout.sheet ? 'Tap an enemy on the map or in the target strip.' : 'Click an enemy on the map.';
+      : !anyShot ? `The party can see enemies, but none is in ${acting ? name(acting.id) : 'this character'}’s line of sight. Move for a clear shot.`
+        : layout.compact || layout.sheet ? 'Tap an enemy on the map or in the target strip.' : 'Click an enemy on the map.';
   // Turn banner: your own characters (for the GM, the NPCs the GM runs).
   const bannerTitle = currentId && view.actors[currentId] && !view.actors[currentId]!.placeholder && mine(currentId) && (!isGm || view.actors[currentId]!.controller === 'gm')
     ? (isGm ? `${name(currentId)}’s Turn` : 'Your Turn') : null;
@@ -272,7 +288,7 @@ export function Table({ s }: { s: ClientState }) {
     return (
       <span className="menu-wrap">
         <button className={`btn${delayOpen ? ' on' : ''}`} disabled={!fresh || !!view.pending} aria-expanded={!!delayOpen} aria-haspopup="menu"
-          onClick={(e) => setDelayOpen(delayOpen ? null : e.currentTarget.getBoundingClientRect())} title="House rule: take your Turn later this Round (before you move or act)">Delay</button>
+          onClick={(e) => setDelayOpen(delayOpen ? null : e.currentTarget.getBoundingClientRect())} title="House rule: take your Turn later this Round (before you move or act).">Delay</button>
         {delayOpen && (
           <span className="menu" role="menu" style={{ left: Math.max(8, Math.min(delayOpen.left, window.innerWidth - 230)), bottom: window.innerHeight - delayOpen.top + 6 }}>
             {later.map((id) => <button key={id} role="menuitem" onClick={() => { setDelayOpen(null); c.act({ type: 'delayTurn', after: id }); }}>After {c.name(id)}</button>)}
@@ -283,6 +299,10 @@ export function Table({ s }: { s: ClientState }) {
     );
   })();
   const sheetMode = layout.sheet;
+  // Landscape phones are short on map: the target strip starts folded and folds again after a pick or a map touch.
+  const [chipsFolded, setChipsFolded] = useState(layout.shortLandscape);
+  useEffect(() => { setChipsFolded(layout.shortLandscape); }, [layout.shortLandscape]);
+  const showChips = (layout.compact || layout.sheet) && canAct && mapMode === 'move' && !required && chips.length > 0;
   const toggleSide = () => { const v = !sideCollapsed; setSideCollapsed(v); store.set('nsc.sideCollapsed', v ? '1' : '0'); };
 
   return (
@@ -290,17 +310,17 @@ export function Table({ s }: { s: ClientState }) {
       <TopBar c={c} onHelp={() => setHelp(true)} />
       <InitiativeStrip c={c} onPick={(id, friendly) => (view.actors[id]?.placeholder ? undefined : friendly ? (setSelected(id), isGm && setFocusId(id)) : setTargetId(id))} />
 
-      <main className="mapwrap">
+      <main className="mapwrap" onPointerDownCapture={(e) => { if (layout.shortLandscape && !chipsFolded && (e.target as Element).closest?.('.mapstage')) setChipsFolded(true); }}>
         {view.map ? (
           <MapView
             view={view} isGm={isGm} actingId={actingId} canAct={canAct} targetId={targetId} attack={attack} chances={chances}
             compact={layout.compact || layout.sheet}
-            bottomInset={(layout.compact || layout.sheet) && canAct && mapMode === 'move' && chips.length ? 62 : 0}
+            bottomInset={showChips && !chipsFolded ? (layout.shortLandscape ? 52 : 62) : 0}
             followIds={[...(actingId && view.map.tokens[actingId] ? [actingId] : []), ...(targetId && targetId !== actingId ? [targetId] : [])]}
             followKey={`${turnKey ?? 'free'}|${actingId ?? ''}|${targetId ?? ''}|${sheet}`}
             showMini={showMini} onToggleMini={() => { const v = !showMini; setShowMini(v); store.set('nsc.minimap', v ? '1' : '0'); }}
             mode={effMode} areaKind={scatterPick ? 'blast' : areaKind} partyFog={partyFog} neutralTemplate={!!scatterPick}
-            hoverInfo={(cell) => { const ci = view.map ? coverAt(view.map, cell) : null; return ci ? coverLabel(ci, isGm) : null; } /* */} focusId={isGm ? focusId : null} highlight={highlight}
+            hoverInfo={(cell) => { const ci = view.map ? coverAt(view.map, cell) : null; return ci ? coverLabel(ci, isGm) : null; }} focusId={isGm ? focusId : null} highlight={highlight}
             shareCursor={!isGm || gmCursor} me={c.me} act={c.act}
             signals={s.signals} effects={effects} nameOf={(f) => client.nameOf(f)}
             canDrag={(id) => isGm || (mine(id) && (!enc.active || currentId === id))}
@@ -342,17 +362,17 @@ export function Table({ s }: { s: ClientState }) {
             ) : <p className="dim">The GM hasn’t loaded a map.</p>}
           </div>
         )}
-        {(layout.compact || layout.sheet) && canAct && mapMode === 'move' && <TargetChips chips={chips} targetId={targetId} onPick={setTargetId} />}
+        {showChips && <TargetChips chips={chips} targetId={targetId} collapsed={chipsFolded} onCollapse={setChipsFolded} onPick={(id) => { setTargetId(id); if (layout.shortLandscape) setChipsFolded(true); }} />}
         <TurnBanner turnKey={turnKey} title={bannerTitle} sub={bannerTitle && !isGm ? name(currentId!) : undefined} />
         {!sheetMode && !layout.shortLandscape && sideCollapsed && (
           <button className="btn side-open" onClick={toggleSide} aria-label="Show Panels" title="Show Panels">Panels ‹</button>
         )}
         {view.map && (
           <div className="legend">
-            <span><i style={{ background: 'rgba(34,227,255,0.5)' }} />Move</span>
-            <span><i style={{ background: 'rgba(255,212,0,0.5)' }} />Run (Uses Action)</span>
-            <span><i style={{ background: '#ff2bd6' }} />Watch</span>
-            <span><i style={{ background: 'rgba(2,4,14,0.9)', border: '1px solid #445' }} />Unseen</span>
+            <span><i className="sw-move" />Move</span>
+            <span><i className="sw-run" />Run (Uses Action)</span>
+            <span><i className="sw-watch" />Watch</span>
+            <span><i className="sw-unseen" />Unseen</span>
           </div>
         )}
         {effMode === 'area' && areaAim && view.map && (areaKind || scatterPick) && (
@@ -380,6 +400,7 @@ export function Table({ s }: { s: ClientState }) {
         c={c} compact={layout.compact} mapMode={mapMode} setMapMode={setMapMode} actingId={actingId} acting={acting} canAct={canAct}
         usage={usage} weapon={weapon} targetId={targetId} attack={attack} fireNow={fireNow} onFire={fire} canEndTurn={canEndTurn}
         partyFog={partyFog} setPartyFog={setPartyFog} extra={delaySlot}
+        required={required} onOpenPanel={() => { openTab('combat'); setSideCollapsed(false); }}
       />
 
       <aside className="side" aria-label="Panels">
@@ -397,7 +418,7 @@ export function Table({ s }: { s: ClientState }) {
             ? <button className="tab grip" aria-label={sheetOpen ? 'Collapse Panel' : 'Expand Panel'} onClick={() => setSheetOpen(!sheetOpen)}>{sheetOpen ? '▾' : '▴'}</button>
             : !layout.shortLandscape && <button className="tab grip side-hide" aria-label="Hide Panels" title="Hide Panels" onClick={toggleSide}>›</button>}
         </div>
-        <div className="side-body">
+        <div className={`side-body tab-${tab}`}>
           <Prompts c={c} onPickScatter={setScatterPick} scatterPicking={scatterPick} />
           <AreaDodgePrompt view={view} isGm={isGm} mine={(id) => c.mine(id)} name={c.name} act={c.act} />
           {tab === 'combat' && (
@@ -409,7 +430,7 @@ export function Table({ s }: { s: ClientState }) {
                 setHighlight={setHighlight} onFire={fire} coverPick={coverPick} setCoverPick={setCoverPick}
                 ownIds={ownIds} onSelectOwn={(id) => setSelected(id)} targetHint={targetHint}
               />
-              <CombatExtrasPanel c={c} actingId={actingId} targetId={targetId} canAct={canAct} />{/* */}
+              <CombatExtrasPanel c={c} actingId={actingId} targetId={targetId} canAct={canAct} />
             </>
           )}
           {tab === 'sheet' && <SheetPanel c={c} preferId={isGm ? (focusId ?? actingId) : actingId} />}

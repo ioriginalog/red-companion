@@ -30,7 +30,7 @@ export function SystemsSheet({ c, actorId }: { c: SystemsCtx; actorId: string })
       {cb.onFire ? (
         <section className="card sys-fire" role="status">
           <div className="ttl">On Fire</div>
-          <p style={{ margin: '0 0 8px' }}>{cb.name} burns for {cb.onFire} HP at the start of each Turn until the flames are out.</p>
+          <p className="u-m-0 u-mb-8">{cb.name} burns for {cb.onFire} HP at the start of each Turn until the flames are out.</p>
           {can && <button className="btn yellow" onClick={() => c.act({ type: 'extinguish', actorId })}>Put It Out (Action)</button>}
         </section>
       ) : null}
@@ -54,24 +54,24 @@ function RoleSection({ c, a, cb, can }: { c: SystemsCtx; a: ProjectedActor; cb: 
   return (
     <section className="card">
       <div className="ttl">Role</div>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+      <div className="row u-between">
         <b>{ROLE_NAME[role.id] ?? role.id}</b><span className="h mono">Rank {role.rank}</span>
       </div>
       {role.id === 'solo' && (
-        <div style={{ marginTop: 8 }}>
-          <div className="dim h" style={{ fontSize: 12 }}>Combat Awareness · {spent} of {role.rank} Points</div>
+        <div className="u-mt-8">
+          <div className="dim h u-fs-12">Combat Awareness · {spent} of {role.rank} Points</div>
           <div className="sys-aw">
             {AWARENESS.map((d) => (
               <label key={d.key} title={d.summary} className={draft && !d.allowed(alloc[d.key] ?? 0) ? 'bad' : ''}>
                 <span>{d.name}</span>
-                <input type="number" min={0} max={10} value={alloc[d.key] ?? 0} disabled={!can} aria-label={`${d.name} points`}
+                <input type="number" min={0} max={10} value={alloc[d.key] ?? 0} disabled={!can} aria-label={`${d.name} Points`}
                   onChange={(e) => setDraft({ ...alloc, [d.key]: Math.max(0, Math.min(10, Number(e.target.value) || 0)) })} />
               </label>
             ))}
           </div>
-          {problem && <div className="warn" style={{ marginTop: 6 }}>{problem}</div>}
+          {problem && <div className="warn u-mt-6">{problem}</div>}
           {can && draft && (
-            <div className="row" style={{ marginTop: 6 }}>
+            <div className="row u-mt-6">
               <button className="btn yellow" disabled={!!problem} onClick={() => { if (c.act({ type: 'setAwareness', actorId: a.id, allocation: draft })) setDraft(null); }}>
                 {c.view.encounter.active ? 'Re-Allocate (Action)' : 'Save Allocation'}
               </button>
@@ -81,11 +81,11 @@ function RoleSection({ c, a, cb, can }: { c: SystemsCtx; a: ProjectedActor; cb: 
         </div>
       )}
       {role.id === 'medtech' && role.medicine && (
-        <div className="dim" style={{ fontSize: 13, marginTop: 6 }}>
+        <div className="dim u-fs-13 u-mt-6">
           Surgery {role.medicine.surgery} · Pharmaceuticals {role.medicine.pharmaceuticals} · Cryosystem {role.medicine.cryosystem}
         </div>
       )}
-      {role.notes && <p className="dim" style={{ fontSize: 13, margin: '6px 0 0' }}>{role.notes}</p>}
+      {role.notes && <p className="dim u-fs-13 u-m-0 u-mt-6">{role.notes}</p>}
     </section>
   );
 }
@@ -99,7 +99,7 @@ function SpeedwareSection({ c, cb, actorId, can }: { c: SystemsCtx; cb: Combatan
   return (
     <section className="card">
       <div className="ttl">Speedware</div>
-      <p style={{ margin: '0 0 8px' }}>
+      <p className="u-m-0 u-mb-8">
         <b>{piece.name}</b>: {eff.mode === 'passive'
           ? `always on, +${eff.initiative} to Initiative.`
           : st?.active ? `active, ${st.roundsLeft} ${st.roundsLeft === 1 ? 'Round' : 'Rounds'} left (+${eff.initiative} to Initiative rolls made while on).`
@@ -121,14 +121,14 @@ function HumanitySection({ cb }: { cb: Combatant }) {
       <div className="ttl">Cyberware</div>
       {h && (
         <div className={`sys-hum sys-hum-${status}`}>
-          <div className="row" style={{ justifyContent: 'space-between', fontSize: 13 }}><span>Humanity</span><span className="mono">{h.current} / {h.max}{h.base !== undefined && h.base !== h.max ? ` (of ${h.base})` : ''} · EMP {cb.stats.EMP}</span></div>
+          <div className="row u-between u-fs-13"><span>Humanity</span><span className="mono">{h.current} / {h.max}{h.base !== undefined && h.base !== h.max ? ` (of ${h.base})` : ''} · EMP {cb.stats.EMP}</span></div>
           <div className="bar"><i style={{ width: `${Math.max(0, Math.min(100, (h.current / Math.max(1, h.max)) * 100))}%` }} /></div>
           {status !== 'stable' && <div className="note">{status === 'cyberpsycho' ? 'Cyberpsychosis.' : status === 'critical' ? 'On the edge of cyberpsychosis.' : 'Humanity is running low.'}</div>}
         </div>
       )}
       <ul className="sys-list">
         {(cb.cyberware ?? []).map((i) => (
-          <li key={i.id}><b>{i.name}</b>{i.slot ? <span className="dim"> · {i.slot}</span> : null}{i.notes ? <div className="dim" style={{ fontSize: 12 }}>{i.notes}</div> : null}</li>
+          <li key={i.id}><b>{i.name}</b>{i.slot ? <span className="dim"> · {i.slot}</span> : null}{i.notes ? <div className="dim u-fs-12">{i.notes}</div> : null}</li>
         ))}
         {!cb.cyberware?.length && <li className="dim">None installed.</li>}
       </ul>
@@ -147,7 +147,7 @@ function GearSection({ cb, a }: { cb: Combatant; a: ProjectedActor }) {
           <li key={w.id}><b>{w.name}</b><span className="dim"> · {[w.smartgunLink ? 'Smartgun Link' : '', w.smart === 'built' ? 'Smart Weapon' : w.smart === 'rebuild' ? 'Smart Rebuild' : ''].filter(Boolean).join(' · ')}</span></li>
         ))}
         {(cb.gear ?? []).map((g, i) => (
-          <li key={`g${i}`}><b>{g.name}</b>{g.qty > 1 ? <span className="mono"> × {g.qty}</span> : null}{g.notes ? <div className="dim" style={{ fontSize: 12 }}>{g.notes}</div> : null}</li>
+          <li key={`g${i}`}><b>{g.name}</b>{g.qty > 1 ? <span className="mono"> × {g.qty}</span> : null}{g.notes ? <div className="dim u-fs-12">{g.notes}</div> : null}</li>
         ))}
       </ul>
     </section>
@@ -169,15 +169,15 @@ function AmmoSection({ c, a, cb, can }: { c: SystemsCtx; a: ProjectedActor; cb: 
         const hands = wieldProblem(cb, w);
         return (
           <div key={w.id} className="sys-ammo">
-            <div className="row" style={{ justifyContent: 'space-between' }}>
+            <div className="row u-between">
               <b>{w.name}</b>
               <select disabled={!can} value={cur} aria-label={`Ammunition for ${w.name}`}
                 onChange={(e) => c.act({ type: 'setAmmoType', actorId: a.id, weaponId: w.id, ammoType: e.target.value as AmmoTypeId })}>
                 {options.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
-            <div className="dim" style={{ fontSize: 12 }}>{def.summary}{def.automated ? '' : ' (GM resolves)'}</div>
-            {hands && <div className="warn" style={{ marginTop: 4 }}>{hands}</div>}
+            <div className="dim u-fs-12">{def.summary}{def.automated ? '' : ' (GM resolves)'}</div>
+            {hands && <div className="warn u-mt-4">{hands}</div>}
           </div>
         );
       })}
@@ -196,7 +196,7 @@ function InjurySection({ c, a, cb }: { c: SystemsCtx; a: ProjectedActor; cb: Com
     <section className="card">
       <div className="ttl">Treat Injuries</div>
       {medics.length > 1 && (
-        <label className="row" style={{ marginBottom: 6 }}><span className="dim">Medic</span>
+        <label className="row u-mb-6"><span className="dim">Medic</span>
           <select value={medic?.id ?? ''} onChange={(e) => setMedicId(e.target.value)}>{medics.map((m) => <option key={m.id} value={m.id}>{m.public.name}</option>)}</select>
         </label>
       )}
@@ -209,7 +209,7 @@ function InjurySection({ c, a, cb }: { c: SystemsCtx; a: ProjectedActor; cb: Com
           return (
             <li key={`${inst.injuryId}-${i}`}>
               <b>{def.name}</b>{inst.quickFixed ? <span className="dim"> · Quick-Fixed</span> : null}
-              <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+              <div className="row u-wrap u-gap-6 u-mt-4">
                 {medic && options.map((o) => {
                   const ok = 'dv' in treatmentDv(inst.injuryId, o.kind, o.skill);
                   const lvl = medic.combatant!.skills[o.skill] ?? 0;
@@ -221,7 +221,7 @@ function InjurySection({ c, a, cb }: { c: SystemsCtx; a: ProjectedActor; cb: Com
                     </button>
                   );
                 })}
-                {!options.length && <span className="dim" style={{ fontSize: 12 }}>{def.quickFix ? 'Quick-Fixed; a Quick Fix is the whole treatment.' : 'No field treatment.'}</span>}
+                {!options.length && <span className="dim u-fs-12">{def.quickFix ? 'Quick-Fixed; a Quick Fix is the whole treatment.' : 'No field treatment.'}</span>}
               </div>
             </li>
           );

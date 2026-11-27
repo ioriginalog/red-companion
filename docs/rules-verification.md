@@ -17,7 +17,7 @@ Status key: **Easy Mode** = matches the free Easy Mode PDF · **Errata** = match
 | Aimed Shot | −8, one attack regardless of ROF. Head: through-damage × 2 vs head SP. Held Item: drop on penetration. Leg: Broken Leg on penetration (if not already broken). | Secondary |
 | Melee weapons | Count ceil(SP / 2) (Core p.175 errata example). Ablate the real SP. | Errata |
 | Brawling | Full SP. Damage by BODY: ≤4 1d6, 5–6 2d6, 7–10 3d6, 11+ 4d6. Two attacks. | Secondary |
-| Martial Arts | BODY damage; counts half SP. Special moves not built yet. | Secondary |
+| Martial Arts | BODY damage; counts half SP. Special Moves: see Grapples, Martial Arts, Facedowns and Role Abilities below. | Secondary |
 | Armor | Highest SP in a location counts; every piece in that location ablates by 1 when damage gets through. | Secondary |
 | Critical Injury trigger | 2+ sixes on damage dice. Happens even if armor stopped all damage. | Secondary |
 | Crit bonus damage | +5 to HP; ignores armor, no ablation, not multiplied by headshots. Reroll injuries already owned. | Secondary |
@@ -90,7 +90,7 @@ Built from community references (not the Core Rulebook). Starter Programs (Lockp
 | ICE state | Each runner's ICE state is their own and resets when they jack out safely. | Interpretation |
 | 2070s Quickhacks (option) | Jack In to a visible target's neuroport within 50 m/yds (25 squares), 1 NET Action; the quickhack's effect is a GM prompt (the kit's tables aren't in the tool). Off by default. | Secondary (public summaries) |
 
-Not built for Netrunning: rival netrunners fighting each other, Demon turns (GM runs them), Relentless ICE following the runner, and the Edgerunners Mission Kit quickhack tables. (Improved Smart Ammo is now built as a weapon option; see Systems.)
+Not built for Netrunning: rival netrunners fighting each other, ICE following a runner between floors, and the Edgerunners Mission Kit quickhack tables. (Demon Turns are built; see Automation.) (Improved Smart Ammo is now built as a weapon option; see Systems.)
 
 ## Systems (2026-11, Track K)
 
@@ -198,7 +198,12 @@ RED Core has no light-level rules or darkness modifier that we could confirm. Co
 
 ## Not Built Yet
 
-Shields, human shields, weapon quality, drug effects, vehicles (Moto tracks Family vehicles by name only), re-bleed automation for Broken Ribs/Foreign Object, Spinal Injury lost-Action tracking.
+- Shields and human shields.
+- Weapon quality (Poor, Excellent); the GM can override a weapon's damage dice and ROF instead.
+- Drug effects.
+- Vehicles: no SDP, seats, speed or vehicle combat. Moto tracks Family vehicles by name only.
+
+Built since earlier versions of this list: Broken Ribs and Foreign Object re-bleed, Spinal Injury's lost Action, and the ear injuries' lost Move Action (see Automation); Martial Arts Special Moves; Demon Turns; light sources, darkness and night vision (see Light, Vision and Drawings).
 
 ## Rules Packs and Book Values (Round 3)
 
