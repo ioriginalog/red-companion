@@ -23,14 +23,14 @@ const fx = (note: string, stats?: DrugEffect['stats']): DrugEffect => ({ note, .
 /** Original examples, not book drugs. */
 export const DRUG_TEMPLATES: DrugDef[] = [
   { id: 'glimmer', name: 'Glimmer', duration: '1 hour', addictionDv: 13,
-    effect: fx('Original. Hands go steady and the world slows a little.', { REF: 1 }),
-    secondary: fx('Original. Jittery and short-sighted without it.', { REF: -1, INT: -1 }) },
+    effect: fx('Hands go steady and the world slows a little.', { REF: 1 }),
+    secondary: fx('Jittery and short-sighted without it.', { REF: -1, INT: -1 }) },
   { id: 'brickwall', name: 'Brickwall', duration: '30 minutes', addictionDv: 15,
-    effect: fx('Original. Pain fades to static; the GM may ignore one Wound State penalty.', { BODY: 1 }),
-    secondary: fx('Original. Everything aches.', { BODY: -1, MOVE: -1 }) },
+    effect: fx('Pain fades to static; the GM may ignore one Wound State penalty.', { BODY: 1 }),
+    secondary: fx('Everything aches.', { BODY: -1, MOVE: -1 }) },
   { id: 'nightjar', name: 'Nightjar', duration: '6 hours', addictionDv: 11,
-    effect: fx('Original. Wide awake; no sleep needed while it lasts.', { INT: 1 }),
-    secondary: fx('Original. Foggy and irritable.', { COOL: -1 }) },
+    effect: fx('Wide awake; no sleep needed while it lasts.', { INT: 1 }),
+    secondary: fx('Foggy and irritable.', { COOL: -1 }) },
 ];
 
 const STATS: readonly StatKey[] = ['INT', 'REF', 'DEX', 'TECH', 'COOL', 'WILL', 'LUCK', 'MOVE', 'BODY', 'EMP'];

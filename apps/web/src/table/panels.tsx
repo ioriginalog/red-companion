@@ -123,7 +123,7 @@ export function Prompts({ c, onPickScatter, scatterPicking }: { c: TableCtx; onP
   if (isGm && enc.active && !pending) {
     const late = Object.keys(view.map?.tokens ?? {}).filter((id) => {
       const a = view.actors[id];
-      return a && !a.placeholder && !a.public.conditions.dead && !enc.order.includes(id) && !dismissed.includes(id);
+      return a && !a.placeholder && !a.public.vehicle && !a.public.conditions.dead && !enc.order.includes(id) && !dismissed.includes(id); // vehicles act on their driver's Turn
     });
     if (late.length) {
       out.push(

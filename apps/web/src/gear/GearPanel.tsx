@@ -48,7 +48,7 @@ export function GearPanel({ c, actingId, targetId, canAct }: { c: GearCtx; actin
       <div className="gear-sub">Vehicles</div>
       <div className="row gear-row">
         <select aria-label="Vehicle" value={spawn.templateId} onChange={(e) => setSpawn({ ...spawn, templateId: e.target.value })}>
-          {VEHICLE_TEMPLATES.map((v) => <option key={v.id} value={v.id}>{v.name} (SDP {v.sdp}, {v.seats} Seats, MOVE {v.move})</option>)}
+          {VEHICLE_TEMPLATES.map((v) => <option key={v.id} value={v.id}>{v.name} (SDP {v.sdp}, {v.seats} {v.seats === 1 ? 'Seat' : 'Seats'}, MOVE {v.move})</option>)}
         </select>
         <select aria-label="Vehicle Allegiance" value={spawn.allegiance} onChange={(e) => setSpawn({ ...spawn, allegiance: e.target.value as typeof spawn.allegiance })}>
           <option value="party">Party</option><option value="neutral">Neutral</option><option value="hostile">Hostile</option>
@@ -71,7 +71,7 @@ export function GearPanel({ c, actingId, targetId, canAct }: { c: GearCtx; actin
     return (
       <section className="card gear" aria-label={`${ac.name} Vehicle`}>
         <div className="ttl">Vehicle · {ac.name}</div>
-        <p className="gear-line">SDP {ac.hp.current}/{ac.hp.max} · {v.passengers.length}/{v.seats} Seats · MOVE {v.move}{v.topSpeed ? ` · Top Speed ${v.topSpeed}` : ''}{v.sp ? ` · Plating SP ${v.sp}` : ''}</p>
+        <p className="gear-line">SDP {ac.hp.current}/{ac.hp.max} · {v.passengers.length}/{v.seats} {v.seats === 1 ? 'Seat' : 'Seats'} · MOVE {v.move}{v.topSpeed ? ` · Top Speed ${v.topSpeed}` : ''}{v.sp ? ` · Plating SP ${v.sp}` : ''}</p>
         <p className="gear-line dim">Aboard: {v.passengers.length ? v.passengers.map((p) => `${c.name(p)}${p === v.driverId ? ' (Driver)' : ''}`).join(', ') : 'nobody'}.</p>
         {gmSpawn}
       </section>
@@ -128,14 +128,14 @@ export function GearPanel({ c, actingId, targetId, canAct }: { c: GearCtx; actin
         </div>
         <p className="gear-line dim">{DRUG_TEMPLATES.find((d) => d.id === drugId)?.effect.note}</p>
         {(ac.drugs?.active ?? []).map((d) => (
-          <div className="row gear-row" key={`a-${d.id}`}>
-            <span className="h">{d.name}</span><span className="gear-tag good">Active</span><span className="dim">{d.effect.note}</span>
+          <div className="row gear-row gear-dose" key={`a-${d.id}`}>
+            <span className="h">{d.name}</span><span className="gear-tag good">Active</span><span className="dim">{d.duration}</span>
             {c.isGm && <button className="btn ghost" onClick={() => gear(c, { op: 'drugWearsOff', actorId: ac.id, drugId: d.id })} title={`WILL + Resist Torture/Drugs vs DV ${d.addictionDv}`}>Wears Off</button>}
           </div>
         ))}
         {(ac.drugs?.addictions ?? []).map((d) => (
-          <div className="row gear-row" key={`x-${d.id}`}>
-            <span className="h">{d.name}</span><span className="gear-tag bad">Addicted</span><span className="dim">{d.secondary.note}</span>
+          <div className="row gear-row gear-dose" key={`x-${d.id}`}>
+            <span className="h">{d.name}</span><span className="gear-tag bad">Addicted</span><span className="dim gear-note">{d.secondary.note}</span>
             {c.isGm && <button className="btn ghost" onClick={() => gear(c, { op: 'cureAddiction', actorId: ac.id, drugId: d.id })}>Cured</button>}
           </div>
         ))}
