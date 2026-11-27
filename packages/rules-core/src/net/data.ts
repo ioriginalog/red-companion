@@ -50,11 +50,15 @@ export const PROGRAM_TEMPLATES: Program[] = [
   p({ id: 'needle', name: 'Needle', class: 'attacker', target: 'ice', atk: 3, def: 0, maxRez: 2, damage: { count: 1, sides: 6 }, summary: 'Original. Accurate but light.' }),
 ];
 
-/** Starter Black ICE. Entirely original designs and numbers. */
+/**
+ * Starter Black ICE. Entirely original designs and numbers. Every Black ICE
+ * chases the runner between floors (engine rule, see `chase`); a high PER
+ * like Bloodhound's just makes it hard to Slide away from.
+ */
 export const ICE_TEMPLATES: IceStats[] = [
   { name: 'Tripwire', kind: 'antiPersonnel', per: 2, spd: 4, atk: 4, def: 2, rez: 10, damage: { count: 2, sides: 6 }, effect: 'Pings the owner’s security when it lands.' },
   { name: 'Gatekeeper', kind: 'antiPersonnel', per: 4, spd: 4, atk: 6, def: 4, rez: 20, damage: { count: 3, sides: 6 } },
   { name: 'Lamprey', kind: 'antiProgram', per: 3, spd: 6, atk: 5, def: 3, rez: 15, damage: { count: 3, sides: 6 } },
-  { name: 'Bloodhound', kind: 'antiPersonnel', per: 6, spd: 6, atk: 5, def: 4, rez: 20, damage: { count: 2, sides: 6 }, effect: 'Follows the runner between floors.' },
+  { name: 'Bloodhound', kind: 'antiPersonnel', per: 6, spd: 6, atk: 5, def: 4, rez: 20, damage: { count: 2, sides: 6 }, effect: 'Picks up the runner’s scent: the owner’s security learns roughly where their body is jacked in.' },
   { name: 'Warden', kind: 'antiPersonnel', per: 4, spd: 2, atk: 8, def: 6, rez: 30, damage: { count: 4, sides: 6 } },
 ];

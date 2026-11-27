@@ -5,7 +5,7 @@
 import { makeCheck } from '../checks.js';
 import type { Dice } from '../dice.js';
 import type { CheckResult } from '../types.js';
-import type { InterfaceAbility, NetArchitecture, NetDice, NetFloor, NetRig, NetRun, Program } from './types.js';
+import type { IceRef, InterfaceAbility, NetArchitecture, NetDice, NetFloor, NetRig, NetRun, Program } from './types.js';
 
 // ----- Architecture graph --------------------------------------------------------
 
@@ -156,12 +156,52 @@ export function freshRun(arch: NetArchitecture): NetRun {
   };
 }
 
-/** Live Black ICE on a floor for this run (index list). */
-export function liveIce(run: NetRun, floorId: string): number[] {
-  return (run.ice[floorId] ?? []).flatMap((rez, i) => (rez > 0 ? [i] : []));
+export const iceKey = (home: string, index: number) => `${home}:${index}`;
+
+/** The floor a Black ICE is on now (its home unless it chased the runner away). */
+export const iceLocation = (run: NetRun, home: string, index: number): string => run.iceAt?.[iceKey(home, index)] ?? home;
+
+/**
+ * Every Black ICE on a floor for this run, live or derezzed: the floor's own
+ * ICE first (in floor order), then ICE that followed the runner here. Op
+ * indices ("attack ICE #i") count in this list.
+ */
+export function iceOn(run: NetRun, floorId: string): IceRef[] {
+  const own: IceRef[] = [];
+  const visitors: IceRef[] = [];
+  for (const [home, rezList] of Object.entries(run.ice)) {
+    rezList.forEach((rez, index) => {
+      if (iceLocation(run, home, index) !== floorId) return;
+      (home === floorId ? own : visitors).push({ home, index, rez });
+    });
+  }
+  visitors.sort((a, b) => (a.home === b.home ? a.index - b.index : a.home < b.home ? -1 : 1));
+  return [...own, ...visitors];
+}
+
+/** Live Black ICE on a floor for this run. */
+export function liveIce(run: NetRun, floorId: string): IceRef[] {
+  return iceOn(run, floorId).filter((r) => r.rez > 0);
 }
 
 /** Engaged = standing on a floor with live Black ICE or a live Demon. */
 export function isEngaged(run: NetRun): boolean {
   return liveIce(run, run.floorId).length > 0 || (run.demonRez[run.floorId] ?? 0) > 0;
+}
+
+/**
+ * Black ICE chases (Secondary): once it has met a runner it follows them from
+ * floor to floor until it's derezzed, slid away from, or the runner jacks out.
+ * Moves every live ICE on `from` to `to`, except `left` (the ICE a successful
+ * Slide leaves behind, lying in wait there). Demons stay put.
+ */
+export function chase(run: NetRun, from: string, to: string, left?: IceRef): { run: NetRun; followers: IceRef[] } {
+  const followers = liveIce(run, from).filter((r) => !left || r.home !== left.home || r.index !== left.index);
+  if (!followers.length) return { run, followers };
+  const iceAt = { ...(run.iceAt ?? {}) };
+  for (const f of followers) {
+    if (f.home === to) delete iceAt[iceKey(f.home, f.index)];
+    else iceAt[iceKey(f.home, f.index)] = to;
+  }
+  return { run: { ...run, iceAt }, followers };
 }

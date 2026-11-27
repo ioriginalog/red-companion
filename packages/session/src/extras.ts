@@ -19,7 +19,7 @@ import {
   type CheckResult, type CombatEvent, type Combatant, type Dice, type Modifier,
 } from '@cprc/rules-core';
 import { checkOtherAction, controls, currentActorId, getActor, SessionError, usageFor } from './helpers.js';
-import { factionOf } from './tactical.js';
+import { factionOf, partyVision, visionFor } from './tactical.js';
 import type { Actor, Encounter, ExtraOp, ExtrasState, Grapple, Intent, RoundHit, SessionState, StatePatch, Viewer } from './types.js';
 
 type Result = { events: CombatEvent[]; patch: StatePatch };
@@ -97,6 +97,20 @@ function vis(state: SessionState, ...ids: (string | undefined)[]): 'public' | 'g
 const rollsOf = (...cs: [string, CheckResult][]) => cs.map(([label, c]) => ({ label, total: c.total, natural: c.roll.natural }));
 const name = (a: Actor) => a.combatant.name;
 const withC = (a: Actor, c: Combatant): Actor => ({ ...a, combatant: c });
+
+/**
+ * A Facedown needs the initiator to see the target: their own sight, or for
+ * the party and its allies, anything the party can see. Off the map (or
+ * without both tokens placed) it's the GM's call, so it's allowed.
+ */
+export function seesForFacedown(state: SessionState, a: Actor, t: Actor): boolean {
+  const map = state.map;
+  const from = map?.tokens[a.id];
+  const to = map?.tokens[t.id];
+  if (!map || !from || !to) return true;
+  const vision = factionOf(a) === 'friendly' ? partyVision(map, state.actors) : visionFor(map, [from]);
+  return vision.has(`${to.x},${to.y}`);
+}
 
 // ----- Penalties shared with attacks and checks ------------------------------------------------
 
@@ -355,6 +369,7 @@ export function executeExtra(state: SessionState, rawOp: unknown, by: Viewer, di
       const a = own(state, by, id(op.actorId, 'Character'));
       const t = getActor(state, id(op.targetId, 'Opponent'));
       need(a.id !== t.id, 'You can’t face yourself down.');
+      if (by.role !== 'gm' && !seesForFacedown(state, a, t)) throw new SessionError('NO_LINE_OF_SIGHT', `${name(a)} can’t see ${name(t)}.`);
       upright(a);
       upright(t, 'stand up to anyone');
       const r = resolveFacedown(a.combatant, t.combatant, dice);

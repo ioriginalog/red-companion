@@ -5,7 +5,7 @@ import {
   type Combatant, type Dice, type NetArchitecture, type NetRig, type Stats,
 } from '@cprc/rules-core';
 import {
-  applyEntry, emptySession, handleIntent, projectEntry, projectState,
+  applyEntry, emptySession, handleIntent, netThreats, projectEntry, projectState,
   type Actor, type Intent, type LogEntry, type NetOp, type SessionState, type TacticalMap, type Viewer,
 } from '../src/index.js';
 
@@ -246,17 +246,48 @@ describe('netrunning: Black ICE', () => {
     expect(t.state.netrun!.rigs.kes!.programs.find((p) => p.id === 'shield')!.status).toBe('ready');
   });
 
-  it('engaged runners can’t walk away; Sword derezzes; Programs run once a Round', () => {
+  it('Black ICE chases an engaged runner to the next floor; Sword derezzes it there', () => {
     const t = atIce();
     // Kes faster: 3+9=12 vs 4+2=6.
     t.net({ op: 'move', actorId: 'kes', toFloorId: 'f3' }, P1, d10(9, 2));
     expect(projectState(t.state, P1).netrun!.runs.kes!.engaged).toBe(true);
-    expect(t.net({ op: 'move', actorId: 'kes', toFloorId: 'f4' }, P1)).toMatchObject({ ok: false, code: 'INVALID' });
+    // Walking away is allowed, but the ICE follows (no new Speed Check for it).
+    const r = t.net({ op: 'move', actorId: 'kes', toFloorId: 'f4' }, P1);
+    expect(r.ok).toBe(true);
+    expect(run(t).floorId).toBe('f4');
+    expect(run(t).iceAt).toEqual({ 'f3:0': 'f4' });
+    const view = projectState(t.state, P1).netrun!.runs.kes!;
+    expect(view.engaged).toBe(true);
+    expect(view.floors.f4!.ice).toEqual([{ name: 'Tripwire', kind: 'antiPersonnel', rez: 10, maxRez: 10, following: true }]);
+    expect(view.floors.f3!.ice).toBeUndefined();
+    expect(netThreats(t.state)).toEqual([{ runnerId: 'kes', ice: [{ floorId: 'f4', index: 0, name: 'Tripwire' }] }]);
     // Sword: 3+1+8=12 vs DEF 2+2=4 → hit, 3d6 = 4+3+3 = 10 = REZ 10 → derezzed.
     expect(t.net({ op: 'program', actorId: 'kes', programId: 'sword', index: 0 }, P1, scriptedDice({ d10: [8, 2], d6: [4, 3, 3] })).ok).toBe(true);
     expect(run(t).ice.f3).toEqual([0]);
     expect(projectState(t.state, P1).netrun!.runs.kes!.engaged).toBe(false);
-    expect(t.net({ op: 'move', actorId: 'kes', toFloorId: 'f4' }, P1).ok).toBe(true);
+  });
+
+  it('a Slide leaves the ICE lying in wait; coming back sets off a new Speed Check', () => {
+    const t = atIce();
+    t.net({ op: 'move', actorId: 'kes', toFloorId: 'f3' }, P1, d10(9, 2));
+    expect(t.net({ op: 'ability', actorId: 'kes', ability: 'slide', index: 0, toFloorId: 'f4' }, P1, d10(8, 2)).ok).toBe(true);
+    expect(run(t).floorId).toBe('f4');
+    expect(run(t).iceAt ?? {}).toEqual({});
+    expect(projectState(t.state, P1).netrun!.runs.kes!.engaged).toBe(false);
+    // Back up to f3: the Tripwire is waiting there and rolls Speed again (3+2=5 vs 4+9=13: it strikes first).
+    const before = t.log.length;
+    expect(t.net({ op: 'move', actorId: 'kes', toFloorId: 'f3' }, P1, scriptedDice({ d10: [2, 9, 9, 2], d6: [1, 1] })).ok).toBe(true);
+    const texts = t.log.slice(before).flatMap((e) => e.events).map((e) => (e as { text?: string }).text ?? '');
+    expect(texts.some((x) => /Speed Check against Tripwire/.test(x))).toBe(true);
+  });
+
+  it('ICE that chased a runner still bites on an unsafe Jack Out', () => {
+    const t = atIce();
+    t.net({ op: 'move', actorId: 'kes', toFloorId: 'f3' }, P1, d10(9, 2));
+    t.net({ op: 'move', actorId: 'kes', toFloorId: 'f4' }, P1);
+    const before = hp(t);
+    expect(t.net({ op: 'forceJackOut', actorId: 'kes' }, GM, scriptedDice({ d6: [2, 3] })).ok).toBe(true);
+    expect(hp(t)).toBe(before - 5);
   });
 
   it('Zap does 1d6 REZ; Slide escapes on beating PER', () => {

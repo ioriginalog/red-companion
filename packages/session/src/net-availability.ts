@@ -56,22 +56,21 @@ function netEconomy(i: NetAvailInput, cost = 1): NetAvail {
   return yes;
 }
 
-const both = (a: NetAvail, b: NetAvail) => (a.ok ? b : a);
 
 export function netAvailability(i: NetAvailInput): Record<NetActionKey, NetAvail> {
   const f = i.floor;
   const inRun = (then: () => NetAvail): NetAvail => (f ? then() : no('Not jacked in.'));
-  const notEngaged = (): NetAvail => (f && f.engaged ? no('Engaged: Slide away, derez it, or jack out.') : yes);
   const meat: NetAvail = i.gm || !i.tracked || !i.actionUsed ? yes : no('Already used the Action this Turn.', 'ACTION_USED');
   return {
     jackIn: f ? no('Already jacked in.')
       : !i.gm && i.accessInReach === false ? no('Get within 6 m/yds of an access point, with nothing in between.', 'OUT_OF_REACH')
       : netEconomy(i),
     jackOut: inRun(() => netEconomy(i)),
-    move: inRun(() => both(notEngaged(), netEconomy(i))),
+    // Moving while engaged is allowed; the Black ICE follows (only a Slide leaves it behind).
+    move: inRun(() => netEconomy(i)),
     descend: inRun(() => (f!.exitsDown === 0 ? no('This is the bottom of the branch.')
       : f!.kind === 'password' && !f!.passed ? no('Backdoor the Password first.')
-      : both(notEngaged(), netEconomy(i)))),
+      : netEconomy(i))),
     backdoor: inRun(() => (f!.kind !== 'password' ? no('There’s no Password on this floor.') : f!.passed ? no('This Password is already open.') : netEconomy(i))),
     eyeDee: inRun(() => (f!.kind !== 'file' ? no('There’s no File on this floor.') : f!.identified ? no('This File is already identified.') : netEconomy(i))),
     control: inRun(() => (f!.kind !== 'controlNode' ? no('There’s no Control Node on this floor.') : f!.controlled ? no('You already control this node.') : netEconomy(i))),

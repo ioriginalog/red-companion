@@ -8,10 +8,10 @@
  * Players are held to it; the GM is recorded but never refused.
  */
 import {
-  architectureProblem, brainDamage, childrenOf, depthOf, floorTitle, freshRun, gridDistance, hasLineOfSight, isEngaged,
+  architectureProblem, brainDamage, chase, childrenOf, depthOf, floorTitle, freshRun, gridDistance, hasLineOfSight, iceOn, isEngaged,
   isLowestFloor, JACK_IN_RANGE_SQUARES, liveIce, neighborsOf, netActionsFor, netCheck, parentOf,
   pathfinderReveal, programHitBy, QUICKHACK_RANGE_SQUARES, RESTART_COST, rollNetDice, statCheck, woundState, interfaceRank,
-  type CheckResult, type CombatEvent, type Dice, type IceStats, type NetArchitecture, type NetDifficulty, type NetFloor,
+  type CheckResult, type CombatEvent, type Dice, type IceRef, type IceStats, type NetArchitecture, type NetDifficulty, type NetFloor,
   type NetRig, type NetRun, type Program,
 } from '@cprc/rules-core';
 import { controls, currentActorId, getActor, SessionError, usageFor, visibilityFor } from './helpers.js';
@@ -154,7 +154,7 @@ export function parseNetOp(v: unknown): NetOp {
     case 'setRig': return { op: 'setRig', actorId: actorId(), rig: v.rig === null ? null : validateRig(v.rig) };
     case 'setOptions': return { op: 'setOptions', quickhacks2070s: bool(v.quickhacks2070s, 'Quickhacks') };
     case 'revealAccess': return { op: 'revealAccess', archId: id(v.archId, 'Architecture'), found: bool(v.found, 'Found') };
-    case 'iceAttack': return { op: 'iceAttack', actorId: actorId(), index: int(v.index, 0, 2, 'ICE') };
+    case 'iceAttack': return { op: 'iceAttack', actorId: actorId(), index: int(v.index, 0, 9, 'ICE') };
     case 'forceJackOut': return { op: 'forceJackOut', actorId: actorId() };
     case 'iceTurn': return { op: 'iceTurn', actorId: actorId() };
     case 'demonZap': return { op: 'demonZap', actorId: actorId(), count: int(v.count, 1, 6, 'Zaps') };
@@ -166,11 +166,11 @@ export function parseNetOp(v: unknown): NetOp {
       const ability = oneOf(v.ability, ABILITIES, 'Ability');
       return {
         op: 'ability', actorId: actorId(), ability,
-        ...(v.index !== undefined ? { index: int(v.index, -1, 2, 'Target') } : {}),
+        ...(v.index !== undefined ? { index: int(v.index, -1, 9, 'Target') } : {}),
         ...(v.toFloorId !== undefined ? { toFloorId: id(v.toFloorId, 'Floor') } : {}),
       };
     }
-    case 'program': return { op: 'program', actorId: actorId(), programId: id(v.programId, 'Program'), index: int(v.index, -1, 2, 'Target') };
+    case 'program': return { op: 'program', actorId: actorId(), programId: id(v.programId, 'Program'), index: int(v.index, -1, 9, 'Target') };
     case 'activate': return { op: 'activate', actorId: actorId(), programId: id(v.programId, 'Program'), active: bool(v.active, 'Active') };
     case 'scan': return { op: 'scan', actorId: actorId() };
     case 'quickhack': return { op: 'quickhack', actorId: actorId(), targetId: id(v.targetId, 'Target') };
@@ -309,8 +309,10 @@ function iceBites(c: Ctx, a: Actor, ice: IceStats) {
 }
 
 /** Black ICE ATK + 1d10 vs Interface + 1d10; ties go to the runner (defender). */
-function iceAttacks(c: Ctx, a: Actor, floor: NetFloor, index: number) {
-  const ice = floor.ice![index]!;
+const iceStatsOf = (arch: NetArchitecture, ref: IceRef): IceStats => arch.floors[ref.home]!.ice![ref.index]!;
+const sameIce = (x: IceRef, y: IceRef) => x.home === y.home && x.index === y.index;
+
+function iceAttacks(c: Ctx, a: Actor, ice: IceStats) {
   const atk = statCheck(`${ice.name} ATK`, ice.atk, c.dice);
   const def = statCheck('Interface', withRoleInterface(a, c.net.rigs[a.id]!).interface, c.dice);
   const hit = atk.total > def.total;
@@ -318,23 +320,39 @@ function iceAttacks(c: Ctx, a: Actor, floor: NetFloor, index: number) {
   if (hit) iceBites(c, a, ice);
 }
 
-/** Arriving on a floor reveals it; live Black ICE makes a Speed Check, and a faster ICE strikes first. */
-function arrive(c: Ctx, a: Actor, arch: NetArchitecture, run: NetRun, floorId: string) {
+/**
+ * Arriving on a floor reveals it. ICE that followed the runner here is already
+ * fighting; any other live Black ICE here makes a Speed Check, and a faster
+ * ICE strikes first.
+ */
+function arrive(c: Ctx, a: Actor, arch: NetArchitecture, run: NetRun, floorId: string, followers: IceRef[] = []) {
   const floor = arch.floors[floorId]!;
   let r: NetRun = { ...run, floorId, revealed: run.revealed.includes(floorId) ? run.revealed : [...run.revealed, floorId] };
   const live = liveIce(r, floorId);
-  if (live.length && !r.encountered.includes(floorId)) r = { ...r, encountered: [...r.encountered, floorId] };
+  const met = [...new Set(live.map((x) => x.home))].filter((h) => !r.encountered.includes(h));
+  if (met.length) r = { ...r, encountered: [...r.encountered, ...met] };
   setRun(c, a.id, r);
   say(c, a, 'arrive', `${a.combatant.name} reaches floor ${depthOf(arch, floorId)}: ${floorTitle(floor)}.`);
-  for (const i of live) {
-    const ice = floor.ice![i]!;
+  if (followers.length) {
+    const names = followers.map((f) => iceStatsOf(arch, f).name);
+    say(c, a, 'chase', `${names.join(' and ')} ${names.length === 1 ? 'follows' : 'follow'} ${a.combatant.name}.`, { amount: followers.length });
+  }
+  for (const ref of live) {
+    if (followers.some((f) => sameIce(f, ref))) continue;
+    const ice = iceStatsOf(arch, ref);
     const me = netCheck(withRoleInterface(a, c.net.rigs[a.id]!), 'speed', c.dice);
     const it = statCheck(`${ice.name} SPD`, ice.spd, c.dice);
     const iceFirst = it.total >= me.total;
     say(c, a, 'speedCheck', `Speed Check against ${ice.name}: ${me.total} vs ${it.total}. ${iceFirst ? `${ice.name} strikes first.` : `${a.combatant.name} is faster.`}`, { check: me, vs: it, success: !iceFirst });
-    if (iceFirst) iceAttacks(c, a, floor, i);
+    if (iceFirst) iceAttacks(c, a, ice);
   }
   if ((r.demonRez[floorId] ?? 0) > 0) c.events.push({ type: 'gmRulingRequired', visibility: 'gm', reason: `${a.combatant.name} reached the Demon ${floor.demon!.name}. Run its NET Actions.` });
+}
+
+/** Step to a neighboring floor; live Black ICE here follows (except `left`, which a Slide leaves behind). */
+function stepTo(c: Ctx, a: Actor, arch: NetArchitecture, run: NetRun, to: string, left?: IceRef) {
+  const { run: r, followers } = chase(run, run.floorId, to, left);
+  arrive(c, a, arch, r, to, followers);
 }
 
 /** Unsafe: every live Black ICE the runner met bites on the way out (Secondary). */
@@ -342,7 +360,9 @@ function jackOut(c: Ctx, a: Actor, unsafe: boolean) {
   const { run, arch } = getRun(c, a);
   if (unsafe) {
     say(c, a, 'jackOut', `${a.combatant.name} is torn out of ${arch.name}. Every live Black ICE they met strikes.`);
-    for (const fid of run.encountered) for (const i of liveIce(run, fid)) iceBites(c, a, arch.floors[fid]!.ice![i]!);
+    for (const fid of run.encountered) {
+      (run.ice[fid] ?? []).forEach((rez, i) => { if (rez > 0) iceBites(c, a, arch.floors[fid]!.ice![i]!); });
+    }
   } else say(c, a, 'jackOut', `${a.combatant.name} jacks out of ${arch.name} safely.`);
   setRun(c, a.id, null);
 }
@@ -356,25 +376,27 @@ function canStepTo(c: Ctx, arch: NetArchitecture, run: NetRun, to: string, a: Ac
   }
 }
 
-function targetOn(c: Ctx, arch: NetArchitecture, run: NetRun, index: number | undefined): { kind: 'ice'; i: number; ice: IceStats } | { kind: 'demon' } {
+function targetOn(c: Ctx, arch: NetArchitecture, run: NetRun, index: number | undefined): { kind: 'ice'; ref: IceRef; ice: IceStats } | { kind: 'demon' } {
   const floor = arch.floors[run.floorId]!;
-  if (index === -1 || (index === undefined && (run.demonRez[floor.id] ?? 0) > 0 && !liveIce(run, floor.id).length)) {
+  const live = liveIce(run, floor.id);
+  if (index === -1 || (index === undefined && (run.demonRez[floor.id] ?? 0) > 0 && !live.length)) {
     if ((run.demonRez[floor.id] ?? 0) <= 0) throw new SessionError('INVALID', 'No live Demon here.');
     return { kind: 'demon' };
   }
-  const i = index ?? liveIce(run, floor.id)[0];
-  if (i === undefined || !floor.ice?.[i] || (run.ice[floor.id]?.[i] ?? 0) <= 0) throw new SessionError('INVALID', 'No live Black ICE there.');
-  return { kind: 'ice', i, ice: floor.ice[i]! };
+  const ref = index === undefined ? live[0] : iceOn(run, floor.id)[index];
+  if (!ref || ref.rez <= 0) throw new SessionError('INVALID', 'No live Black ICE there.');
+  return { kind: 'ice', ref, ice: iceStatsOf(arch, ref) };
 }
 
 function hitTarget(c: Ctx, a: Actor, arch: NetArchitecture, run: NetRun, t: ReturnType<typeof targetOn>, rolled: number[], by: string) {
   const damage = rolled.reduce((s, x) => s + x, 0);
   const fid = run.floorId;
   if (t.kind === 'ice') {
-    const rez = [...(run.ice[fid] ?? [])];
-    rez[t.i] = Math.max(0, rez[t.i]! - damage);
-    setRun(c, a.id, { ...run, ice: { ...run.ice, [fid]: rez } });
-    say(c, a, 'rezDamage', rez[t.i] === 0 ? `${by} derezzes ${t.ice.name}.` : `${by} deals ${damage} REZ to ${t.ice.name} (${rez[t.i]} left).`, { amount: damage, dice: rolled });
+    const { home, index } = t.ref;
+    const rez = [...(run.ice[home] ?? [])];
+    rez[index] = Math.max(0, rez[index]! - damage);
+    setRun(c, a.id, { ...run, ice: { ...run.ice, [home]: rez } });
+    say(c, a, 'rezDamage', rez[index] === 0 ? `${by} derezzes ${t.ice.name}.` : `${by} deals ${damage} REZ to ${t.ice.name} (${rez[index]} left).`, { amount: damage, dice: rolled });
   } else {
     const left = Math.max(0, (run.demonRez[fid] ?? 0) - damage);
     setRun(c, a.id, { ...run, demonRez: { ...run.demonRez, [fid]: left } });
@@ -454,9 +476,9 @@ export function executeNet(state: SessionState, rawOp: unknown, by: Viewer, dice
       gmOnly(by);
       const a = getActor(state, op.actorId);
       const { run, arch } = getRun(c, a);
-      const floor = arch.floors[run.floorId]!;
-      if (!floor.ice?.[op.index] || (run.ice[floor.id]?.[op.index] ?? 0) <= 0) throw new SessionError('INVALID', 'No live Black ICE there.');
-      iceAttacks(c, a, floor, op.index);
+      const ref = iceOn(run, run.floorId)[op.index];
+      if (!ref || ref.rez <= 0) throw new SessionError('INVALID', 'No live Black ICE there.');
+      iceAttacks(c, a, iceStatsOf(arch, ref));
       break;
     }
     case 'forceJackOut': {
@@ -470,10 +492,9 @@ export function executeNet(state: SessionState, rawOp: unknown, by: Viewer, dice
       const { run, arch } = getRun(c, a);
       const live = liveIce(run, run.floorId);
       if (!live.length) throw new SessionError('INVALID', `No live Black ICE on ${a.combatant.name}’s floor.`);
-      const floor = arch.floors[run.floorId]!;
-      for (const i of live) {
+      for (const ref of live) {
         if (!c.net.runs[a.id] || (c.actors[a.id]?.combatant.conditions.dead ?? true)) break; // jacked out or flatlined mid-turn
-        iceAttacks(c, c.actors[a.id]!, floor, i);
+        iceAttacks(c, c.actors[a.id]!, iceStatsOf(arch, ref));
       }
       break;
     }
@@ -521,22 +542,20 @@ export function executeNet(state: SessionState, rawOp: unknown, by: Viewer, dice
     case 'move': {
       const { a, rig } = requireRunner(c, op.actorId);
       const { run, arch } = getRun(c, a);
-      if (isEngaged(run)) throw new SessionError('INVALID', `${a.combatant.name} is engaged. Slide away, derez it, or jack out.`);
       canStepTo(c, arch, run, op.toFloorId, a);
       spendNet(c, a, rig, 1);
-      arrive(c, a, arch, run, op.toFloorId);
+      stepTo(c, a, arch, run, op.toFloorId);
       break;
     }
     // RED doesn't need Pathfinder to go down; the next floor reveals itself on arrival.
     case 'descend': {
       const { a, rig } = requireRunner(c, op.actorId);
       const { run, arch } = getRun(c, a);
-      if (isEngaged(run)) throw new SessionError('INVALID', `${a.combatant.name} is engaged. Slide away, derez it, or jack out.`);
       const to = childrenOf(arch, run.floorId)[op.branch];
       if (!to) throw new SessionError('INVALID', 'There’s no way down there. This is the bottom of the branch.');
       canStepTo(c, arch, run, to, a);
       spendNet(c, a, rig, 1);
-      arrive(c, a, arch, run, to);
+      stepTo(c, a, arch, run, to);
       break;
     }
     case 'ability': {
@@ -613,10 +632,9 @@ export function executeNet(state: SessionState, rawOp: unknown, by: Viewer, dice
           const ok = mine.total > theirs.total;
           say(c, a, 'slide', `${a.combatant.name} tries to Slide past ${t.ice.name}: ${mine.total} vs ${theirs.total}. ${ok ? 'Away.' : 'Caught.'}`, { check: mine, vs: theirs, success: ok });
           const slid = { ...c.net.runs[a.id]!, slidTurn: key };
-          if (ok) {
-            // Leave every ICE on this floor behind: mark them as no longer engaging by moving.
-            arrive(c, a, arch, slid, op.toFloorId);
-          } else setRun(c, a.id, slid);
+          // The ICE slid past stays behind, lying in wait; any other live ICE here still follows (Interpretation).
+          if (ok) stepTo(c, a, arch, slid, op.toFloorId, t.ref);
+          else setRun(c, a.id, slid);
           break;
         }
         case 'zap': {
@@ -749,7 +767,13 @@ function runView(state: SessionState, net: NetState, actorId: string, run: NetRu
       ...(passed || identified || controlled ? { dv: f.dv } : {}),
       ...((identified && f.kind === 'file') || (controlled && f.kind === 'controlNode') ? (f.note ? { note: f.note } : {}) : {}),
       passed, identified, controlled,
-      ...(f.ice ? { ice: f.ice.map((i, n) => ({ name: i.name, kind: i.kind, rez: run.ice[fid]?.[n] ?? 0, maxRez: i.rez })) } : {}),
+      ...(() => {
+        const ice = iceOn(run, fid).map((ref) => {
+          const st = iceStatsOf(arch, ref);
+          return { name: st.name, kind: st.kind, rez: ref.rez, maxRez: st.rez, ...(ref.home !== fid ? { following: true } : {}) };
+        });
+        return ice.length ? { ice } : {};
+      })(),
       ...(f.demon ? { demon: { name: f.demon.name, rez: run.demonRez[fid] ?? 0, maxRez: f.demon.rez } } : {}),
       ...(fid === run.floorId ? { exitsDown: (arch.children[fid] ?? []).length } : {}),
     };
@@ -801,7 +825,8 @@ export function netThreats(state: SessionState): { runnerId: string; ice: { floo
     const arch = net.architectures[run.archId];
     const floor = arch?.floors[run.floorId];
     if (!floor || state.actors[runnerId]?.combatant.conditions.dead) continue;
-    const ice = liveIce(run, floor.id).map((index) => ({ floorId: floor.id, index, name: floor.ice![index]!.name }));
+    const here = iceOn(run, floor.id);
+    const ice = here.flatMap((ref, index) => (ref.rez > 0 ? [{ floorId: floor.id, index, name: iceStatsOf(arch, ref).name }] : []));
     const demon = floor.demon && (run.demonRez[floor.id] ?? 0) > 0 ? { floorId: floor.id, name: floor.demon.name, netActions: floor.demon.netActions } : undefined;
     if (ice.length || demon) out.push({ runnerId, ice, ...(demon ? { demon } : {}) });
   }

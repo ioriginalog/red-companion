@@ -199,6 +199,23 @@ describe('Facedowns', () => {
     expect(t.x({ kind: 'endFacedown', facedownId: f.id }, P1).ok).toBe(true);
   });
 
+  it('needs the initiator to see the target (own sight or party vision)', () => {
+    const t = table();
+    // A wall between the solo and the far thug, and nobody else on the party side.
+    const walled: TacticalMap = { ...MAP, cells: '....#...'.repeat(3) };
+    t.send({ type: 'setMap', map: walled }, GM);
+    const r = t.x({ kind: 'facedown', actorId: 'solo', targetId: 'far' }, P1, scriptedDice({ d10: [5, 5] }));
+    expect(r).toMatchObject({ ok: false, code: 'NO_LINE_OF_SIGHT' });
+    expect(t.state.extras?.facedowns ?? []).toEqual([]);
+    // An ally on the far side of the wall gives the party sight of the thug.
+    t.send({ type: 'addActor', actor: { ...actor('ally', 'pc', 'p2'), allegiance: 'ally' } }, GM);
+    t.send({ type: 'placeToken', actorId: 'ally', at: { x: 7, y: 0 } }, GM);
+    expect(t.x({ kind: 'facedown', actorId: 'solo', targetId: 'far' }, P1, scriptedDice({ d10: [5, 5] })).ok).toBe(true);
+    // The GM referees and isn't refused.
+    t.send({ type: 'placeToken', actorId: 'ally', at: null }, GM);
+    expect(t.x({ kind: 'facedown', actorId: 'solo', targetId: 'far' }, GM, scriptedDice({ d10: [5, 5] })).ok).toBe(true);
+  });
+
   it('a tie: nobody blinks', () => {
     const t = table();
     t.x({ kind: 'facedown', actorId: 'solo', targetId: 'thug' }, P1, scriptedDice({ d10: [5, 5] }));

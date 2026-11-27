@@ -173,4 +173,18 @@ describe('NET availability stays in lockstep with the authority', () => {
     expect(a.virus.ok).toBe(true);
     expect(a.eyeDee.ok).toBe(true);
   });
+  it('engaged with Black ICE: moving is allowed (the ICE follows), and so are Slide and Zap', () => {
+    const t = setup();
+    t.net({ op: 'revealAccess', archId: 'lab', found: true }, GM);
+    t.net({ op: 'jackIn', actorId: 'kes', archId: 'lab' }, P1);
+    t.net({ op: 'ability', actorId: 'kes', ability: 'backdoor' }, P1, many());
+    t.net({ op: 'descend', actorId: 'kes', branch: 0 }, P1);
+    expect(t.net({ op: 'descend', actorId: 'kes', branch: 0 }, P1, many()).ok).toBe(true);
+    expect(t.state.netrun!.runs.kes!.floorId).toBe('f3');
+    const a = check(t, 'engaged');
+    expect(a.move.ok).toBe(true);
+    expect(a.descend.ok).toBe(true);
+    expect(a.slide.ok).toBe(true);
+    expect(a.zap.ok).toBe(true);
+  });
 });

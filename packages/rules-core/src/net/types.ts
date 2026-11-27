@@ -109,4 +109,13 @@ export interface NetRun {
   shieldSpent: boolean;
   /** Turn key of the last Slide (once per Turn). */
   slidTurn: string | null;
+  /**
+   * Black ICE that has left its home floor chasing the runner (or lies in wait
+   * where a chase ended): "homeFloorId:index" → the floor it's on now.
+   * Missing = still on its home floor.
+   */
+  iceAt?: Record<string, string>;
 }
+
+/** One Black ICE as it stands in a run: its home floor and index (into that floor's `ice`), and its REZ. */
+export interface IceRef { home: string; index: number; rez: number }

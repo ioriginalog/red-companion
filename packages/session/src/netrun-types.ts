@@ -59,7 +59,8 @@ export interface NetFloorView {
   passed: boolean;
   identified: boolean;
   controlled: boolean;
-  ice?: { name: string; kind: 'antiPersonnel' | 'antiProgram'; rez: number; maxRez: number }[];
+  /** ICE on this floor now; `following` = it chased the runner here from another floor. */
+  ice?: { name: string; kind: 'antiPersonnel' | 'antiProgram'; rez: number; maxRez: number; following?: boolean }[];
   demon?: { name: string; rez: number; maxRez: number };
   /** On the runner's own floor, how many ways lead down (revealed or not). */
   exitsDown?: number;
