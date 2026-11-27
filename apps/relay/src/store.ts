@@ -54,7 +54,15 @@ export function parseQueueState(raw: unknown): QueueState {
   return out;
 }
 
-export interface PlayerRecord { playerId: string; name: string; tokenHash: string }
+export interface PlayerRecord {
+  playerId: string;
+  name: string;
+  tokenHash: string;
+  /** More devices' tokens for the same player (after a merge or an approved seat reclaim). */
+  tokenHashes?: string[];
+  /** Epoch ms this player was last connected. */
+  lastSeen?: number;
+}
 export interface SessionMeta {
   sessionId: string;
   gmKeyHash: string;

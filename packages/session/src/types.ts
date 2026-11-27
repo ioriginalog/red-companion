@@ -314,6 +314,8 @@ export type Intent =
   | { type: 'replaceActor'; actor: Actor }
   | { type: 'removeActor'; actorId: string }
   | { type: 'assignController'; actorId: string; controller: string }
+  /** GM: every character `from` controls passes to `to` (a player id or 'gm'). Used when merging or removing players. */
+  | { type: 'reassignPlayer'; from: string; to: string }
   | { type: 'startEncounter'; participants: { actorId: string; bonus?: number }[] }
   | { type: 'endEncounter' }
   | { type: 'cancelPending' }

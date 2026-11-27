@@ -12,11 +12,11 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
-  applyEntry, LogGapError, parseClientMessage, partyVision, projectEntry, projectState, PROTOCOL_VERSION, replay,
-  type ClientMessage, type HistoryItem, type Intent, type LogEntry, type PlayerInfo, type ServerMessage, type SessionState, type Signal, type Viewer,
+  applyEntry, checkPlayerName, isReservedName, LogGapError, nameKey, parseClientMessage, partyVision, playerSees, projectEntry, projectState, PROTOCOL_VERSION, replay,
+  type ClientMessage, type HistoryItem, type Intent, type LogEntry, type PlayerInfo, type ReclaimRequest, type RosterOp, type ServerMessage, type SessionState, type Signal, type Viewer,
 } from '@cprc/session';
 import type { Cell } from '@cprc/rules-core';
-import { ASSET_NAME, type DropNotice, type QueuedIntent, type SessionMeta, type Store } from './store.js';
+import { ASSET_NAME, type DropNotice, type PlayerRecord, type QueuedIntent, type SessionMeta, type Store } from './store.js';
 
 /** Every square a signal points at (none for clears). */
 function signalCells(s: Signal): Cell[] {
@@ -65,6 +65,12 @@ export interface RelayOptions {
   helloTarpit?: { free?: number; msPerFailure?: number; maxMs?: number; decayMs?: number };
   /** Unauthenticated sockets allowed per IP at once. Default 8. */
   maxPendingPerIp?: number;
+  /**
+   * Identities that control no character and have been offline this long
+   * (ms) don't count toward `maxPlayersPerSession`, and are pruned when a new
+   * player needs the room. Default 10 minutes.
+   */
+  idlePlayerMs?: number;
   /** Player intent limits (per player): sustained rate/s, burst, and chat-like intents per minute. */
   playerRate?: { perSecond?: number; burst?: number; chatPerMinute?: number };
   /** Clock for tests. */
@@ -107,6 +113,14 @@ interface Room {
   gmShown?: { cursor?: boolean; measure?: boolean };
   /** Party vision cached per state object, for filtering GM signals. */
   visionCache?: { state: SessionState; cells: Set<string> | null };
+  /**
+   * Per player socket: the last entry number it was sent. Players' entries are
+   * numbered per connection (the welcome starts the count), never with the log's
+   * seq, so the entries they don't receive can't be counted from gaps.
+   */
+  pseq: Map<WebSocket, number>;
+  /** Seat requests waiting for the GM (in memory only). */
+  reclaims: ReclaimRequest[];
 }
 
 interface PlayerRate { tokens: number; at: number; chat: number[] }
@@ -145,6 +159,8 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
   const qPerPlayer = opts.offlineQueue?.perPlayer ?? 10;
   const qMaxAge = opts.offlineQueue?.maxAgeMs ?? 600_000;
   const historyN = opts.historyEntries ?? 300;
+  const idleMs = opts.idlePlayerMs ?? 600_000;
+  const startedAt = now();
   const tarpit = { free: 5, msPerFailure: 1000, maxMs: 5000, decayMs: 30_000, ...opts.helloTarpit };
   const maxPending = opts.maxPendingPerIp ?? 8;
   const rate = { perSecond: 5, burst: 20, chatPerMinute: 30, ...opts.playerRate };
@@ -163,7 +179,9 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
       perPlayer.set(i.playerId, n);
       return n <= qPerPlayer;
     }).slice(0, qPerSession);
-    indexRoom({ meta, log: null, state: null, gm: null, players: new Map(), queue, settled: held.settled, unseen: held.unseen, flushOnFetch: false, rates: new Map() });
+    // Names that read as the GM are no longer allowed; older sessions may hold one.
+    for (const p of meta.players) if (isReservedName(p.name)) p.name = `Player ${p.playerId.slice(0, 4)}`;
+    indexRoom({ meta, log: null, state: null, gm: null, players: new Map(), queue, settled: held.settled, unseen: held.unseen, flushOnFetch: false, rates: new Map(), pseq: new Map(), reclaims: [] });
   }
   const saveQueue = (r: Room) => {
     try { store.saveQueue(r.meta.sessionId, { queue: r.queue, settled: r.settled, unseen: r.unseen }); } catch (e) { log(`queue save failed: ${(e as Error).message}`); }
@@ -329,7 +347,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     const meta: SessionMeta = { sessionId, gmKeyHash: sha256(gmKey), joinCode, createdAt: new Date().toISOString(), players: [] };
     store.saveMeta(meta);
     if (entries.length) store.appendLog(sessionId, entries);
-    indexRoom({ meta, log: entries, state: replay(sessionId, entries), gm: null, players: new Map(), queue: [], settled: {}, unseen: {}, flushOnFetch: false, rates: new Map() });
+    indexRoom({ meta, log: entries, state: replay(sessionId, entries), gm: null, players: new Map(), queue: [], settled: {}, unseen: {}, flushOnFetch: false, rates: new Map(), pseq: new Map(), reclaims: [] });
     log(`session ${entries.length ? `imported (${entries.length} entries)` : 'created'} ${sessionId}`);
     return { sessionId, gmKey, joinCode };
   }
@@ -425,22 +443,50 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     if (close) c.ws.close(4000, code);
   };
 
+  function infoOf(r: Room, p: PlayerRecord, online = new Set(r.players.values())): PlayerInfo {
+    const on = online.has(p.playerId);
+    return { playerId: p.playerId, name: p.name, online: on, ...(!on && p.lastSeen ? { lastSeen: p.lastSeen } : {}) };
+  }
   function playersOf(r: Room): PlayerInfo[] {
     const online = new Set(r.players.values());
-    return r.meta.players.map((p) => ({ playerId: p.playerId, name: p.name, online: online.has(p.playerId) }));
+    return r.meta.players.map((p) => infoOf(r, p, online));
+  }
+  /** Everyone (GM and players) gets the new directory after a roster change. */
+  function broadcastPlayers(r: Room) {
+    const m: ServerMessage = { t: 'players', players: playersOf(r) };
+    if (r.gm) send(r.gm, m);
+    for (const ws of r.players.keys()) send(ws, m);
   }
 
+  /**
+   * Players get only entries that show them something (see `playerSees`),
+   * numbered per connection: unseen Turns, private rolls and others' whispers
+   * leave no trace, not even a gap in the numbers.
+   */
   function broadcastEntries(r: Room & { state: SessionState }, entries: LogEntry[], statesAfter: SessionState[], start: SessionState) {
     for (const [ws, playerId] of r.players) {
       const viewer: Viewer = { role: 'player', playerId };
-      send(ws, { t: 'entries', entries: entries.map((e, i) => projectEntry(e, viewer, statesAfter[i]!, undefined, i === 0 ? start : statesAfter[i - 1])) });
+      let n = r.pseq.get(ws) ?? 0;
+      const out = entries
+        .map((e, i) => projectEntry(e, viewer, statesAfter[i]!, undefined, i === 0 ? start : statesAfter[i - 1]))
+        .filter(playerSees)
+        .map((p) => ({ ...p, seq: ++n }));
+      r.pseq.set(ws, n);
+      if (out.length) send(ws, { t: 'entries', entries: out });
     }
+  }
+  /** A player's view and history, numbered for this connection (`view.seq` = the last history number). */
+  function playerSnapshot(r: Room & { state: SessionState; log: LogEntry[] }, ws: WebSocket, viewer: Viewer & { role: 'player' }) {
+    const history = historyFor(r, viewer);
+    const view = { ...projectState(r.state, viewer), seq: history.length };
+    r.pseq.set(ws, history.length);
+    return { view, history };
   }
   /** After undo or a log replacement: each player's view and history, rebuilt, so undone lines disappear. */
   function broadcastRewind(r: Room & { state: SessionState; log: LogEntry[] }) {
     for (const [ws, playerId] of r.players) {
-      const viewer: Viewer = { role: 'player', playerId };
-      send(ws, { t: 'rewind', toSeq: r.state.seq, view: projectState(r.state, viewer), history: historyFor(r, viewer) });
+      const { view, history } = playerSnapshot(r, ws, { role: 'player', playerId });
+      send(ws, { t: 'rewind', toSeq: view.seq, view, history });
     }
   }
 
@@ -505,6 +551,9 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
         for (const p of r.players.keys()) send(p, { t: 'gmStatus', online: false });
       } else if (c.role === 'player' && c.playerId) {
         r.players.delete(ws);
+        r.pseq.delete(ws);
+        const rec = r.meta.players.find((p) => p.playerId === c.playerId);
+        if (rec) { rec.lastSeen = now(); try { store.saveMeta(r.meta); } catch (e) { log(`meta save failed: ${(e as Error).message}`); } }
         if (![...r.players.values()].includes(c.playerId)) {
           if (r.gm) send(r.gm, { t: 'playerLeft', playerId: c.playerId });
           for (const p of r.players.keys()) send(p, { t: 'playerLeft', playerId: c.playerId });
@@ -546,7 +595,11 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
       return !!r && sameHash(sha256(msg.gmKey), r.meta.gmKeyHash);
     }
     const r = byJoinCode.get(msg.joinCode.toUpperCase());
-    return !!r && !!msg.playerToken && r.meta.players.some((p) => sameHash(p.tokenHash, sha256(msg.playerToken!)));
+    return !!r && !!msg.playerToken && !!byToken(r, msg.playerToken);
+  }
+  function byToken(r: Room, token: string): PlayerRecord | undefined {
+    const h = sha256(token);
+    return r.meta.players.find((p) => sameHash(p.tokenHash, h) || (p.tokenHashes ?? []).some((x) => sameHash(x, h)));
   }
 
   function beginHello(c: Conn, msg: Extract<ClientMessage, { t: 'hello' }>, reset: () => void, unpend: () => void) {
@@ -567,7 +620,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
       if (r.gm) { send(r.gm, { t: 'error', code: 'REPLACED', message: 'GM connected from another device.' }); r.gm.close(4002, 'REPLACED'); }
       r.gm = c.ws;
       Object.assign(c, { room: r, role: 'gm' });
-      send(c.ws, { t: 'welcome', role: 'gm', sessionId: r.meta.sessionId, headSeq: r.state.seq, players: playersOf(r) });
+      send(c.ws, { t: 'welcome', role: 'gm', sessionId: r.meta.sessionId, headSeq: r.state.seq, players: playersOf(r), ...(r.reclaims.length ? { reclaims: r.reclaims } : {}) });
       for (const p of r.players.keys()) send(p, { t: 'gmStatus', online: true });
       // Queued player intents go out once the GM has the log (it fetches one
       // whenever the relay holds entries); an empty session can take them now.
@@ -575,26 +628,62 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
       return;
     }
     const r = byJoinCode.get(msg.joinCode.toUpperCase());
-    let rec = r && msg.playerToken ? r.meta.players.find((p) => sameHash(p.tokenHash, sha256(msg.playerToken!))) : undefined;
     if (!r) return helloFailed(c, 'Unknown join code.');
     ensureLoaded(r);
+    let rec = msg.playerToken ? byToken(r, msg.playerToken) : undefined;
     let token = msg.playerToken;
+    let seat: PlayerRecord | undefined;
     if (!rec) {
-      if (r.meta.players.length >= maxPlayers) return fail(c, 'SESSION_FULL', 'This session is full.', true);
+      const named = checkPlayerName(msg.name);
+      if (!named.ok) return fail(c, 'BAD_NAME', named.message, true);
+      // A name that matches an existing player may be that player on a new device: the GM decides.
+      seat = r.meta.players.find((p) => nameKey(p.name) === nameKey(named.name));
+      if (!admit(r, !!seat)) return fail(c, 'SESSION_FULL', 'This session is full.', true);
       token = randomBytes(24).toString('base64url');
-      rec = { playerId: randomUUID().slice(0, 8), name: msg.name, tokenHash: sha256(token) };
+      rec = { playerId: randomUUID().slice(0, 8), name: named.name, tokenHash: sha256(token), lastSeen: now() };
       r.meta.players.push(rec);
       store.saveMeta(r.meta);
     }
+    welcomePlayer(r, c, rec, token!, true);
+    if (seat) requestSeat(r, rec, seat);
+  }
+
+  /** Characters a player controls (an identity with none is "unclaimed"). */
+  function claims(r: Room & { state: SessionState }, playerId: string): boolean {
+    return Object.values(r.state.actors).some((a) => a.controller === playerId);
+  }
+  /** Unclaimed, offline and quiet for `idleMs`: doesn't hold a place at the table. */
+  function idle(r: Room & { state: SessionState }, p: PlayerRecord, online: Set<string>): boolean {
+    return !online.has(p.playerId) && !claims(r, p.playerId) && now() - (p.lastSeen ?? startedAt) >= idleMs;
+  }
+  /**
+   * Room for one more identity? Idle identities don't count, and are pruned
+   * when the list is at the cap. A seat request may go two over, so a full
+   * table can still take back a returning player.
+   */
+  function admit(r: Room & { state: SessionState }, reclaiming: boolean): boolean {
+    const online = new Set(r.players.values());
+    const active = r.meta.players.filter((p) => !idle(r, p, online));
+    if (active.length >= maxPlayers + (reclaiming ? 2 : 0)) return false;
+    if (r.meta.players.length >= maxPlayers) {
+      for (const p of r.meta.players.filter((x) => idle(r, x, online))) forget(r, p.playerId);
+    }
+    return true;
+  }
+
+  /** Attach a socket to a player identity and send it the welcome. */
+  function welcomePlayer(r: Room & { state: SessionState; log: LogEntry[] }, c: Conn, rec: PlayerRecord, token: string, announce: boolean) {
+    rec.lastSeen = now();
+    const joined = infoOf(r, rec, new Set([...r.players.values(), rec.playerId]));
     // Others in the room learn about the newcomer (names only, never tokens).
-    const joined = { playerId: rec.playerId, name: rec.name, online: true };
-    for (const [p, pid] of r.players) if (pid !== rec.playerId) send(p, { t: 'playerJoined', player: joined });
+    if (announce) for (const [p, pid] of r.players) if (pid !== rec.playerId) send(p, { t: 'playerJoined', player: joined });
     r.players.set(c.ws, rec.playerId);
     Object.assign(c, { room: r, role: 'player', playerId: rec.playerId });
-    const viewer: Viewer = { role: 'player', playerId: rec.playerId };
+    const viewer = { role: 'player' as const, playerId: rec.playerId };
+    const { view, history } = playerSnapshot(r, c.ws, viewer);
     send(c.ws, {
-      t: 'welcome', role: 'player', sessionId: r.meta.sessionId, playerId: rec.playerId, playerToken: token!,
-      view: projectState(r.state, viewer), players: playersOf(r), history: historyFor(r, viewer),
+      t: 'welcome', role: 'player', sessionId: r.meta.sessionId, playerId: rec.playerId, playerToken: token,
+      view, players: playersOf(r), history,
       queued: r.queue.filter((i) => i.playerId === rec.playerId).map((i) => i.clientMsgId),
       settled: r.settled[rec.playerId] ?? [],
     });
@@ -606,15 +695,121 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
       saveQueue(r);
     }
     if (r.gm) {
-      send(r.gm, { t: 'playerJoined', player: joined });
+      if (announce) send(r.gm, { t: 'playerJoined', player: joined });
       send(c.ws, { t: 'gmStatus', online: true });
     } else send(c.ws, { t: 'gmStatus', online: false });
   }
 
+  // ----- Roster (GM) ----------------------------------------------------------------
+
+  /** A new identity whose name matches `seat`: ask the GM whether it's that player on a new device. */
+  function requestSeat(r: Room & { state: SessionState }, rec: PlayerRecord, seat: PlayerRecord) {
+    // One request per seat: a newer one replaces it, and an idle-to-be requester from before is dropped.
+    for (const old of r.reclaims.filter((x) => x.seatId === seat.playerId)) {
+      closeReclaim(r, old.requestId);
+      if (![...r.players.values()].includes(old.playerId) && !claims(r, old.playerId)) forget(r, old.playerId);
+    }
+    const request: ReclaimRequest = { requestId: randomUUID().slice(0, 12), playerId: rec.playerId, seatId: seat.playerId, name: seat.name, at: now() };
+    r.reclaims.push(request);
+    if (r.gm) send(r.gm, { t: 'reclaimRequest', request });
+    toPlayer(r, rec.playerId, { t: 'reclaim', status: 'pending', seatName: seat.name });
+  }
+  function closeReclaim(r: Room, requestId: string) {
+    const before = r.reclaims.length;
+    r.reclaims = r.reclaims.filter((x) => x.requestId !== requestId);
+    if (r.reclaims.length !== before && r.gm) send(r.gm, { t: 'reclaimClosed', requestId });
+  }
+  const toPlayer = (r: Room, playerId: string, m: ServerMessage) => { for (const [ws, pid] of r.players) if (pid === playerId) send(ws, m); };
+
+  /** Remove an identity's record and everything held for it. Sockets are the caller's business. */
+  function forget(r: Room, playerId: string) {
+    r.meta.players = r.meta.players.filter((p) => p.playerId !== playerId);
+    const before = r.queue.length;
+    r.queue = r.queue.filter((i) => i.playerId !== playerId);
+    const touched = before !== r.queue.length || !!r.settled[playerId] || !!r.unseen[playerId];
+    delete r.settled[playerId];
+    delete r.unseen[playerId];
+    r.rates.delete(playerId);
+    for (const x of r.reclaims.filter((q) => q.playerId === playerId || q.seatId === playerId)) closeReclaim(r, x.requestId);
+    if (touched) saveQueue(r);
+    store.saveMeta(r.meta);
+  }
+
+  /** `drop` and `keep` are one person: drop's tokens, sockets and held intents become keep's. */
+  function merge(r: Room & { state: SessionState; log: LogEntry[] }, keep: PlayerRecord, drop: PlayerRecord) {
+    keep.tokenHashes = [...new Set([...(keep.tokenHashes ?? []), drop.tokenHash, ...(drop.tokenHashes ?? [])])].slice(-20);
+    for (const i of r.queue) if (i.playerId === drop.playerId) i.playerId = keep.playerId;
+    if (r.settled[drop.playerId]) r.settled[keep.playerId] = [...(r.settled[keep.playerId] ?? []), ...r.settled[drop.playerId]!].slice(-50);
+    if (r.unseen[drop.playerId]) r.unseen[keep.playerId] = [...(r.unseen[keep.playerId] ?? []), ...r.unseen[drop.playerId]!];
+    delete r.settled[drop.playerId];
+    delete r.unseen[drop.playerId];
+    for (const x of r.reclaims.filter((q) => q.playerId === drop.playerId || q.seatId === drop.playerId)) closeReclaim(r, x.requestId);
+    r.meta.players = r.meta.players.filter((p) => p.playerId !== drop.playerId);
+    saveQueue(r);
+    // Each of drop's devices is welcomed again as keep, with a fresh token of keep's.
+    for (const [ws, pid] of [...r.players]) {
+      if (pid !== drop.playerId) continue;
+      const token = randomBytes(24).toString('base64url');
+      keep.tokenHashes = [...keep.tokenHashes, sha256(token)].slice(-20);
+      const conn = (ws as WebSocket & { conn?: Conn }).conn;
+      if (conn) welcomePlayer(r, conn, keep, token, false);
+    }
+    store.saveMeta(r.meta);
+  }
+
+  function onRoster(c: Conn, r: Room & { state: SessionState; log: LogEntry[] }, op: RosterOp) {
+    const find = (id: string) => r.meta.players.find((p) => p.playerId === id);
+    const refuse = (message: string) => fail(c, 'ROSTER', message);
+    switch (op.op) {
+      case 'rename': {
+        const p = find(op.playerId);
+        if (!p) return refuse('That player has left the session.');
+        const named = checkPlayerName(op.name);
+        if (!named.ok) return refuse(named.message);
+        if (r.meta.players.some((x) => x !== p && nameKey(x.name) === nameKey(named.name))) return refuse('Another player already uses that name.');
+        p.name = named.name;
+        store.saveMeta(r.meta);
+        break;
+      }
+      case 'remove': {
+        if (!find(op.playerId)) return refuse('That player has left the session.');
+        forget(r, op.playerId);
+        for (const [ws, pid] of [...r.players]) {
+          if (pid !== op.playerId) continue;
+          send(ws, { t: 'error', code: 'REMOVED', message: 'The GM removed you from this session.' });
+          r.players.delete(ws);
+          r.pseq.delete(ws);
+          ws.close(4003, 'REMOVED');
+        }
+        break;
+      }
+      case 'merge': {
+        const keep = find(op.keepId);
+        const drop = find(op.dropId);
+        if (!keep || !drop) return refuse('That player has left the session.');
+        if (keep === drop) return refuse('Pick two different players.');
+        merge(r, keep, drop);
+        break;
+      }
+      case 'reclaim': {
+        const q = r.reclaims.find((x) => x.requestId === op.requestId);
+        if (!q) return refuse('That request was already answered.');
+        const seat = find(q.seatId);
+        const asker = find(q.playerId);
+        closeReclaim(r, q.requestId);
+        if (!seat || !asker) return refuse('That player has left the session.');
+        if (op.approve) merge(r, seat, asker);
+        else toPlayer(r, asker.playerId, { t: 'reclaim', status: 'denied', seatName: seat.name });
+        break;
+      }
+    }
+    broadcastPlayers(r);
+  }
+
   /**
    * The player's recent log, projected exactly as it was sent live (each entry
-   * against its own before/after state), events only. Replays from the start,
-   * so it costs one pass over the log per join.
+   * against its own before/after state), events only, numbered from 1 for this
+   * connection. Replays from the start, so it costs one pass over the log per join.
    */
   function historyFor(r: Room & { log: LogEntry[] }, viewer: Viewer): HistoryItem[] {
     if (historyN <= 0 || r.log.length === 0) return [];
@@ -625,7 +820,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
       const before = s;
       s = applyEntry(s, e);
       const p = projectEntry(e, viewer, s, undefined, before);
-      if (p.events.length) out.push({ seq: p.seq, by: p.by, intentType: p.intentType, events: p.events });
+      if (p.events.length) out.push({ seq: out.length + 1, ...(p.by ? { by: p.by } : {}), ...(p.intentType ? { intentType: p.intentType } : {}), events: p.events });
     }
     return out;
   }
@@ -715,6 +910,8 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
         return;
       case 'reject':
         return rejectTo(r, msg.playerId, msg.clientMsgId, msg.code, msg.message);
+      case 'roster':
+        return onRoster(c, r, msg.op);
       default:
         return fail(c, 'NOT_ALLOWED', `GM can't send ${msg.t}.`);
     }

@@ -33,15 +33,36 @@ export type ClientMessage =
   | { t: 'reject'; playerId: string; clientMsgId: string; code: string; message: string }
   | { t: 'intent'; clientMsgId: string; intent: Intent }
   | { t: 'signal'; signal: Signal }
+  /** GM only: manage player identities (see RosterOp). */
+  | { t: 'roster'; op: RosterOp }
   | { t: 'ping' };
 
-export interface PlayerInfo { playerId: string; name: string; online: boolean }
+/**
+ * GM roster management (relay commands; the relay answers with a `players` broadcast or an error).
+ *   rename:  change a player's display name (same rules as joining: 1–40 characters, not a GM name, not taken).
+ *   remove:  forget the identity; its devices are disconnected and must join again as someone new.
+ *   merge:   two identities are one person: `dropId`'s devices and tokens become `keepId`.
+ *   reclaim: answer a seat request (a returning player on a new device asked for their old seat by name).
+ * Character assignments live in the session log, so the GM client moves them with the
+ * `reassignPlayer` intent alongside remove, merge and an approved reclaim.
+ */
+export type RosterOp =
+  | { op: 'rename'; playerId: string; name: string }
+  | { op: 'remove'; playerId: string }
+  | { op: 'merge'; keepId: string; dropId: string }
+  | { op: 'reclaim'; requestId: string; approve: boolean };
 
-/** One past log entry as a player saw it (events only), for the welcome history. */
-export interface HistoryItem { seq: number; by: string; intentType: string; events: ProjectedEntry['events'] }
+/** `lastSeen`: epoch ms the player was last connected (absent while online, or if never recorded). */
+export interface PlayerInfo { playerId: string; name: string; online: boolean; lastSeen?: number }
+
+/** A new device asking for an existing player's seat (by matching name). The GM approves or denies. */
+export interface ReclaimRequest { requestId: string; playerId: string; seatId: string; name: string; at: number }
+
+/** One past log entry as a player saw it (events only), for the welcome history. `by`/`intentType` are absent when its content is hidden. */
+export interface HistoryItem { seq: number; by?: string; intentType?: string; events: ProjectedEntry['events'] }
 
 export type ServerMessage =
-  | { t: 'welcome'; role: 'gm'; sessionId: string; headSeq: number; players: PlayerInfo[] }
+  | { t: 'welcome'; role: 'gm'; sessionId: string; headSeq: number; players: PlayerInfo[]; reclaims?: ReclaimRequest[] }
   | {
     t: 'welcome'; role: 'player'; sessionId: string; playerId: string; playerToken: string; view: ViewState; players: PlayerInfo[]; history?: HistoryItem[];
     /** This player's intents the relay still holds for the GM. */
@@ -61,6 +82,14 @@ export type ServerMessage =
   /** A held intent will never reach the GM (expired, or lost). */
   | { t: 'queueDropped'; clientMsgId: string; reason: 'expired' | 'lost'; message: string }
   | { t: 'playerJoined'; player: PlayerInfo }
+  /** The whole player directory, after a roster change (rename, remove, merge, reclaim). */
+  | { t: 'players'; players: PlayerInfo[] }
+  /** GM: a seat request to approve or deny. */
+  | { t: 'reclaimRequest'; request: ReclaimRequest }
+  /** GM: a seat request was answered or withdrawn. */
+  | { t: 'reclaimClosed'; requestId: string }
+  /** Player: the GM has been asked to give this device the seat named `seatName` (pending), or said no (denied). Approval arrives as a fresh welcome. */
+  | { t: 'reclaim'; status: 'pending' | 'denied'; seatName: string }
   | { t: 'playerLeft'; playerId: string }
   | { t: 'gmStatus'; online: boolean }
   /** `from` = 'gm' or a playerId. */
@@ -120,9 +149,67 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const signal = parseSignal(m.signal);
       return signal ? { t: 'signal', signal } : null;
     }
+    case 'roster': {
+      const op = isObj(m.op) ? m.op : null;
+      if (!op) return null;
+      if (op.op === 'rename' && isStr(op.playerId, 64) && typeof op.name === 'string' && op.name.length <= 80) return { t: 'roster', op: { op: 'rename', playerId: op.playerId, name: op.name } };
+      if (op.op === 'remove' && isStr(op.playerId, 64)) return { t: 'roster', op: { op: 'remove', playerId: op.playerId } };
+      if (op.op === 'merge' && isStr(op.keepId, 64) && isStr(op.dropId, 64)) return { t: 'roster', op: { op: 'merge', keepId: op.keepId, dropId: op.dropId } };
+      if (op.op === 'reclaim' && isStr(op.requestId, 64) && typeof op.approve === 'boolean') return { t: 'roster', op: { op: 'reclaim', requestId: op.requestId, approve: op.approve } };
+      return null;
+    }
     case 'ping':
       return { t: 'ping' };
     default:
       return null;
   }
+}
+
+// ----- Player names ------------------------------------------------------------------
+
+/** Look-alike characters folded before comparing names (digits and symbols used as letters, Cyrillic and Greek twins). */
+const LOOKALIKE: Record<string, string> = {
+  '0': 'o', '1': 'i', '!': 'i', '|': 'i', '3': 'e', '4': 'a', '@': 'a', '5': 's', '$': 's', '6': 'g', '9': 'g', '7': 't', '8': 'b',
+  'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'м': 'm', 'г': 'r', 'к': 'k', 'т': 't', 'н': 'h', 'х': 'x', 'ѕ': 's', 'і': 'i', 'ј': 'j',
+  'α': 'a', 'ε': 'e', 'ο': 'o', 'ρ': 'p', 'μ': 'm', 'γ': 'y', 'κ': 'k', 'τ': 't', 'ν': 'v', 'ι': 'i',
+};
+
+const stripMarks = (name: string) => name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+/** Latin words of a name, lowercased, accents stripped and look-alikes folded (for spotting GM names). */
+function nameWords(name: string): string[] {
+  return stripMarks(name).split('').map((ch) => LOOKALIKE[ch] ?? ch).join('').split(/[^a-z]+/).filter(Boolean);
+}
+
+/** Folded form used to compare names: case, accents, spacing and punctuation ignored. */
+export function nameKey(name: string): string {
+  return stripMarks(name).replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+const RESERVED = new Set([
+  'gm', 'thegm', 'gamemaster', 'gamesmaster', 'thegamemaster', 'gamemistress', 'gamemaestro', 'gmaster', 'gamem', 'gmm',
+  'dm', 'dungeonmaster', 'referee', 'admin', 'moderator', 'narrator', 'storyteller',
+]);
+
+/**
+ * Names a player may not take, because chat would show them as the GM:
+ * "GM", "G M", "g.m.", "GameMaster", "Game Master", "Bob (GM)", "GM Bob", "6M" and the like.
+ */
+export function isReservedName(name: string): boolean {
+  const words = nameWords(name);
+  const key = words.join('');
+  if (!key) return false;
+  if (RESERVED.has(key)) return true;
+  // "GM" as a word anywhere ("GM Bob", "Bob [GM]"), or spelled out in single letters ("G M Bob").
+  if (words.includes('gm') || words.some((w, i) => w === 'g' && words[i + 1] === 'm')) return true;
+  return /game?s?(master|mistress)/.test(key);
+}
+
+/** A player name as entered: trimmed, inner whitespace collapsed. Returns an error message for a bad one. */
+export function checkPlayerName(raw: string): { ok: true; name: string } | { ok: false; message: string } {
+  const name = raw.replace(/\s+/g, ' ').trim();
+  if (!name || name.length > 40) return { ok: false, message: 'Names are 1–40 characters.' };
+  if (!nameKey(name)) return { ok: false, message: 'Use at least one letter in your name.' };
+  if (isReservedName(name)) return { ok: false, message: 'That name is reserved for the GM. Pick another name.' };
+  return { ok: true, name };
 }

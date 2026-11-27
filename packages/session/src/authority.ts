@@ -48,7 +48,7 @@ export interface AuthorityContext {
 }
 
 const GM_ONLY: ReadonlySet<IntentType> = new Set([
-  'addActor', 'replaceActor', 'removeActor', 'assignController', 'startEncounter', 'endEncounter', 'cancelPending', 'setMap', 'placeToken',
+  'addActor', 'replaceActor', 'removeActor', 'assignController', 'reassignPlayer', 'startEncounter', 'endEncounter', 'cancelPending', 'setMap', 'placeToken',
   ...TOOL_GM_ONLY,
   'setHandout', 'removeHandout',
 ]);
@@ -285,6 +285,11 @@ function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, ne
     case 'assignController': {
       const a = getActor(state, intent.actorId);
       return { events: [], patch: { actors: { [a.id]: { ...a, controller: intent.controller } } } };
+    }
+    case 'reassignPlayer': {
+      if (intent.from === 'gm' || intent.from === intent.to) throw new SessionError('INVALID', 'Pick two different players.');
+      const moved = Object.values(state.actors).filter((a) => a.controller === intent.from);
+      return { events: [], patch: moved.length ? { actors: Object.fromEntries(moved.map((a) => [a.id, { ...a, controller: intent.to }])) } : {} };
     }
     case 'startEncounter': {
       if (state.encounter.active) throw new SessionError('INVALID', 'An encounter is already running.');

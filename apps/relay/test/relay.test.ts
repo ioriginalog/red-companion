@@ -127,11 +127,13 @@ describe('relay', () => {
     auth.act({ type: 'addActor', actor: npc('solo', pid, 'pc') });
     auth.act({ type: 'addActor', actor: npc('ganger') });
     const e1 = await p.nextOf('entries');
-    const e2 = await p.nextOf('entries');
     expect(e1.entries[0]!.patch.actors!.solo!.combatant).toBeDefined();
-    // An unseen hostile (no map, no encounter) isn't sent to players at all.
-    expect(JSON.stringify(e2)).not.toContain('ganger');
+    expect(e1.entries[0]!.seq).toBe(1);
+    // An unseen hostile (no map, no encounter) isn't sent to players at all: not even an empty entry.
 
+    // In an encounter, the ganger is known to the party.
+    auth.act({ type: 'startEncounter', participants: [{ actorId: 'solo' }, { actorId: 'ganger' }] }, { role: 'gm' }, scriptedDice({ d10: [9, 1] }));
+    expect((await p.nextOf('entries')).entries[0]!.seq).toBe(2);
     // Player shoots; relay forwards to GM; GM authority decides.
     p.send({ t: 'intent', clientMsgId: 'm1', intent: { type: 'rangedAttack', attackerId: 'solo', defenderId: 'ganger', weaponId: 'pistol', distance: 5 } });
     const fwd = await gm.nextOf('intent');
@@ -140,6 +142,8 @@ describe('relay', () => {
     expect(r.ok).toBe(true);
     const e3 = await p.nextOf('entries');
     expect(e3.entries[0]!.events.some((e) => e.type === 'attackResolved')).toBe(true);
+    // Numbered per connection, so the entry the player never got leaves no gap.
+    expect(e3.entries[0]!.seq).toBe(3);
 
     // A rejected intent is forwarded back to the player.
     p.send({ t: 'intent', clientMsgId: 'm2', intent: { type: 'addActor', actor: npc('x') } });
@@ -156,7 +160,9 @@ describe('relay', () => {
     // Undo → rewind to players (view and history rebuilt).
     gm.send({ t: 'truncate', toSeq: 2 });
     const snap = await p.nextOf('rewind');
-    expect(snap.view.seq).toBe(2);
+    // Rebuilt for this connection: the count is the player's own history, not the log's head.
+    expect(snap.view.seq).toBe(snap.history.length);
+    expect(snap.toSeq).toBe(snap.history.length);
     expect(snap.view.pending).toBeNull();
 
     // Player can't append.
@@ -558,7 +564,9 @@ describe('round 3: lockout, history, offline queue', () => {
     auth.act({ type: 'chat', text: 'Hello, choom.' });
     auth.act({ type: 'rollDice', label: 'Secret', dice: { count: 2, sides: 6, bonus: 0 }, private: true }, { role: 'gm' }, scriptedDice({ d6: [3, 4] }));
     auth.act({ type: 'rollDice', label: 'Open', dice: { count: 1, sides: 10, bonus: 0 } }, { role: 'gm' }, scriptedDice({ d10: [7] }));
-    await p.nextOf('entries'); await p.nextOf('entries'); await p.nextOf('entries'); await p.nextOf('entries'); await p.nextOf('entries');
+    // The unseen ganger and the private roll send nothing at all.
+    const got = [await p.nextOf('entries'), await p.nextOf('entries'), await p.nextOf('entries')];
+    expect(got.map((m) => m.entries.map((e) => e.seq))).toEqual([[1], [2], [3]]);
     p.ws.close();
     const { first: again } = await hello({ t: 'hello', v: H, role: 'player', joinCode, name: 'Nix', playerToken: w.playerToken });
     if (again.t !== 'welcome' || again.role !== 'player') throw new Error('welcome');
@@ -579,7 +587,8 @@ describe('round 3: lockout, history, offline queue', () => {
     for (let i = 0; i < 5; i++) auth.act({ type: 'chat', text: `line ${i}` });
     await new Promise((r) => setTimeout(r, 100));
     const { first } = await hello({ t: 'hello', v: H, role: 'player', joinCode, name: 'Nix' });
-    expect(first.t === 'welcome' && first.role === 'player' && first.history!.map((h) => h.seq)).toEqual([4, 5]);
+    expect(first.t === 'welcome' && first.role === 'player' && first.history!.map((h) => h.seq)).toEqual([1, 2]);
+    expect(first.t === 'welcome' && first.role === 'player' && first.view.seq).toBe(2);
     gm.ws.close();
   });
 
@@ -879,5 +888,171 @@ describe('round 5: GM signals in the fog, persisted offline queue', () => {
     again.send({ t: 'hello', v: PROTOCOL_VERSION, role: 'player', joinCode, name: 'Nix', playerToken: (welcome as { playerToken: string }).playerToken });
     expect(await again.nextOf('welcome')).toMatchObject({ queued: [], settled: [] });
     again.ws.close();
+  });
+});
+
+describe('player roster: names, idle seats, rename, remove, merge, reclaim', () => {
+  let clock = 1_000_000;
+  async function restart(o: Partial<Parameters<typeof createRelay>[0]> = {}) {
+    await relay.close();
+    relay = createRelay({ store: new MemoryStore(), createPerHour: 100, now: () => clock, ...o });
+    await new Promise<void>((r) => relay.server.listen(0, '127.0.0.1', () => r()));
+    base = `127.0.0.1:${(relay.server.address() as AddressInfo).port}`;
+  }
+  const H = PROTOCOL_VERSION;
+  async function connect(m: ClientMessage) {
+    const c = new Client(`ws://${base}/ws`);
+    await c.open();
+    c.send(m);
+    return c;
+  }
+  async function join(joinCode: string, name: string, playerToken?: string) {
+    const c = await connect({ t: 'hello', v: H, role: 'player', joinCode, name, ...(playerToken ? { playerToken } : {}) });
+    const w = await c.nextOf('welcome');
+    if (w.role !== 'player') throw new Error('player welcome');
+    return { c, w };
+  }
+  async function table(o: Partial<Parameters<typeof createRelay>[0]> = {}) {
+    await restart(o);
+    const s = await createSession();
+    const gm = await connect({ t: 'hello', v: H, role: 'gm', sessionId: s.sessionId, gmKey: s.gmKey });
+    await gm.nextOf('welcome');
+    return { ...s, gm, auth: gmAuthority(gm, s.sessionId) };
+  }
+  const settle = () => new Promise((r) => setTimeout(r, 60));
+
+  it('reserves GM names and look-alikes', async () => {
+    const { joinCode } = await table();
+    for (const name of ['GM', 'gm', 'G M', 'g.m.', 'GameMaster', 'Game Master', 'The GM', 'Bob (GM)', 'GM Bob', '6M', 'Gаme Mаster', 'ＧＭ']) {
+      const c = await connect({ t: 'hello', v: H, role: 'player', joinCode, name });
+      expect(await c.next(), name).toMatchObject({ t: 'error', code: 'BAD_NAME', message: 'That name is reserved for the GM. Pick another name.' });
+    }
+    for (const name of ['Gemma', 'Magnus', 'Gus Mendez', 'Vex']) {
+      const { c } = await join(joinCode, name);
+      c.ws.close();
+    }
+  });
+
+  it('players never receive entries they can’t see: two unseen Turns, a private roll, a whisper', async () => {
+    const { joinCode, gm, auth } = await table();
+    const a = await join(joinCode, 'Ana');
+    const b = await join(joinCode, 'Bo');
+    const cells = '......#.....'.repeat(4);
+    auth.act({ type: 'addActor', actor: npc('ana-pc', a.w.playerId, 'pc') });
+    auth.act({ type: 'addActor', actor: npc('bo-pc', b.w.playerId, 'pc') });
+    auth.act({ type: 'addActor', actor: npc('zzone') });
+    auth.act({ type: 'addActor', actor: npc('zztwo') });
+    auth.act({ type: 'setMap', map: { id: 'm', name: 'Split', width: 12, height: 4, cells, cellPx: 64, sightRange: 30, tokens: { 'ana-pc': { x: 1, y: 1 }, 'bo-pc': { x: 2, y: 2 }, zzone: { x: 9, y: 1 }, zztwo: { x: 10, y: 2 } }, watches: {}, spotted: [] } });
+    auth.act({ type: 'startEncounter', participants: [{ actorId: 'ana-pc' }, { actorId: 'zzone' }, { actorId: 'zztwo' }, { actorId: 'bo-pc' }] }, { role: 'gm' }, scriptedDice({ d10: [10, 9, 8, 7] }));
+    await settle();
+    const frames: ServerMessage[] = [];
+    b.c.ws.on('message', (d) => frames.push(JSON.parse(d.toString()) as ServerMessage));
+    auth.act({ type: 'endTurn' }, { role: 'player', playerId: a.w.playerId }); // Ana → zzone: the anonymous slot appears
+    await settle();
+    const mark = frames.length;
+    auth.act({ type: 'moveToken', actorId: 'zzone', to: { x: 9, y: 0 } });
+    auth.act({ type: 'endTurn' }); // zzone → zztwo
+    auth.act({ type: 'moveToken', actorId: 'zztwo', to: { x: 10, y: 3 } });
+    auth.act({ type: 'rollDice', label: 'ZzSecret', dice: { count: 1, sides: 10, bonus: 0 }, private: true }, { role: 'player', playerId: a.w.playerId }, scriptedDice({ d10: [4] }));
+    auth.act({ type: 'chat', text: 'ZzWhisper', to: ['gm'] }, { role: 'player', playerId: a.w.playerId });
+    await settle();
+    expect(frames.slice(mark).filter((m) => m.t === 'entries')).toEqual([]);
+    auth.act({ type: 'endTurn' }); // zztwo → Bo
+    await settle();
+    const after = frames.slice(mark).filter((m): m is Extract<ServerMessage, { t: 'entries' }> => m.t === 'entries');
+    expect(after).toHaveLength(1);
+    const seqs = frames.filter((m): m is Extract<ServerMessage, { t: 'entries' }> => m.t === 'entries').flatMap((m) => m.entries.map((e) => e.seq));
+    // No gaps either: the numbers are this connection's own.
+    expect(seqs).toEqual(seqs.map((_x, i) => seqs[0]! + i));
+    expect(JSON.stringify(frames)).not.toMatch(/zzone|zztwo|ZzSecret|ZzWhisper/);
+    gm.ws.close(); a.c.ws.close(); b.c.ws.close();
+  });
+
+  it('idle unclaimed identities don’t hold a seat; claimed or online ones do', async () => {
+    const { joinCode, gm, auth } = await table({ maxPlayersPerSession: 3, idlePlayerMs: 60_000 });
+    const keep = await join(joinCode, 'Keeper');
+    auth.act({ type: 'addActor', actor: npc('pc1', keep.w.playerId, 'pc') });
+    keep.c.ws.close();
+    const online = await join(joinCode, 'Online');
+    const drifter = await join(joinCode, 'Drifter');
+    drifter.c.ws.close();
+    await settle();
+    // Full: Keeper has a character, Online is here, Drifter left a moment ago.
+    expect(await (await connect({ t: 'hello', v: H, role: 'player', joinCode, name: 'Late' })).next()).toMatchObject({ code: 'SESSION_FULL' });
+    clock += 61_000;
+    const late = await join(joinCode, 'Late');
+    expect(late.w.players.map((p) => p.name).sort()).toEqual(['Keeper', 'Late', 'Online']);
+    // Seven quick joins can't exhaust the session any more.
+    late.c.ws.close(); await settle(); clock += 61_000;
+    for (let i = 0; i < 7; i++) { const j = await join(joinCode, `Guest ${i}`); j.c.ws.close(); await settle(); clock += 61_000; }
+    const final = await join(joinCode, 'Final');
+    expect(final.w.players.length).toBeLessThanOrEqual(3);
+    gm.ws.close(); online.c.ws.close(); final.c.ws.close();
+  });
+
+  it('the GM renames, removes and merges players', async () => {
+    const { joinCode, gm } = await table();
+    const a = await join(joinCode, 'Ana');
+    const a2 = await join(joinCode, 'Ana Phone');
+    const b = await join(joinCode, 'Bo');
+    gm.send({ t: 'roster', op: { op: 'rename', playerId: b.w.playerId, name: 'GM' } });
+    expect(await gm.nextOf('error')).toMatchObject({ code: 'ROSTER', message: 'That name is reserved for the GM. Pick another name.' });
+    gm.send({ t: 'roster', op: { op: 'rename', playerId: b.w.playerId, name: 'ana' } });
+    expect(await gm.nextOf('error')).toMatchObject({ code: 'ROSTER', message: 'Another player already uses that name.' });
+    gm.send({ t: 'roster', op: { op: 'rename', playerId: b.w.playerId, name: '  Bo   Rivers ' } });
+    expect((await gm.nextOf('players')).players.map((p) => p.name)).toEqual(['Ana', 'Ana Phone', 'Bo Rivers']);
+    expect((await a.c.nextOf('players')).players.map((p) => p.name)).toContain('Bo Rivers');
+    // Merge: the phone becomes Ana, with a fresh token that keeps working.
+    gm.send({ t: 'roster', op: { op: 'merge', keepId: a.w.playerId, dropId: a2.w.playerId } });
+    const re = await a2.c.nextOf('welcome');
+    expect(re).toMatchObject({ role: 'player', playerId: a.w.playerId });
+    expect((await gm.nextOf('players')).players.map((p) => p.name)).toEqual(['Ana', 'Bo Rivers']);
+    a2.c.ws.close();
+    if (re.role !== 'player') throw new Error('player');
+    const back = await join(joinCode, 'whatever', re.playerToken);
+    expect(back.w.playerId).toBe(a.w.playerId);
+    const old = await join(joinCode, 'whatever', a2.w.playerToken); // the phone's old token maps to Ana too
+    expect(old.w.playerId).toBe(a.w.playerId);
+    // Remove: Bo is disconnected and his token no longer works.
+    gm.send({ t: 'roster', op: { op: 'remove', playerId: b.w.playerId } });
+    expect(await b.c.nextOf('error')).toMatchObject({ code: 'REMOVED' });
+    expect(await b.c.closed).toBe(4003);
+    expect((await gm.nextOf('players')).players.map((p) => p.name)).toEqual(['Ana']);
+    const bAgain = await join(joinCode, 'Bo', b.w.playerToken);
+    expect(bAgain.w.playerId).not.toBe(b.w.playerId);
+    gm.send({ t: 'roster', op: { op: 'merge', keepId: 'nobody', dropId: a.w.playerId } });
+    expect(await gm.nextOf('error')).toMatchObject({ code: 'ROSTER' });
+    gm.ws.close(); a.c.ws.close(); back.c.ws.close(); old.c.ws.close(); bAgain.c.ws.close();
+  });
+
+  it('a returning player on a new device asks for their seat by name; the GM approves or denies', async () => {
+    const { joinCode, gm, sessionId, gmKey } = await table();
+    const a = await join(joinCode, 'Ana');
+    a.c.ws.close();
+    await settle();
+    const phone = await join(joinCode, 'ana');
+    expect(await phone.c.nextOf('reclaim')).toEqual({ t: 'reclaim', status: 'pending', seatName: 'Ana' });
+    const req = await gm.nextOf('reclaimRequest');
+    expect(req.request).toMatchObject({ playerId: phone.w.playerId, seatId: a.w.playerId, name: 'Ana' });
+    // A GM who reconnects still sees the request.
+    gm.ws.close();
+    const gm2 = await connect({ t: 'hello', v: H, role: 'gm', sessionId, gmKey });
+    expect(await gm2.nextOf('welcome')).toMatchObject({ reclaims: [{ requestId: req.request.requestId }] });
+    // Players can't answer it.
+    phone.c.send({ t: 'roster', op: { op: 'reclaim', requestId: req.request.requestId, approve: true } } as ClientMessage);
+    expect(await phone.c.nextOf('error')).toMatchObject({ code: 'NOT_ALLOWED' });
+    gm2.send({ t: 'roster', op: { op: 'reclaim', requestId: req.request.requestId, approve: true } });
+    expect(await gm2.nextOf('reclaimClosed')).toEqual({ t: 'reclaimClosed', requestId: req.request.requestId });
+    expect(await phone.c.nextOf('welcome')).toMatchObject({ playerId: a.w.playerId });
+    expect((await gm2.nextOf('players')).players.map((p) => p.name)).toEqual(['Ana']);
+    // Denied: the asker keeps a new identity of its own.
+    const tablet = await join(joinCode, 'ANA');
+    expect(await tablet.c.nextOf('reclaim')).toMatchObject({ status: 'pending' });
+    const req2 = await gm2.nextOf('reclaimRequest');
+    gm2.send({ t: 'roster', op: { op: 'reclaim', requestId: req2.request.requestId, approve: false } });
+    expect(await tablet.c.nextOf('reclaim')).toMatchObject({ status: 'denied' });
+    gm2.send({ t: 'roster', op: { op: 'reclaim', requestId: req2.request.requestId, approve: true } });
+    expect(await gm2.nextOf('error')).toMatchObject({ code: 'ROSTER', message: 'That request was already answered.' });
+    gm2.ws.close(); phone.c.ws.close(); tablet.c.ws.close();
   });
 });

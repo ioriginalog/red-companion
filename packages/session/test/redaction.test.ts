@@ -302,7 +302,7 @@ describe('unexplored terrain', () => {
     const cells = MAP.cells.split('');
     cells[1 * 12 + 10] = 'c';
     cells[2 * 12 + 2] = 'c';
-    const map: TacticalMap = { ...MAP, cells: cells.join(''), explored, cover: { '10,1': { material: 'concrete', hp: 25 }, '2,2': { material: 'thickWood', hp: 20 } } };
+    const map: TacticalMap = { ...MAP, cells: cells.join(''), explored, cover: { '10,1': { material: 'thickConcrete', hp: 25 }, '2,2': { material: 'thickWood', hp: 20 } } };
     const view = projectState({ ...s, map }, P1).map!;
     expect(view.cells).toHaveLength(60);
     for (let y = 0; y < 5; y++) {

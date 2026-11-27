@@ -284,6 +284,10 @@ export function validateIntent(state: SessionState, raw: unknown, by: Viewer): v
       actorId(state, i.actorId, 'actorId');
       str(i.controller, 'Controller', 64);
       return;
+    case 'reassignPlayer':
+      str(i.from, 'From', 64);
+      str(i.to, 'To', 64);
+      return;
     case 'startEncounter': {
       const ps = arr(i.participants, 'Participants', 100)!;
       if (ps.length === 0) bad('Add at least one participant.');
