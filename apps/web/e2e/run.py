@@ -317,6 +317,43 @@ def test_bursts(browser, base):
     check(not errs, f'no page errors under bursts ({errs[:3]})')
     gctx.close(); pctx.close()
 
+def test_gm_signals(browser, base):
+    print('6. GM pings and ruler never point into the fog')
+    gctx = new_ctx(browser); gm = gctx.new_page(); errs = []; page_errors(gm, errs, 'GM')
+    code = gm_create(gm, base)
+    actx = new_ctx(browser); a = actx.new_page(); fa = capture(a); pa = player_join(a, base, code, 'Ana')
+    cells = ''.join(''.join('#' if x == 6 else '.' for x in range(12)) for _ in range(5))
+    gm_act(gm, {'type': 'addActor', 'actor': actor('solo', 'Solo', 'pc', pa)})
+    gm_act(gm, {'type': 'addActor', 'actor': actor('zzlurker', 'Zzlurker', 'npc')})
+    gm_act(gm, {'type': 'setMap', 'map': {'id': 'm', 'name': 'Wall', 'width': 12, 'height': 5, 'cells': cells, 'cellPx': 64, 'sightRange': 30,
+                                          'tokens': {'solo': {'x': 2, 'y': 2}, 'zzlurker': {'x': 9, 'y': 2}}, 'watches': {}, 'spotted': []}})
+    time.sleep(0.5)
+    gm.evaluate("() => window.__nsc.signal({ kind: 'ping', at: { x: 9, y: 2 } })")
+    time.sleep(0.2)
+    gm.evaluate("() => window.__nsc.signal({ kind: 'measure', from: { x: 9, y: 2 }, to: { x: 2, y: 2 } })")
+    time.sleep(0.2)
+    gm.evaluate("() => window.__nsc.signal({ kind: 'cursor', at: { x: 10, y: 1 } })")
+    time.sleep(0.2)
+    gm.evaluate("() => window.__nsc.signal({ kind: 'ping', at: { x: 3, y: 1 } })")  # sentinel, in view
+    deadline = time.time() + 5
+    def sigs():
+        out = []
+        for raw in fa:
+            try: m = json.loads(raw)
+            except Exception: continue
+            if m.get('t') == 'signal' and m.get('from') == 'gm': out.append(m['signal'])
+        return out
+    while time.time() < deadline and not any(x.get('kind') == 'ping' and x.get('at') == {'x': 3, 'y': 1} for x in sigs()):
+        time.sleep(0.1)
+    got = sigs()
+    check(any(x.get('kind') == 'ping' and x.get('at') == {'x': 3, 'y': 1} for x in got), 'a GM ping the party can see reaches the player')
+    def fogged(x):
+        pts = [x.get('at'), x.get('from'), x.get('to')]
+        return any(isinstance(c, dict) and c.get('x', 0) >= 6 for c in pts)
+    check(not any(fogged(x) for x in got), f'no GM ping, ruler or cursor from a fogged square reached the player ({[x for x in got if fogged(x)][:3]})')
+    check(not errs, f'GM page without errors ({errs[:3]})')
+    gctx.close(); actx.close()
+
 def main():
     for d in ['apps/web/dist/index.html', 'apps/relay/dist/server.js']:
         if not os.path.exists(os.path.join(ROOT, d)): sys.exit(f'Missing {d}: run npm run build first.')
@@ -332,6 +369,7 @@ def main():
             test_offline_tab_close(browser, base, relay)
             test_undo(browser, base)
             test_bursts(browser, base)
+            test_gm_signals(browser, base)
             browser.close()
     finally:
         relay.stop()
