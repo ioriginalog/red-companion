@@ -37,7 +37,7 @@ export function RoleField({ value, onChange }: { value: RoleState | null; onChan
       </div>
 
       {role?.id === 'solo' && (
-        <div style={{ marginTop: 10 }}>
+        <div className="u-mt-10">
           <div className="ed-sub">Combat Awareness · {spent(role.awareness)} of {role.rank} Points</div>
           <div className="aw-grid">
             {AWARENESS.map((a) => {
@@ -57,7 +57,7 @@ export function RoleField({ value, onChange }: { value: RoleState | null; onChan
       )}
 
       {role?.id === 'medtech' && (
-        <div style={{ marginTop: 10 }}>
+        <div className="u-mt-10">
           <div className="ed-sub">Medicine · {(role.medicine?.surgery ?? 0) + (role.medicine?.pharmaceuticals ?? 0) + (role.medicine?.cryosystem ?? 0)} of {role.rank} Points</div>
           <div className="grid3">
             {([['surgery', 'Surgery', 10], ['pharmaceuticals', 'Pharmaceuticals', 5], ['cryosystem', 'Cryosystem Operation', 5]] as const).map(([k, label, max]) => (
@@ -74,9 +74,9 @@ export function RoleField({ value, onChange }: { value: RoleState | null; onChan
         </div>
       )}
 
-      {role?.id === 'netrunner' && <div className="note" style={{ marginTop: 8 }}>Interface rank {role.rank}. Netrunning reads it from here.</div>}
+      {role?.id === 'netrunner' && <div className="note u-mt-8">Interface rank {role.rank}. Netrunning reads it from here.</div>}
       {role && role.id !== 'solo' && role.id !== 'medtech' && role.id !== 'netrunner' && (
-        <label className="fld" style={{ marginTop: 8 }}><span>Role Ability Notes</span>
+        <label className="fld u-mt-8"><span>Role Ability Notes</span>
           <textarea value={role.notes ?? ''} maxLength={2000} onChange={(e) => onChange({ ...role, notes: e.target.value })} placeholder="How this character uses their Role Ability." />
         </label>
       )}
@@ -126,7 +126,7 @@ export function CyberwareField({ value, emp, onChange }: { value: CyberwareItem[
     <section className="card">
       <div className="ttl">Cyberware and Humanity</div>
       <div className={`hum hum-${status}`}>
-        <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="row u-between">
           <span>Humanity <b className="mono">{h.current}</b> / {h.max}<span className="dim"> (Starting {h.base})</span></span>
           <span>EMP <b className="mono">{empFromHumanity(h.current)}</b> (Starting {emp})</span>
         </div>
@@ -136,7 +136,7 @@ export function CyberwareField({ value, emp, onChange }: { value: CyberwareItem[
       {value.length === 0 && <div className="ed-empty">No cyberware.</div>}
       {value.map((item, i) => (
         <div className="cw" key={item.id}>
-          <div className="wrow" style={{ gridTemplateColumns: '2fr 1.1fr 0.7fr 0.8fr auto' }}>
+          <div className="wrow wrow-cyber">
             <label className="fld"><span>Name</span><input value={item.name} maxLength={80} onChange={(e) => upd(i, { name: e.target.value })} /></label>
             <label className="fld"><span>Slot</span><input value={item.slot ?? ''} maxLength={40} placeholder="Neuralware" onChange={(e) => upd(i, { slot: e.target.value || undefined })} /></label>
             <label className="fld"><span>HL Dice</span><input value={item.hlDice ?? ''} maxLength={10} placeholder="2d6" onChange={(e) => upd(i, { hlDice: e.target.value.trim() || undefined })} /></label>
@@ -157,7 +157,7 @@ export function CyberwareField({ value, emp, onChange }: { value: CyberwareItem[
           <label className="fld"><span>Notes</span><input value={item.notes ?? ''} maxLength={300} onChange={(e) => upd(i, { notes: e.target.value || undefined })} placeholder="What it does at the table" /></label>
         </div>
       ))}
-      <div className="row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+      <div className="row u-mt-8 u-wrap">
         <select aria-label="Cyberware to Add" value={pick} onChange={(e) => setPick(e.target.value)}>
           <option value="custom">Custom Item</option>
           {groups.map((g, gi) => (
@@ -168,7 +168,7 @@ export function CyberwareField({ value, emp, onChange }: { value: CyberwareItem[
         </select>
         <button className="btn" onClick={add}>Add Cyberware</button>
       </div>
-      <div className="note" style={{ marginTop: 6 }}>
+      <div className="note u-mt-6">
         At character creation each item takes its fixed Humanity Loss, and every item with a loss lowers maximum Humanity by 2 (borgware 4).
         Later installs are rolled: use Downtime and Upkeep in the Table’s Scene tab.
       </div>
@@ -183,11 +183,11 @@ export function RulesPacks() {
   const file = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState<{ text: string; bad: boolean } | null>(null);
   return (
-    <div className="packs" style={{ marginTop: 10 }}>
+    <div className="packs u-mt-10">
       <div className="ed-sub">Rules Packs</div>
       {packs.length === 0 && <div className="note">No packs yet. Import a catalog of cyberware or Programs from your own books (JSON). Packs stay on this device.</div>}
       {packs.map((p) => (
-        <div key={p.name} className="row" style={{ justifyContent: 'space-between' }}>
+        <div key={p.name} className="row u-between">
           <span>{p.name} <span className="dim">· {p.cyberware?.length ?? 0} Cyberware · {p.programs?.length ?? 0} Programs</span></span>
           <button className="btn sm" onClick={() => { removePack(p.name); setMsg({ text: `Removed ${p.name}.`, bad: false }); }}>Remove</button>
         </div>
@@ -200,7 +200,7 @@ export function RulesPacks() {
         const err = importPackText(await f.text());
         setMsg(err ? { text: err, bad: true } : { text: `Imported ${f.name}.`, bad: false });
       }} />
-      <button className="btn" style={{ marginTop: 6 }} onClick={() => file.current?.click()}>Import Rules Pack</button>
+      <button className="btn u-mt-6" onClick={() => file.current?.click()}>Import Rules Pack</button>
       {msg && <div className={msg.bad ? 'ed-err' : 'note'} role="status">{msg.text}</div>}
     </div>
   );
@@ -215,14 +215,14 @@ export function GearField({ value, onChange }: { value: GearItem[]; onChange: (v
       <div className="ttl">Gear</div>
       {value.length === 0 && <div className="ed-empty">No gear.</div>}
       {value.map((g, i) => (
-        <div className="wrow" key={i} style={{ gridTemplateColumns: '2fr 0.6fr 2fr auto' }}>
+        <div className="wrow wrow-gear" key={i}>
           <label className="fld"><span>Item</span><input value={g.name} maxLength={60} onChange={(e) => upd(i, { name: e.target.value })} /></label>
           <label className="fld"><span>Qty</span><input type="number" min={1} max={999} value={g.qty} onChange={(e) => upd(i, { qty: Math.max(1, Math.min(999, Math.round(Number(e.target.value) || 1))) })} /></label>
           <label className="fld"><span>Notes</span><input value={g.notes ?? ''} maxLength={120} onChange={(e) => upd(i, { notes: e.target.value || undefined })} /></label>
           <button className="iconbtn" aria-label={`Remove ${g.name}`} onClick={() => onChange(value.filter((_, j) => j !== i))}>✕</button>
         </div>
       ))}
-      <div className="row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+      <div className="row u-mt-8 u-wrap">
         <select aria-label="Gear to Add" value={pick} onChange={(e) => setPick(e.target.value)}>
           {GEAR_PRESETS.map((g) => <option key={g.name} value={g.name} title={g.summary}>{g.name}</option>)}
           <option value="">Custom Item</option>
@@ -257,7 +257,7 @@ function EffectAdder({ onAdd }: { onAdd: (e: CyberwareEffect) => void }) {
         {PICKABLE.map((k) => <option key={k} value={k}>{EFFECT_LABEL[k]}</option>)}
       </select>
       {kind === 'stat' && <select aria-label="STAT" value={stat} onChange={(e) => setStat(e.target.value as StatKey)}>{STATS.map((s) => <option key={s}>{s}</option>)}</select>}
-      {kind === 'skill' && <input aria-label="Skill" value={skill} maxLength={40} onChange={(e) => setSkill(e.target.value)} style={{ width: 110 }} />}
+      {kind === 'skill' && <input className="u-w-110" aria-label="Skill" value={skill} maxLength={40} onChange={(e) => setSkill(e.target.value)} />}
       {kind === 'armor' && <select aria-label="Location" value={loc} onChange={(e) => setLoc(e.target.value as 'body' | 'head')}><option value="body">Body</option><option value="head">Head</option></select>}
       {kind === 'speedware' && (
         <select aria-label="Speedware Mode" value={mode} onChange={(e) => setMode(e.target.value as 'passive' | 'activated')}>
@@ -266,7 +266,7 @@ function EffectAdder({ onAdd }: { onAdd: (e: CyberwareEffect) => void }) {
         </select>
       )}
       {['stat', 'skill', 'armor', 'initiative', 'healingMultiplier', 'speedware'].includes(kind) && (
-        <input aria-label="Value" type="number" value={num} onChange={(e) => setNum(Math.round(Number(e.target.value) || 0))} style={{ width: 56 }} />
+        <input className="u-w-56" aria-label="Value" type="number" value={num} onChange={(e) => setNum(Math.round(Number(e.target.value) || 0))} />
       )}
       <button className="btn sm" onClick={() => onAdd(build())}>Add Effect</button>
     </span>

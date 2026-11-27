@@ -369,10 +369,10 @@ export function Table({ s }: { s: ClientState }) {
         )}
         {view.map && (
           <div className="legend">
-            <span><i style={{ background: 'rgba(34,227,255,0.5)' }} />Move</span>
-            <span><i style={{ background: 'rgba(255,212,0,0.5)' }} />Run (Uses Action)</span>
-            <span><i style={{ background: '#ff2bd6' }} />Watch</span>
-            <span><i style={{ background: 'rgba(2,4,14,0.9)', border: '1px solid #445' }} />Unseen</span>
+            <span><i className="sw-move" />Move</span>
+            <span><i className="sw-run" />Run (Uses Action)</span>
+            <span><i className="sw-watch" />Watch</span>
+            <span><i className="sw-unseen" />Unseen</span>
           </div>
         )}
         {effMode === 'area' && areaAim && view.map && (areaKind || scatterPick) && (

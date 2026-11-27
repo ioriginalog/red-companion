@@ -39,11 +39,11 @@ export function RoleAbilityPanel({ c, actorId }: { c: ExtrasCtx; actorId: string
   return (
     <section className="card">
       <div className="ttl">{def && !['solo', 'netrunner', 'medtech'].includes(def.id) ? def.ability : 'Standing'}</div>
-      <div className="row" style={{ justifyContent: 'space-between', fontSize: 13 }}>
+      <div className="row u-between u-fs-13">
         <span>Reputation <b className="mono">{reputation}</b></span>
         {c.isGm && (
-          <span className="row" style={{ gap: 4 }}>
-            <input aria-label="Set Reputation" type="number" min={0} max={10} value={rep} placeholder={String(reputation)} onChange={(e) => setRep(e.target.value)} style={{ width: 56, padding: '3px 6px' }} />
+          <span className="row u-gap-4">
+            <input className="u-w-56 u-pad-input" aria-label="Set Reputation" type="number" min={0} max={10} value={rep} placeholder={String(reputation)} onChange={(e) => setRep(e.target.value)} />
             <button className="btn sm" disabled={rep === ''} onClick={() => { send(c, { kind: 'setReputation', actorId, value: Number(rep) }); setRep(''); }}>Set</button>
           </span>
         )}
@@ -60,14 +60,14 @@ export function RoleAbilityPanel({ c, actorId }: { c: ExtrasCtx; actorId: string
               </button>
             ))}
           </div>
-          <p className="dim" style={{ fontSize: 12, margin: '6px 0 0' }}>A failed appeal can’t be repeated to the same fans for a week.</p>
+          <p className="dim u-fs-12 u-m-0 u-mt-6">A failed appeal can’t be repeated to the same fans for a week.</p>
         </>
       )}
 
       {role?.id === 'lawman' && (
         <>
           <div className="ex-sub">Backup {role.rank}</div>
-          <p style={{ fontSize: 13, margin: '0 0 6px' }}>Roll 1d10 at or under {role.rank} to get {BACKUP_TIERS[backupTier(role.rank)]!.name.toLowerCase()} in 1d6 Rounds.</p>
+          <p className="u-fs-13 u-m-0 u-mb-6">Roll 1d10 at or under {role.rank} to get {BACKUP_TIERS[backupTier(role.rank)]!.name.toLowerCase()} in 1d6 Rounds.</p>
           <button className="btn yellow" disabled={!can} onClick={() => send(c, { kind: 'backup', actorId })}>Call Backup (Action)</button>
         </>
       )}
@@ -76,7 +76,7 @@ export function RoleAbilityPanel({ c, actorId }: { c: ExtrasCtx; actorId: string
         <>
           <div className="ex-sub">Operator {role.rank}</div>
           <ul className="ex-list">{operatorPerks(role.rank).map((p) => <li key={p}>{p}</li>)}</ul>
-          <div className="row ex-form" style={{ gap: 6, marginTop: 6 }}>
+          <div className="row ex-form u-gap-6 u-mt-6">
             {c.isGm && <input aria-label="Seller Total" type="number" placeholder="Seller’s total" value={seller} onChange={(e) => setSeller(e.target.value)} />}
             <button className="btn" disabled={!can} onClick={() => send(c, { kind: 'haggle', actorId, ...(c.isGm && seller !== '' ? { sellerTotal: Number(seller) } : {}) })}>Haggle</button>
           </div>
@@ -86,9 +86,9 @@ export function RoleAbilityPanel({ c, actorId }: { c: ExtrasCtx; actorId: string
       {role?.id === 'media' && (
         <>
           <div className="ex-sub">Credibility {role.rank}</div>
-          <p style={{ fontSize: 13, margin: '0 0 6px' }}>Reach: {AUDIENCE_BY_RANK[role.rank - 1]}. Believed on 1d10 ≤ {believabilityFor(role.rank)}.</p>
+          <p className="u-fs-13 u-m-0 u-mb-6">Reach: {AUDIENCE_BY_RANK[role.rank - 1]}. Believed on 1d10 ≤ {believabilityFor(role.rank)}.</p>
           <div className="ex-form">
-            <div className="row" style={{ gap: 6 }}>
+            <div className="row u-gap-6">
               <label>DV <input type="number" min={1} max={40} value={dv} onChange={(e) => setDv(Number(e.target.value))} /></label>
               <label>Evidence <select value={evidence} onChange={(e) => setEvidence(Number(e.target.value))}>{[0, 1, 2, 3].map((n) => <option key={n} value={n}>+{n}</option>)}</select></label>
             </div>
@@ -105,14 +105,14 @@ export function RoleAbilityPanel({ c, actorId }: { c: ExtrasCtx; actorId: string
           <div className="ex-sub">Teamwork {role.rank} · {(role.team ?? []).length} of {maxTeam(role.rank)}</div>
           <ul className="ex-list">
             {(role.team ?? []).map((m, i) => (
-              <li key={`${m.name}-${i}`} className="row" style={{ justifyContent: 'space-between' }}>
+              <li key={`${m.name}-${i}`} className="row u-between">
                 <span>{m.name} · {TEAM_KIND_LABEL[m.kind]} · Loyalty <b className="mono">{m.loyalty}</b></span>
                 {c.isGm && <button className="btn sm" onClick={() => send(c, { kind: 'loyalty', actorId, member: i })} title="GM rolls 1d6 in secret; at or above Loyalty they may refuse, botch, or betray.">Risky Order</button>}
               </li>
             ))}
           </ul>
           {c.isGm && (role.team ?? []).length < maxTeam(role.rank) && (
-            <div className="row ex-form" style={{ gap: 6, marginTop: 6 }}>
+            <div className="row ex-form u-gap-6 u-mt-6">
               <input aria-label="New Member Name" placeholder="Name" value={recruitName} onChange={(e) => setRecruitName(e.target.value)} />
               <select aria-label="Member Kind" value={recruitKind} onChange={(e) => setRecruitKind(e.target.value as TeamMemberKind)}>
                 {TEAM_KINDS.map((k) => <option key={k} value={k}>{TEAM_KIND_LABEL[k]}</option>)}
@@ -126,14 +126,14 @@ export function RoleAbilityPanel({ c, actorId }: { c: ExtrasCtx; actorId: string
       {role?.id === 'nomad' && (
         <>
           <div className="ex-sub">Moto {role.rank}</div>
-          <p style={{ fontSize: 13, margin: '0 0 6px' }}>+{role.rank} to {MOTO_SKILLS.join(', ')}.</p>
-          <div className="dim" style={{ fontSize: 12 }}>Family motorpool: {motorpoolFor(role.rank).join(' · ')}</div>
-          <ul className="ex-list" style={{ marginTop: 6 }}>
+          <p className="u-fs-13 u-m-0 u-mb-6">+{role.rank} to {MOTO_SKILLS.join(', ')}.</p>
+          <div className="dim u-fs-12">Family motorpool: {motorpoolFor(role.rank).join(' · ')}</div>
+          <ul className="ex-list u-mt-6">
             {(role.moto?.vehicles ?? []).map((v) => <li key={v}>{v}</li>)}
             {(role.moto?.upgrades ?? []).map((u) => <li key={u} className="dim">Upgrade: {u}</li>)}
           </ul>
           {c.isGm && (
-            <div className="row ex-form" style={{ gap: 6, marginTop: 6 }}>
+            <div className="row ex-form u-gap-6 u-mt-6">
               <input aria-label="Add a Family Vehicle" placeholder="Add a vehicle" value={vehicle} onChange={(e) => setVehicle(e.target.value)} />
               <button className="btn sm" disabled={!vehicle.trim()} onClick={() => {
                 send(c, { kind: 'setRoleExtras', actorId, moto: { vehicles: [...(role.moto?.vehicles ?? []), vehicle.trim()], upgrades: role.moto?.upgrades ?? [] } });
@@ -147,12 +147,12 @@ export function RoleAbilityPanel({ c, actorId }: { c: ExtrasCtx; actorId: string
       {role?.id === 'tech' && (
         <>
           <div className="ex-sub">Maker {role.rank}</div>
-          <p style={{ fontSize: 13, margin: '0 0 6px' }}>
+          <p className="u-fs-13 u-m-0 u-mb-6">
             Field {role.maker?.field ?? 0} · Upgrade {role.maker?.upgrade ?? 0} · Fabrication {role.maker?.fabrication ?? 0} · Invention {role.maker?.invention ?? 0}
           </p>
           <div className="ex-form">
             <input aria-label="Item" placeholder="Item (e.g. a silenced pistol)" value={item} onChange={(e) => setItem(e.target.value)} />
-            <div className="row" style={{ gap: 6 }}>
+            <div className="row u-gap-6">
               <select aria-label="Specialty" value={spec} onChange={(e) => setSpec(e.target.value as typeof spec)}>
                 <option value="upgrade">Upgrade</option><option value="fabrication">Fabrication</option><option value="invention">Invention</option>
               </select>
@@ -163,7 +163,7 @@ export function RoleAbilityPanel({ c, actorId }: { c: ExtrasCtx; actorId: string
             <select aria-label="Tech Skill" value={skill} onChange={(e) => setSkill(e.target.value)}>
               {TECH_SKILLS.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
-            <div className="dim" style={{ fontSize: 12 }}>Takes {MAKER_TIME[spec === 'invention' && PRICE_CATEGORIES.indexOf(price) < 3 ? 'expensive' : price]}.</div>
+            <div className="dim u-fs-12">Takes {MAKER_TIME[spec === 'invention' && PRICE_CATEGORIES.indexOf(price) < 3 ? 'expensive' : price]}.</div>
             <div className="ex-grid">
               <button className="btn" disabled={!can || !item.trim()} onClick={() => send(c, { kind: 'maker', actorId, specialty: spec, skill, price, item })}>Roll Maker</button>
               <button className="btn" disabled={!can || !item.trim() || fieldExpertiseMinutes(cb) === 0} onClick={() => send(c, { kind: 'juryRig', actorId, item })}

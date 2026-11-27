@@ -18,27 +18,27 @@ export function Inspector({ c, id, onClose, onTarget }: { c: TableCtx; id: strin
   const adjust = (delta: number) => { if (delta) c.act({ type: 'adjustHp', actorId: id, delta, ...(reason.trim() ? { reason: reason.trim() } : {}) }); };
   return (
     <section className="card inspector" aria-label={`Inspector for ${a.public.name}`}>
-      <div className="ttl row" style={{ justifyContent: 'space-between' }}><span>Inspector</span><button className="link" onClick={onClose} aria-label="Close Inspector">Close</button></div>
+      <div className="ttl row u-between"><span>Inspector</span><button className="link" onClick={onClose} aria-label="Close Inspector">Close</button></div>
       <div className="row">
         <Portrait a={a} />
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="u-grow u-minw-0">
           <div className="h name-md">{a.public.name}</div>
           <div className="dim h sub">{ALLEGIANCE[a.public.allegiance]} · {WOUND[a.public.woundState]}{hp ? ` · ${hp.current}/${hp.max} HP` : ''}</div>
         </div>
       </div>
       <div className="hp-adjust">
         {[-5, -1, 1, 5].map((d) => <button key={d} className={`btn sm${d < 0 ? ' danger' : ''}`} onClick={() => adjust(d)}>{d > 0 ? `+${d}` : `−${-d}`}</button>)}
-        <input aria-label="Custom HP Change" inputMode="numeric" placeholder="±HP" value={custom} onChange={(e) => setCustom(e.target.value.replace(/[^\d-]/g, ''))} style={{ width: 64 }} />
+        <input className="u-w-64" aria-label="Custom HP Change" inputMode="numeric" placeholder="±HP" value={custom} onChange={(e) => setCustom(e.target.value.replace(/[^\d-]/g, ''))} />
         <button className="btn sm" disabled={!Number(custom)} onClick={() => { adjust(Number(custom)); setCustom(''); }}>Apply</button>
       </div>
-      <input aria-label="Reason (Optional)" placeholder="Reason (Optional), e.g. fire, fall" value={reason} onChange={(e) => setReason(e.target.value)} style={{ width: '100%', marginTop: 6 }} />
-      <div className="modes" style={{ marginTop: 10 }}>
+      <input className="u-w-full u-mt-6" aria-label="Reason (Optional)" placeholder="Reason (Optional), e.g. fire, fall" value={reason} onChange={(e) => setReason(e.target.value)} />
+      <div className="modes u-mt-10">
         {CONDITIONS.map(([k, label]) => (
           <button key={k} className={`mode${a.public.conditions[k] ? ' sel' : ''}`} aria-pressed={a.public.conditions[k]}
             onClick={() => c.act({ type: 'setCondition', actorId: id, condition: k, value: !a.public.conditions[k] })}>{label}</button>
         ))}
       </div>
-      <div className="modes" style={{ marginTop: 10 }}>
+      <div className="modes u-mt-10">
         <button className="mode" onClick={() => onTarget(id)}>Make Target</button>
         {c.view.encounter.active && !c.view.encounter.order.includes(id) && <button className="mode" onClick={() => c.act({ type: 'addToInitiative', actorId: id })}>Add to Initiative</button>}
         {c.view.encounter.active && c.view.encounter.order.includes(id) && <button className="mode" onClick={() => c.act({ type: 'removeFromInitiative', actorId: id })}>Remove from Initiative</button>}
@@ -69,13 +69,13 @@ export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor
             <button className={`mode${shareCursor ? ' sel' : ''}`} aria-pressed={shareCursor} onClick={() => setShareCursor(!shareCursor)} title="Players see your pointer. Careful: hovering a hidden token shows where it is.">Share My Cursor</button>
           </div>
           {/* Exploration fog (never-seen squares are dark for players). */}
-          <div className="modes" style={{ marginTop: 8 }} role="group" aria-label="Exploration">
+          <div className="modes u-mt-8" role="group" aria-label="Exploration">
             <button className="mode" onClick={() => { const m = view.map!; c.act({ type: 'setMap', map: { ...m, explored: '1'.repeat(m.width * m.height) } }); }}
               title="Players see the whole map’s layout (tokens still follow line of sight).">Mark All Explored</button>
             <button className="mode" onClick={() => { const { explored: _e, ...m } = view.map!; c.act({ type: 'setMap', map: m }); }}
               title="Forget everything but what the party sees right now.">Reset Exploration</button>
           </div>
-          <p className="dim small" style={{ marginTop: 8 }}>
+          <p className="dim small u-mt-8">
             {mapMode === 'reveal' ? 'Drag over squares to reveal them to players; drag over revealed squares to hide them again.' : 'Players always see revealed squares, even without line of sight (lit areas, windows, cameras).'}
           </p>
         </section>
@@ -89,7 +89,7 @@ export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor
               onClick={() => c.act({ type: 'setDelayRule', allowed: view.encounter.delayAllowed === false })}
               title="Not in RED Core: lets the acting character take their Turn later this Round, before moving or acting.">Allow Delay</button>
           </div>
-          <p className="dim small" style={{ marginTop: 8 }}>Delay isn’t a RED Core rule. With it on, the acting character can take their Turn later this Round, before they move or act.</p>
+          <p className="dim small u-mt-8">Delay isn’t a RED Core rule. With it on, the acting character can take their Turn later this Round, before they move or act.</p>
         </section>
       )}
       {actors.length > 0 && (
@@ -99,7 +99,7 @@ export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor
             {actors.map((a) => (
               <div key={a.id} className="row roster-row">
                 <button className="btn ghost roster-name" onClick={() => onFocus(a.id)}>
-                  <span style={{ color: `var(--${a.public.allegiance})` }}>{a.public.name}</span>
+                  <span className={`al-text-${a.public.allegiance}`}>{a.public.name}</span>
                   <span className="dim small"> · {a.combatant ? `${a.combatant.hp.current}/${a.combatant.hp.max} HP` : ''}{view.map && !view.map.tokens[a.id] ? ' · Off Map' : ''}</span>
                 </button>
                 {view.encounter.active && !view.encounter.order.includes(a.id) && !a.public.conditions.dead && (

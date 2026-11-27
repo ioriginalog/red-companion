@@ -29,7 +29,7 @@ export function TopBar({ c, onHelp }: { c: TableCtx; onHelp: () => void }) {
     <header className="topbar">
       <div className="brand h"><span className="slash" />Night Shift <b>Companion</b></div>
       <div className="h dim scene-name">{view.map?.name ?? 'No Map Loaded'}</div>
-      {enc.active && <span className="chip" style={{ color: 'var(--yellow)' }}>Round {enc.round}</span>}
+      {enc.active && <span className="chip u-yellow">Round {enc.round}</span>}
       <div className="spacer" />
       {isGm && s.joinCode && (
         <button className="chip code" onClick={invite} title="Copy an invite link for your players.">
@@ -282,12 +282,12 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
       <div className="card help" onClick={(e) => e.stopPropagation()}>
         <div className="ttl">Shortcuts</div>
         <dl>{SHORTCUTS.map(([k, v]) => <div key={k}><dt><kbd>{k}</kbd></dt><dd>{v}</dd></div>)}</dl>
-        <div className="ttl" style={{ marginTop: 14 }}>Chat Commands</div>
+        <div className="ttl u-mt-14">Chat Commands</div>
         <dl>{COMMANDS.map(([k, v]) => <div key={k}><dt><code>{k}</code></dt><dd>{v}</dd></div>)}</dl>
-        <div className="ttl" style={{ marginTop: 14 }}>About and Legal</div>
+        <div className="ttl u-mt-14">About and Legal</div>
         <p className="small legal">{DISCLAIMER}</p>
         <p className="small dim">Night Shift Companion is a free, non-commercial fan tool. Map and portrait art was generated for this project; it contains no R. Talsorian Games or CD PROJEKT RED art.</p>
-        <button className="btn" onClick={onClose} style={{ marginTop: 12 }}>Close</button>
+        <button className="btn u-mt-12" onClick={onClose}>Close</button>
       </div>
     </div>
   );

@@ -20,19 +20,19 @@ export function AreaDodgePrompt({ view, isGm, mine, name, act }: Props) {
   return (
     <div className="card prompt" role="alertdialog" aria-label="Dodge the Area Attack">
       <div className="ttl">{label} Incoming</div>
-      <p style={{ margin: '0 0 8px' }}>
+      <p className="u-m-0 u-mb-8">
         {name(p.attackerId)} rolled {p.attack.total}. Dodging is DEX + Evasion + 1d10; beat {p.attack.total} to get clear. Damage is rolled once everyone decides.
       </p>
       {yours.map((id) => (
-        <div className="row" key={id} style={{ marginBottom: 6, flexWrap: 'wrap' }}>
-          <b style={{ minWidth: 110 }}>{name(id)}</b>
+        <div className="row u-mb-6 u-wrap" key={id}>
+          <b className="u-minw-110">{name(id)}</b>
           <button className="btn yellow" onClick={() => act({ type: 'respondAreaDodge', pendingId: p.id, actorId: id, dodge: true })}>Dodge</button>
           <button className="btn" onClick={() => act({ type: 'respondAreaDodge', pendingId: p.id, actorId: id, dodge: false })}>Take It</button>
         </div>
       ))}
       {isGm && (
-        <div className="row" style={{ flexWrap: 'wrap' }}>
-          <span className="dim" style={{ flex: 1 }}>{open.length ? `Waiting on ${joinNames(open.map(name))}.` : 'Resolving…'}</span>
+        <div className="row u-wrap">
+          <span className="dim u-grow">{open.length ? `Waiting on ${joinNames(open.map(name))}.` : 'Resolving…'}</span>
           <button className="btn" disabled={!open.length} onClick={() => act({ type: 'resolveAreaDodges', pendingId: p.id })}>Everyone Left Dodges</button>
         </div>
       )}

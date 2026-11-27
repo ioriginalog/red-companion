@@ -49,7 +49,7 @@ export function SheetPanel({ c, preferId }: { c: TableCtx; preferId: string | nu
       <section className="card">
         <div className="row">
           <Portrait a={a} big />
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="u-grow u-minw-0">
             <div className="h name-lg">{a.public.name}</div>
             <div className="dim h sub">{ALLEGIANCE[a.public.allegiance]} · {WOUND[woundState(cb.hp)]}</div>
             <div className="row mono hp-row"><span>HP</span><span>{cb.hp.current}/{cb.hp.max}</span></div>
@@ -96,7 +96,7 @@ export function SheetPanel({ c, preferId }: { c: TableCtx; preferId: string | nu
           </div>
         )}
         {forms.length > 0 && (
-          <div className="ma-forms" style={{ marginTop: 8 }}>
+          <div className="ma-forms u-mt-8">
             {forms.map((f) => {
               const moves = SPECIAL_MOVES.filter((mv) => mv.form === f);
               return (
@@ -133,7 +133,7 @@ export function SheetPanel({ c, preferId }: { c: TableCtx; preferId: string | nu
           <div className="sheet-list">
             {(['head', 'body'] as const).map((loc) => (
               <div key={loc} className="armor-loc">
-                <div className="row" style={{ justifyContent: 'space-between' }}><span className="h">{loc === 'head' ? 'Head' : 'Body'}</span><span className="mono">SP {effectiveSP(cb, loc)}</span></div>
+                <div className="row u-between"><span className="h">{loc === 'head' ? 'Head' : 'Body'}</span><span className="mono">SP {effectiveSP(cb, loc)}</span></div>
                 {cb.armor.filter((p) => p.location === loc).map((p) => (
                   <div key={p.id} className="armor-piece">
                     <span className="small">{p.name}{p.penalty ? ` (${p.penalty})` : ''}</span>
@@ -157,7 +157,7 @@ export function SheetPanel({ c, preferId }: { c: TableCtx; preferId: string | nu
               const d = getInjury(ci.injuryId);
               return (
                 <div key={`${ci.injuryId}-${i}`} className="injury">
-                  <div className="row" style={{ justifyContent: 'space-between' }}><b className="h">{d.name}</b>{ci.quickFixed && <span className="tag good-tag">Quick Fixed</span>}</div>
+                  <div className="row u-between"><b className="h">{d.name}</b>{ci.quickFixed && <span className="tag good-tag">Quick Fixed</span>}</div>
                   <div className="small">{d.summary}</div>
                   <div className="dim small">
                     Quick Fix: {d.quickFix ? d.quickFix.map((o) => `${o.skill} DV ${o.dv}`).join(' or ') : 'none'} · Treatment: {d.treatment === 'quickFixIsPermanent' ? 'Quick Fix is permanent' : d.treatment.map((o) => `${o.skill} DV ${o.dv}`).join(' or ')}

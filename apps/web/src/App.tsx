@@ -45,7 +45,7 @@ function Home({ busy, toast, lockedUntil }: { busy: boolean; toast: string | nul
 
         <h2>Join a Session</h2>
         <form className="stack" onSubmit={(e) => { e.preventDefault(); if (code.trim()) client.join(code, name); }}>
-          <input aria-label="Join Code" placeholder="Join code" value={code} maxLength={8} onChange={(e) => setCode(e.target.value.toUpperCase())} style={{ letterSpacing: '0.2em', fontWeight: 700 }} />
+          <input className="code-input" aria-label="Join Code" placeholder="Join code" value={code} maxLength={8} onChange={(e) => setCode(e.target.value.toUpperCase())} />
           <input aria-label="Your Name" placeholder="Your name" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
           <button className="cta" disabled={!code.trim() || busy}>Join</button>
         </form>
@@ -53,10 +53,10 @@ function Home({ busy, toast, lockedUntil }: { busy: boolean; toast: string | nul
         <h2>Run a Session</h2>
         <div className="stack">
           {saved.length > 0 && (
-            <ul className="saved-sessions" aria-label="Your Sessions on This Device" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
+            <ul className="saved-sessions u-list-plain u-grid u-gap-6" aria-label="Your Sessions on This Device">
               {saved.map((g, i) => (
-                <li key={g.sessionId} className="row" style={{ gap: 6 }}>
-                  <button className={`btn${i === 0 ? ' yellow' : ''}`} style={{ flex: 1 }} disabled={busy} onClick={() => void client.resumeGm(g)}>
+                <li key={g.sessionId} className="row u-gap-6">
+                  <button className={`btn${i === 0 ? ' yellow' : ''} u-grow`} disabled={busy} onClick={() => void client.resumeGm(g)}>
                     Resume Session {g.joinCode}
                   </button>
                   {forgetting === g.sessionId ? (
@@ -71,7 +71,7 @@ function Home({ busy, toast, lockedUntil }: { busy: boolean; toast: string | nul
               ))}
             </ul>
           )}
-          {forgetting && <div className="dim" role="status" style={{ fontSize: 13 }}>Forgetting removes the GM key from this device. Without a GM backup you can’t run that session again.</div>}
+          {forgetting && <div className="dim u-fs-13" role="status">Forgetting removes the GM key from this device. Without a GM backup you can’t run that session again.</div>}
           <button className="btn" disabled={busy} onClick={() => void client.createSession()}>Create a New Session</button>
           <button className="btn ghost" disabled={busy} onClick={() => importRef.current?.click()} title="Open a GM backup, or restore a session export as a new session.">Import Session or GM Backup</button>
           <input
@@ -80,8 +80,8 @@ function Home({ busy, toast, lockedUntil }: { busy: boolean; toast: string | nul
           />
         </div>
         {lockLeft > 0
-          ? <div className="warn" role="status" aria-live="polite" style={{ marginTop: 14 }}>Too many failed attempts from this network. Retrying in {lockLeft} {lockLeft === 1 ? 'second' : 'seconds'}.</div>
-          : toast && <div className="warn" style={{ marginTop: 14 }}>{toast}</div>}
+          ? <div className="warn u-mt-14" role="status" aria-live="polite">Too many failed attempts from this network. Retrying in {lockLeft} {lockLeft === 1 ? 'second' : 'seconds'}.</div>
+          : toast && <div className="warn u-mt-14">{toast}</div>}
 
         <p className="fine">{DISCLAIMER}</p>
         <p className="fine">Free and non-commercial.</p>

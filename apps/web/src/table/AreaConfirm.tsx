@@ -57,7 +57,7 @@ export function AreaConfirm(p: AreaConfirmProps) {
           : <>In the Area: {s.targets.map((t, i) => <span key={t.id} className={t.friendly || t.self ? 'warn-txt' : ''}>{i ? ', ' : ''}{t.name}{t.self ? ' (You)' : t.friendly ? ' (Ally)' : ''}</span>)}</>}
       </div>
       {ownSide.length > 0 && <div className="small warn-txt">Your own side is in the area.</div>}
-      <div className="row" style={{ gap: 8, marginTop: 6 }}>
+      <div className="row u-gap-8 u-mt-6">
         <button className="btn yellow" onClick={p.onConfirm} disabled={!p.scatter && s.dv === null}>{p.scatter ? 'Land It Here' : 'Confirm'}</button>
         <button className="btn ghost" onClick={p.onCancel}>Cancel</button>
       </div>

@@ -509,3 +509,27 @@ kbd, code { font: 600 12px ui-monospace, monospace; background: #071030; border:
 
 /* Split chunks (editors, NET) while they load */
 .loading-card { margin: 16px; }
+
+/* ----- Utilities (stand in for one-off inline styles; !important so they win as inline styles did) ----- */
+.u-m-0 { margin: 0 !important; }
+.u-mt-0 { margin-top: 0 !important; } .u-mt-4 { margin-top: 4px !important; } .u-mt-6 { margin-top: 6px !important; } .u-mt-8 { margin-top: 8px !important; }
+.u-mt-10 { margin-top: 10px !important; } .u-mt-12 { margin-top: 12px !important; } .u-mt-14 { margin-top: 14px !important; }
+.u-mb-6 { margin-bottom: 6px !important; } .u-mb-8 { margin-bottom: 8px !important; } .u-mb-10 { margin-bottom: 10px !important; }
+.u-p-10 { padding: 10px !important; } .u-pad-input { padding: 3px 6px !important; }
+.u-fs-11 { font-size: 11px !important; } .u-fs-12 { font-size: 12px !important; } .u-fs-13 { font-size: 13px !important; }
+.u-fs-16 { font-size: 16px !important; } .u-fs-18 { font-size: 18px !important; } .u-fs-22 { font-size: 22px !important; }
+.u-gap-4 { gap: 4px !important; } .u-gap-6 { gap: 6px !important; } .u-gap-8 { gap: 8px !important; } .u-gap-10 { gap: 10px !important; } .u-gap-14 { gap: 14px !important; }
+.u-grid { display: grid !important; } .u-flex { display: flex !important; } .u-iflex { display: inline-flex !important; } .u-block { display: block !important; }
+.u-grow { flex: 1 !important; } .u-wrap { flex-wrap: wrap !important; } .u-between { justify-content: space-between !important; }
+.u-ai-center { align-items: center !important; } .u-ai-start { align-items: flex-start !important; } .u-ji-center { justify-items: center !important; }
+.u-minw-0 { min-width: 0 !important; } .u-minw-110 { min-width: 110px !important; } .u-minw-160 { min-width: 160px !important; } .u-minw-240 { min-width: 240px !important; }
+.u-w-56 { width: 56px !important; } .u-w-64 { width: 64px !important; } .u-w-70 { width: 70px !important; } .u-w-110 { width: 110px !important; } .u-w-full { width: 100% !important; }
+.u-maxw-480 { max-width: 480px !important; } .u-maxw-520 { max-width: 520px !important; } .u-maxw-680 { max-width: 680px !important; }
+.u-break-all { word-break: break-all !important; } .u-yellow { color: var(--yellow) !important; }
+.u-list-plain { list-style: none; margin: 0; padding: 0; }
+.code-input { letter-spacing: 0.2em; font-weight: 700; }
+.legend .sw-move { background: rgba(34, 227, 255, 0.5); } .legend .sw-run { background: rgba(255, 212, 0, 0.5); }
+.legend .sw-watch { background: #ff2bd6; } .legend .sw-unseen { background: rgba(2, 4, 14, 0.9); border: 1px solid #445; }
+.al-text-party { color: var(--party); } .al-text-ally { color: var(--ally); } .al-text-neutral { color: var(--neutral); } .al-text-hostile { color: var(--hostile); }
+.wrow.wrow-cyber { grid-template-columns: 2fr 1.1fr 0.7fr 0.8fr auto; }
+.wrow.wrow-gear { grid-template-columns: 2fr 0.6fr 2fr auto; }
