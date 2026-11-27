@@ -15,8 +15,10 @@ const sq = (x: number, y: number, S: number) => `M${x * S},${y * S}h${S}v${S}h${
  * GM's own view); 'vision' only the squares in `vision` (fog covers the rest).
  * Dark squares a token sees anyway (Low Light, IR) get a green night-vision tint.
  */
-export const LightingLayer = memo(function LightingLayer({ map, levels, vision, scope, S }: {
+export const LightingLayer = memo(function LightingLayer({ map, levels, vision, scope, S, nightEyes }: {
   map: Pick<TacticalMap, 'width' | 'height' | 'ambient'>; levels: Map<string, LightLevel> | null; vision: Set<string>; scope: 'map' | 'vision'; S: number;
+  /** Someone in the party has Low Light or IR: tint the dark squares they see. */
+  nightEyes: boolean;
 }) {
   const paths = useMemo(() => {
     if (!levels) return null;
@@ -28,10 +30,10 @@ export const LightingLayer = memo(function LightingLayer({ map, levels, vision, 
       if (scope === 'vision' && !seen) continue;
       const lvl = levels.get(k) ?? ambient;
       if (lvl === 'dim') dim += sq(x, y, S);
-      else if (lvl === 'dark') { dark += sq(x, y, S); if (seen && scope === 'vision') night += sq(x, y, S); }
+      else if (lvl === 'dark') { dark += sq(x, y, S); if (seen && scope === 'vision' && nightEyes) night += sq(x, y, S); }
     }
     return { dim, dark, night };
-  }, [levels, vision, scope, S, map.width, map.height, map.ambient]);
+  }, [levels, vision, scope, S, map.width, map.height, map.ambient, nightEyes]);
   if (!paths) return null;
   return (
     <g pointerEvents="none" className="light-layer">
@@ -126,10 +128,21 @@ export const AnnotationLayer = memo(function AnnotationLayer({ list, S, selected
 });
 
 /** The landing square and blast area (or shell cone) of an incoming area attack. */
-export const PendingAreaLayer = memo(function PendingAreaLayer({ area, S }: { area: PendingArea; S: number }) {
+export const PendingAreaLayer = memo(function PendingAreaLayer({ area, S, part, mapH }: { area: PendingArea; S: number; part: 'area' | 'label'; mapH: number }) {
   const cx = area.at.x * S + S / 2, cy = area.at.y * S + S / 2;
   const col = area.kind === 'scatter' ? '#dce6ff' : '#ff7a00';
   const box = area.kind === 'blast' || area.kind === 'scatter';
+  if (part === 'label') {
+    // Below the area (above it at the map's bottom edge), drawn over the tokens.
+    const below = (area.at.y + (box ? 3 : 1)) * S + 18;
+    const y = below + 14 < mapH ? below : (area.at.y - (box ? 2 : 0)) * S - 16;
+    return (
+      <g pointerEvents="none" transform={`translate(${cx},${y})`} aria-hidden>
+        <rect x={-92} y={-13} width={184} height={24} rx={3} fill="rgba(3,6,20,0.92)" stroke={col} />
+        <text textAnchor="middle" dy="0.35em" className="svg-label" fill={col}>{area.label}</text>
+      </g>
+    );
+  }
   return (
     <g pointerEvents="none" className="pending-area" aria-hidden>
       {area.cells.map((c) => {
@@ -140,10 +153,6 @@ export const PendingAreaLayer = memo(function PendingAreaLayer({ area, S }: { ar
       {box && <rect x={(area.at.x - 2) * S} y={(area.at.y - 2) * S} width={S * 5} height={S * 5} fill="none" stroke={col} strokeWidth={4} strokeDasharray={area.kind === 'scatter' ? '12 8' : undefined} className="march" />}
       <circle cx={cx} cy={cy} r={S * 0.42} fill="none" stroke={col} strokeWidth={3} className="pulse" />
       <path d={`M${cx - S * 0.3},${cy}H${cx + S * 0.3}M${cx},${cy - S * 0.3}V${cy + S * 0.3}`} stroke={col} strokeWidth={3} />
-      <g transform={`translate(${cx},${(area.at.y - (box ? 2 : 0)) * S - 16})`}>
-        <rect x={-92} y={-13} width={184} height={24} rx={3} fill="rgba(3,6,20,0.92)" stroke={col} />
-        <text textAnchor="middle" dy="0.35em" className="svg-label" fill={col}>{area.label}</text>
-      </g>
     </g>
   );
 });

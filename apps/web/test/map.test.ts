@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { maxHP, scriptedDice, type Combatant, type Stats } from '@cprc/rules-core';
 import {
   applyEntry, emptySession, handleIntent, partyVision, projectState,
-  type Actor, type Intent, type SessionState, type TacticalMap, type ViewState, type Viewer,
+  type Actor, type Annotation, type Intent, type SessionState, type TacticalMap, type ViewState, type Viewer,
 } from '@cprc/session';
 import { pendingArea } from '../src/map/pendingArea.js';
 import { clientVision } from '../src/map/vision.js';
@@ -81,8 +81,8 @@ describe('Client fog uses the relay’s vision', () => {
 
 describe('Drawing geometry', () => {
   it('hit-tests strokes and keeps only the caller’s own', () => {
-    const line = { id: 'a', kind: 'line', points: [0, 0, 4, 0], color: 'cyan', visibility: 'all', by: 'p1' } as const;
-    const circle = { id: 'b', kind: 'circle', points: [5, 5, 6, 5], color: 'red', visibility: 'all', by: 'gm' } as const;
+    const line: Annotation = { id: 'a', kind: 'line', points: [0, 0, 4, 0], color: 'cyan', visibility: 'all', by: 'p1' };
+    const circle: Annotation = { id: 'b', kind: 'circle', points: [5, 5, 6, 5], color: 'red', visibility: 'all', by: 'gm' };
     expect(distanceTo(line, { x: 2, y: 0.2 })).toBeCloseTo(0.2);
     expect(distanceTo(circle, { x: 5, y: 6 })).toBeCloseTo(0);
     expect(hitAnnotation([line, circle], { x: 5, y: 6.1 }, 0.3, () => true)?.id).toBe('b');

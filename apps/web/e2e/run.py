@@ -207,6 +207,13 @@ def test_redaction(browser, base):
             'floors': {'f1': {'id': 'f1', 'kind': 'password', 'dv': 6}, 'f2': {'id': 'f2', 'kind': 'file', 'dv': 8, 'note': 'ZzSecretFile'}},
             'children': {'f1': ['f2']}, 'access': [{'mapId': 'm', 'cells': [{'x': 3, 'y': 2}]}]}}},
         {'type': 'net', 'op': {'op': 'setRig', 'actorId': 'solo', 'rig': {'interface': 3, 'deckName': 'Deck', 'slots': 7, 'programs': []}}},
+        # Lights and drawings: a hidden token's lantern, a lamp behind the wall and a GM-only note never reach players.
+        {'type': 'light', 'op': {'op': 'setAmbient', 'ambient': 'dim'}},
+        {'type': 'light', 'op': {'op': 'upsert', 'light': {'id': 'zzlantern', 'label': 'ZzLampLabel', 'attachedTo': 'zzsecret', 'bright': 3, 'dim': 2, 'on': True}}},
+        {'type': 'light', 'op': {'op': 'upsert', 'light': {'id': 'zzbacklamp', 'at': {'x': 12, 'y': 4}, 'bright': 2, 'dim': 1, 'on': True}}},
+        {'type': 'light', 'op': {'op': 'upsert', 'light': {'id': 'frontlamp', 'at': {'x': 2, 'y': 0}, 'bright': 2, 'dim': 1, 'on': True}}},
+        {'type': 'annotate', 'op': {'op': 'add', 'annotation': {'id': 'zzdraw', 'kind': 'text', 'points': [11, 4], 'text': 'ZzGmDrawing', 'color': 'red', 'visibility': 'gm'}}},
+        {'type': 'annotate', 'op': {'op': 'add', 'annotation': {'id': 'route', 'kind': 'line', 'points': [1, 1, 5, 1], 'color': 'cyan', 'visibility': 'all'}}},
     ]:
         ok = gm_act(gm, i)
         if not ok: print(f'    note: GM intent refused: {i["type"]} {gm.evaluate("() => window.__nsc.getState().toast?.text")}')
@@ -243,9 +250,11 @@ def test_redaction(browser, base):
     # Fresh welcomes (history) are checked too.
     a.reload(); wait_for(a, "() => window.__nsc && window.__nsc.getState().status === 'online'")
     time.sleep(0.5)
-    secrets = ['zzsecret', 'zzsecond', 'Zzhiddenname', 'Zzothername', 'ZzSecretFile', 'ZzPrivateRoll', 'ZzReason', 'ZzGmNote']
+    secrets = ['zzsecret', 'zzsecond', 'Zzhiddenname', 'Zzothername', 'ZzSecretFile', 'ZzPrivateRoll', 'ZzReason', 'ZzGmNote',
+               'zzlantern', 'ZzLampLabel', 'zzbacklamp', 'zzdraw', 'ZzGmDrawing']
     pa_probs, ka = scan_leaks(fa, 'Ana', secrets)
     pb_probs, kb = scan_leaks(fb, 'Bo', secrets)
+    check(any('frontlamp' in f for f in fa) and any('"route"' in f for f in fa), 'players receive visible lights and shared drawings')
     wh_a = any('ZzWhisperForBo' in f for f in fa)
     wh_b = any('ZzWhisperForBo' in f for f in fb)
     check(len(fa) > 5 and len(fb) > 5, f'captured player frames (Ana {len(fa)}, Bo {len(fb)})')

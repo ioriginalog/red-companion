@@ -219,6 +219,7 @@ export function MapView(p: Props) {
   // Vision depends only on the map and on which friendly tokens can see (and how). The GM's view
   // rebuilds `actors` on every entry, so key on a signature instead of the object (LOS is the hot path).
   const seerSig = useMemo(() => seersOf(view).sig, [view]);
+  const nightEyes = /:(lowlight|ir)\b/.test(seerSig);
   const cv = useMemo(() => clientVision(view), [view.map, seerSig]); // eslint-disable-line react-hooks/exhaustive-deps
   const vision = cv.vision;
   const showFog = !p.isGm || p.partyFog;
@@ -548,7 +549,7 @@ export function MapView(p: Props) {
         {gridLayer}
 
         {/* Light: dim and dark squares, then the light sources' glow. */}
-        <LightingLayer map={map} levels={levels} vision={vision} scope={showFog ? 'vision' : 'map'} S={S} />
+        <LightingLayer map={map} levels={levels} vision={vision} scope={showFog ? 'vision' : 'map'} S={S} nightEyes={nightEyes} />
         <LightsLayer map={map} lights={shownLights} S={S} selected={tools.panel === 'light' ? tools.selLight : null} editable={p.isGm} />
 
         {/* Movement rings: cyan = Move, yellow = Run (uses the Action). */}
@@ -598,7 +599,7 @@ export function MapView(p: Props) {
 
         {/* Drawings and the incoming area attack sit above the fog: both are already meant for this viewer. */}
         <AnnotationLayer list={annList} S={S} selected={tools.panel === 'draw' ? tools.selAnn : null} isGm={p.isGm} offset={tools.annOffset} />
-        {incoming && <PendingAreaLayer area={incoming} S={S} />}
+        {incoming && <PendingAreaLayer area={incoming} S={S} part="area" mapH={H} />}
 
         {path && pathFrom && (
           <g pointerEvents="none">
@@ -688,6 +689,8 @@ export function MapView(p: Props) {
             </g>
           );
         })}
+
+        {incoming && <PendingAreaLayer area={incoming} S={S} part="label" mapH={H} />}
 
         {/* Effects */}
         <g pointerEvents="none">
