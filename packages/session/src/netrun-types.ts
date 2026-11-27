@@ -86,6 +86,8 @@ export interface NetView {
   runs: Record<string, NetRunView>;
   /** Architectures the party has found (name and access points only). */
   jackable: { id: string; name: string; access: { mapId: string; cells: Cell[] }[] }[];
+  /** NET Actions each of the viewer's runners has spent this Turn (also before jacking in). */
+  turnUsed?: Record<string, number>;
   /** GM only. */
   full?: NetState;
 }

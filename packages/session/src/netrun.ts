@@ -15,6 +15,7 @@ import {
   type NetRig, type NetRun, type Program,
 } from '@cprc/rules-core';
 import { controls, currentActorId, getActor, SessionError, usageFor, visibilityFor } from './helpers.js';
+import { netAvailInputFromState, netAvailability, type NetActionKey } from './net-availability.js';
 import type { NetFloorView, NetOp, NetRunView, NetState, NetView } from './netrun-types.js';
 import type { Actor, Encounter, SessionState, StatePatch, Viewer } from './types.js';
 
@@ -403,6 +404,14 @@ export function executeNet(state: SessionState, rawOp: unknown, by: Viewer, dice
   const c: Ctx = { state, by, dice, net: state.netrun ?? emptyNet(), actors: { ...state.actors }, events: [], touchedActors: new Set() };
   const key = turnKey(state);
 
+  // Shared availability rules (the NetPanel shows the same reasons on disabled buttons).
+  const availKey = availabilityKey(op);
+  if (availKey && !(op.op === 'jackIn' && by.role !== 'gm' && !c.net.found.includes(op.archId))) {
+    const { a, rig } = requireRunner(c, (op as { actorId: string }).actorId);
+    const avail = netAvailability(netAvailInputFromState(state, c.net, a.id, by.role === 'gm', rig.interface, op.op === 'jackIn' ? op.archId : undefined))[availKey];
+    if (!avail.ok) throw new SessionError(avail.code ?? 'INVALID', avail.reason ?? 'Not possible right now.');
+  }
+
   switch (op.op) {
     // ----- GM -----
     case 'saveArchitecture': {
@@ -712,6 +721,15 @@ export function executeNet(state: SessionState, rawOp: unknown, by: Viewer, dice
   return { events: c.events, patch };
 }
 
+function availabilityKey(op: NetOp): NetActionKey | null {
+  switch (op.op) {
+    case 'jackIn': case 'jackOut': case 'move': case 'descend': case 'program': case 'activate': case 'scan': case 'quickhack':
+      return op.op;
+    case 'ability': return op.ability;
+    default: return null;
+  }
+}
+
 // ----- Projection ------------------------------------------------------------------
 
 function runView(state: SessionState, net: NetState, actorId: string, run: NetRun): NetRunView | null {
@@ -763,7 +781,9 @@ export function projectNet(state: SessionState, viewer: Viewer): NetView | undef
   const jackable = Object.values(net.architectures)
     .filter((a) => viewer.role === 'gm' || net.found.includes(a.id))
     .map((a) => ({ id: a.id, name: a.name, access: a.access }));
-  return { quickhacks2070s: net.quickhacks2070s, rigs, runs, jackable, ...(viewer.role === 'gm' ? { full: net } : {}) };
+  const key = turnKey(state);
+  const turnUsed = Object.fromEntries(Object.entries(net.turns ?? {}).filter(([aid, t]) => mine(aid) && t.turn === key).map(([aid, t]) => [aid, t.used]));
+  return { quickhacks2070s: net.quickhacks2070s, rigs, runs, jackable, turnUsed, ...(viewer.role === 'gm' ? { full: net } : {}) };
 }
 
 /**
