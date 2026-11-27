@@ -45,7 +45,7 @@ export function SessionMenu({ s }: { s: ClientState }) {
             </div>
             <div className="kv1" style={{ marginTop: 6 }}>
               <span className="dim">GM Key</span>{' '}
-              <code aria-label={showKey ? 'GM key' : 'GM key, hidden'} style={{ wordBreak: 'break-all' }}>{showKey ? creds.gmKey : '•'.repeat(16)}</code>
+              <code aria-label={showKey ? 'GM Key' : 'GM Key, Hidden'} style={{ wordBreak: 'break-all' }}>{showKey ? creds.gmKey : '•'.repeat(16)}</code>
             </div>
             <div className="row" style={{ flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
               <button ref={first} className="btn" onClick={() => setShowKey(!showKey)} aria-pressed={showKey}>{showKey ? 'Hide GM Key' : 'Show GM Key'}</button>

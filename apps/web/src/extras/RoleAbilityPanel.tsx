@@ -107,7 +107,7 @@ export function RoleAbilityPanel({ c, actorId }: { c: ExtrasCtx; actorId: string
             {(role.team ?? []).map((m, i) => (
               <li key={`${m.name}-${i}`} className="row" style={{ justifyContent: 'space-between' }}>
                 <span>{m.name} · {TEAM_KIND_LABEL[m.kind]} · Loyalty <b className="mono">{m.loyalty}</b></span>
-                {c.isGm && <button className="btn sm" onClick={() => send(c, { kind: 'loyalty', actorId, member: i })} title="GM rolls 1d6 in secret; at or above Loyalty they may refuse, botch or betray.">Risky Order</button>}
+                {c.isGm && <button className="btn sm" onClick={() => send(c, { kind: 'loyalty', actorId, member: i })} title="GM rolls 1d6 in secret; at or above Loyalty they may refuse, botch, or betray.">Risky Order</button>}
               </li>
             ))}
           </ul>

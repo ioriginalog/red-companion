@@ -126,7 +126,14 @@ export function ChatPanel({ c, rollerId, onUnreadReset }: { c: TableCtx; rollerI
         {items.length === 0 && local.length === 0 && <span className="dim">Nothing yet. Type /help for commands.</span>}
       </div>
       {behind > 0 && <button className="btn yellow new-msgs" onClick={jump}>{behind} New {behind === 1 ? 'Message' : 'Messages'}</button>}
-      <form className="chat-input" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+      <div className="quick-rolls">
+        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '1d10', dice: { count: 1, sides: 10, bonus: 0 } })}>1d10</button>
+        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '1d6', dice: { count: 1, sides: 6, bonus: 0 } })}>1d6</button>
+        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '2d6', dice: { count: 2, sides: 6, bonus: 0 } })}>2d6</button>
+        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '3d6', dice: { count: 3, sides: 6, bonus: 0 } })}>3d6</button>
+        {isGm && <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '1d10 (Private)', dice: { count: 1, sides: 10, bonus: 0 }, private: true })}>GM 1d10</button>}
+      </div>
+      <form className="chat-input pinned" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <input
           aria-label="Chat or Command" value={text} maxLength={520}
           placeholder={roller?.combatant ? `Chat, /r 2d6, /check REF+Handgun (${roller.public.name})` : 'Chat, /r 2d6, /w Name message'}
@@ -138,13 +145,6 @@ export function ChatPanel({ c, rollerId, onUnreadReset }: { c: TableCtx; rollerI
         />
         <button className="btn yellow" disabled={!text.trim()}>Send</button>
       </form>
-      <div className="quick-rolls">
-        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '1d10', dice: { count: 1, sides: 10, bonus: 0 } })}>1d10</button>
-        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '1d6', dice: { count: 1, sides: 6, bonus: 0 } })}>1d6</button>
-        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '2d6', dice: { count: 2, sides: 6, bonus: 0 } })}>2d6</button>
-        <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '3d6', dice: { count: 3, sides: 6, bonus: 0 } })}>3d6</button>
-        {isGm && <button className="mode" onClick={() => c.act({ type: 'rollDice', label: '1d10 (Private)', dice: { count: 1, sides: 10, bonus: 0 }, private: true })}>GM 1d10</button>}
-      </div>
     </section>
   );
 }

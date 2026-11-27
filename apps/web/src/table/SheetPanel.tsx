@@ -71,7 +71,7 @@ export function SheetPanel({ c, preferId }: { c: TableCtx; preferId: string | nu
             const raw = cb.stats[k];
             const eff = effectiveStat(cb, k);
             return (
-              <button key={k} className="stat" disabled={!canRoll} onClick={() => roll(k, k)} title={`${STAT_NAMES[k]}: roll ${k} + 1d10`}>
+              <button key={k} className="stat" disabled={!canRoll} onClick={() => roll(k, k)} title={`${STAT_NAMES[k]}: roll ${k} + 1d10.`}>
                 <span className="k">{k}</span>
                 <span className="v mono">{eff}</span>
                 {eff !== raw && <span className="dim tiny">base {raw}</span>}
@@ -89,7 +89,7 @@ export function SheetPanel({ c, preferId }: { c: TableCtx; preferId: string | nu
               const st = linkedStat(sk);
               const total = (st ? effectiveStat(cb, st) : 0) + lvl;
               return (
-                <button key={sk} className="skill" disabled={!canRoll} onClick={() => roll(st ? `${st} + ${sk}` : sk, st, sk)} title={`Roll ${st ? `${st} + ` : ''}${sk} + 1d10`}>
+                <button key={sk} className="skill" disabled={!canRoll} onClick={() => roll(st ? `${st} + ${sk}` : sk, st, sk)} title={`Roll ${st ? `${st} + ` : ''}${sk} + 1d10.`}>
                   <span>{sk}</span><span className="dim small">{st ?? '—'}</span><span className="mono lvl">{lvl}</span><span className="mono base">{total}</span>
                 </button>
               );

@@ -288,7 +288,7 @@ export function Table({ s }: { s: ClientState }) {
     return (
       <span className="menu-wrap">
         <button className={`btn${delayOpen ? ' on' : ''}`} disabled={!fresh || !!view.pending} aria-expanded={!!delayOpen} aria-haspopup="menu"
-          onClick={(e) => setDelayOpen(delayOpen ? null : e.currentTarget.getBoundingClientRect())} title="House rule: take your Turn later this Round (before you move or act)">Delay</button>
+          onClick={(e) => setDelayOpen(delayOpen ? null : e.currentTarget.getBoundingClientRect())} title="House rule: take your Turn later this Round (before you move or act).">Delay</button>
         {delayOpen && (
           <span className="menu" role="menu" style={{ left: Math.max(8, Math.min(delayOpen.left, window.innerWidth - 230)), bottom: window.innerHeight - delayOpen.top + 6 }}>
             {later.map((id) => <button key={id} role="menuitem" onClick={() => { setDelayOpen(null); c.act({ type: 'delayTurn', after: id }); }}>After {c.name(id)}</button>)}
@@ -299,6 +299,10 @@ export function Table({ s }: { s: ClientState }) {
     );
   })();
   const sheetMode = layout.sheet;
+  // Landscape phones are short on map: the target strip starts folded and folds again after a pick or a map touch.
+  const [chipsFolded, setChipsFolded] = useState(layout.shortLandscape);
+  useEffect(() => { setChipsFolded(layout.shortLandscape); }, [layout.shortLandscape]);
+  const showChips = (layout.compact || layout.sheet) && canAct && mapMode === 'move' && !required && chips.length > 0;
   const toggleSide = () => { const v = !sideCollapsed; setSideCollapsed(v); store.set('nsc.sideCollapsed', v ? '1' : '0'); };
 
   return (
@@ -306,12 +310,12 @@ export function Table({ s }: { s: ClientState }) {
       <TopBar c={c} onHelp={() => setHelp(true)} />
       <InitiativeStrip c={c} onPick={(id, friendly) => (view.actors[id]?.placeholder ? undefined : friendly ? (setSelected(id), isGm && setFocusId(id)) : setTargetId(id))} />
 
-      <main className="mapwrap">
+      <main className="mapwrap" onPointerDownCapture={(e) => { if (layout.shortLandscape && !chipsFolded && (e.target as Element).closest?.('.mapstage')) setChipsFolded(true); }}>
         {view.map ? (
           <MapView
             view={view} isGm={isGm} actingId={actingId} canAct={canAct} targetId={targetId} attack={attack} chances={chances}
             compact={layout.compact || layout.sheet}
-            bottomInset={(layout.compact || layout.sheet) && canAct && mapMode === 'move' && chips.length && !required ? 62 : 0}
+            bottomInset={showChips && !chipsFolded ? (layout.shortLandscape ? 52 : 62) : 0}
             followIds={[...(actingId && view.map.tokens[actingId] ? [actingId] : []), ...(targetId && targetId !== actingId ? [targetId] : [])]}
             followKey={`${turnKey ?? 'free'}|${actingId ?? ''}|${targetId ?? ''}|${sheet}`}
             showMini={showMini} onToggleMini={() => { const v = !showMini; setShowMini(v); store.set('nsc.minimap', v ? '1' : '0'); }}
@@ -358,7 +362,7 @@ export function Table({ s }: { s: ClientState }) {
             ) : <p className="dim">The GM hasn’t loaded a map.</p>}
           </div>
         )}
-        {(layout.compact || layout.sheet) && canAct && mapMode === 'move' && !required && <TargetChips chips={chips} targetId={targetId} onPick={setTargetId} />}
+        {showChips && <TargetChips chips={chips} targetId={targetId} collapsed={chipsFolded} onCollapse={setChipsFolded} onPick={(id) => { setTargetId(id); if (layout.shortLandscape) setChipsFolded(true); }} />}
         <TurnBanner turnKey={turnKey} title={bannerTitle} sub={bannerTitle && !isGm ? name(currentId!) : undefined} />
         {!sheetMode && !layout.shortLandscape && sideCollapsed && (
           <button className="btn side-open" onClick={toggleSide} aria-label="Show Panels" title="Show Panels">Panels ‹</button>
@@ -414,7 +418,7 @@ export function Table({ s }: { s: ClientState }) {
             ? <button className="tab grip" aria-label={sheetOpen ? 'Collapse Panel' : 'Expand Panel'} onClick={() => setSheetOpen(!sheetOpen)}>{sheetOpen ? '▾' : '▴'}</button>
             : !layout.shortLandscape && <button className="tab grip side-hide" aria-label="Hide Panels" title="Hide Panels" onClick={toggleSide}>›</button>}
         </div>
-        <div className="side-body">
+        <div className={`side-body tab-${tab}`}>
           <Prompts c={c} onPickScatter={setScatterPick} scatterPicking={scatterPick} />
           <AreaDodgePrompt view={view} isGm={isGm} mine={(id) => c.mine(id)} name={c.name} act={c.act} />
           {tab === 'combat' && (

@@ -113,13 +113,13 @@ export function CombatPanel(p: Props) {
             <div className="modes">
               {weapon && area !== 'blast' && view.map && p.setCoverPick && (
                 <button className={`mode${p.coverPick ? ' sel' : ''}`} disabled={actionGone && !(usage?.attackWith === weapon.id)} aria-pressed={!!p.coverPick}
-                  onClick={() => p.setCoverPick!(!p.coverPick)} title="Shoot a cover square to wear it down (uses your Action)">
+                  onClick={() => p.setCoverPick!(!p.coverPick)} title="Shoot a cover square to wear it down (uses your Action).">
                   Shoot Cover
                 </button>
               )}
               {area && (
                 <button className={`mode${p.mapMode === 'area' ? ' sel' : ''}`} disabled={actionGone} onClick={() => p.setMapMode(p.mapMode === 'area' ? 'move' : 'area')}
-                  title={area === 'blast' ? 'Aim a 10 × 10 m/yds blast' : 'Fire a shell: 6 m/yds cone'}>
+                  title={area === 'blast' ? 'Aim a 10 × 10 m/yds blast.' : 'Fire a shell: 6 m/yds cone.'}>
                   {area === 'blast' ? 'Blast Template' : 'Shell Template'}
                 </button>
               )}
@@ -145,7 +145,7 @@ export function CombatPanel(p: Props) {
               const near = nearestTarget(view, actingId);
               return (
                 <button className="link" disabled={!near} onClick={() => near && p.setTargetId(near)}
-                  title={near ? 'Target the closest enemy in line of sight' : 'No enemy is in this character’s line of sight.'}>Nearest</button>
+                  title={near ? 'Target the closest enemy in line of sight.' : 'No enemy is in this character’s line of sight.'}>Nearest</button>
               );
             })()}
           </div>

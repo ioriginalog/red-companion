@@ -43,14 +43,14 @@ export function TopBar({ c, onHelp }: { c: TableCtx; onHelp: () => void }) {
           Queued: {s.queued} {s.queued === 1 ? 'Action' : 'Actions'}
         </span>
       )}
-      <span className={`chip${s.unsynced > 0 ? ' warn-chip' : ''}`} role="status" title={s.unsynced > 0 ? `${s.unsynced} ${s.unsynced === 1 ? 'action' : 'actions'} will sync when the connection returns` : s.status === 'online' ? 'Synced' : 'Reconnecting'}>
+      <span className={`chip${s.unsynced > 0 ? ' warn-chip' : ''}`} role="status" title={s.unsynced > 0 ? `${s.unsynced} ${s.unsynced === 1 ? 'action' : 'actions'} will sync when the connection returns.` : s.status === 'online' ? 'Synced' : 'Reconnecting'}>
         <span className={`dot ${s.status === 'online' && !s.unsynced ? 'on' : 'off'}`} />
         <span className={s.unsynced > 0 ? '' : 'hide-sm'}>{s.unsynced > 0
           ? `${s.status === 'online' ? 'Syncing' : 'Offline'}: ${s.unsynced} ${s.unsynced === 1 ? 'Action' : 'Actions'} Will Sync`
           : s.status === 'online' ? 'Synced' : s.status === 'connecting' ? 'Connecting' : 'Offline'}</span>
       </span>
       <button className="btn ghost icon" onClick={() => { setMuted(!muted); setM(!muted); }} aria-pressed={!muted} aria-label={muted ? 'Sound Off' : 'Sound On'} title={muted ? 'Sound Off' : 'Sound On'}>{muted ? 'Muted' : 'Sound'}</button>
-      <button className="btn ghost icon" onClick={onHelp} title="Help, Shortcuts and About (?)" aria-label="Help and About">?</button>
+      <button className="btn ghost icon" onClick={onHelp} title="Help, Shortcuts, and About (?)" aria-label="Help and About">?</button>
       {/* The session menu holds Leave (with confirmation), the GM key, backup and export. */}
       <button className="btn ghost hide-sm" onClick={() => client.openSessionMenu()}>{isGm ? 'Session' : 'Leave'}</button>
     </header>

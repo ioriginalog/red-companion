@@ -55,11 +55,11 @@ export function ActionBar(p: ActionBarProps) {
     : null;
 
   const secondary: Item[] = [
-    { key: 'watch', label: 'Watch', on: mapMode === 'watch', disabled: !canAct || !view.map || !!usage?.actionUsed, title: 'House rule: spend your Action to watch a 90° cone until your next Turn. (W)', run: () => toggle('watch') },
+    { key: 'watch', label: 'Watch', on: mapMode === 'watch', disabled: !canAct || !view.map || !!usage?.actionUsed, title: 'House rule: spend your Action to watch a 90° cone until your next Turn (W).', run: () => toggle('watch') },
     { key: 'ruler', label: 'Ruler', on: mapMode === 'ruler', disabled: !view.map, title: 'Ruler (R)', run: () => toggle('ruler') },
     { key: 'reload', label: 'Reload', disabled: !canAct || !weapon?.ammo || weapon.ammo.loaded === weapon.ammo.capacity, run: () => { if (actingId && weapon) c.act({ type: 'reload', actorId: actingId, weaponId: weapon.id }); } },
     { key: 'brawl', label: 'Brawl', disabled: !canAct || !targetId, run: () => { if (actingId && targetId) c.act({ type: 'meleeAttack', attackerId: actingId, defenderId: targetId, with: { kind: 'brawling' } }); } },
-    ...(stabilize && t ? [{ key: 'stab', label: 'Stabilize', disabled: !!usage?.actionUsed || !!view.pending, title: `Stabilize ${t.public.name} with ${stabilize} (uses your Action; must be adjacent)`, run: () => { if (actingId) c.act({ type: 'stabilize', medicId: actingId, targetId: t.id, skill: stabilize }); } }] : []),
+    ...(stabilize && t ? [{ key: 'stab', label: 'Stabilize', disabled: !!usage?.actionUsed || !!view.pending, title: `Stabilize ${t.public.name} with ${stabilize} (uses your Action; must be adjacent).`, run: () => { if (actingId) c.act({ type: 'stabilize', medicId: actingId, targetId: t.id, skill: stabilize }); } }] : []),
     ...(isGm ? [
       { key: 'place', label: 'Place', on: mapMode === 'place', disabled: !view.map, title: 'Select a token, then tap a square to put it there.', run: () => toggle('place') },
       { key: 'party', label: 'Party View', on: p.partyFog, disabled: !view.map, title: 'Show what the party can see.', run: () => p.setPartyFog(!p.partyFog) },
@@ -123,7 +123,7 @@ export function ActionBar(p: ActionBarProps) {
       {p.extra}
       <div className="spacer" />
       {canAct && weapon && enc.active && (
-        <button className="btn yellow dock-fire" disabled={!p.fireNow} onClick={p.onFire} title="Fire (F)" aria-label={targetId ? `${fireLabel}${chance ? `, ${chance} to hit` : ''}` : `${fireLabel}: pick a target first`}>
+        <button className="btn yellow dock-fire" disabled={!p.fireNow} onClick={p.onFire} title="Fire (F)" aria-label={targetId ? `${fireLabel}${chance ? `, ${chance} to Hit` : ''}` : `${fireLabel}: Pick a Target First`}>
           {fireLabel}{chance && targetId && <span className="sub mono">{chance}</span>}
         </button>
       )}

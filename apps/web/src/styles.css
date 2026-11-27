@@ -243,6 +243,10 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--cyan)
 .roll-body .tag { margin-left: 4px; }
 .feed .roll { color: var(--text); } .feed .chat { color: var(--text); }
 .chat-input { display: flex; gap: 6px; margin-top: 8px; }
+/* The chat card fills the panel: the log scrolls, the input and Send stay put. */
+.side-body.tab-chat > .chatcard { flex: 1 1 0; min-height: 0; }
+.side-body.tab-chat .chatcard .feed { flex: 1 1 0; height: auto; min-height: 72px; }
+.chat-input.pinned { flex: none; }
 .chat-input input { flex: 1; min-width: 0; }
 .quick-rolls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 
@@ -388,8 +392,14 @@ kbd, code { font: 600 12px ui-monospace, monospace; background: #071030; border:
 @media (prefers-reduced-motion: reduce) { .turn-banner { animation: tb-fade 1.9s linear forwards; } @keyframes tb-fade { 0%, 85% { opacity: 1; } 100% { opacity: 0; } } }
 
 /* Target chips (phones) */
-.target-chips { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; gap: 6px; overflow-x: auto; padding: 0 10px; z-index: 5; scrollbar-width: none; scroll-snap-type: x proximity; }
-.target-chips::-webkit-scrollbar { display: none; }
+.target-chips { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; gap: 6px; padding: 0 10px; z-index: 5; pointer-events: none; }
+.target-chips > * { pointer-events: auto; }
+.tchip-list { display: flex; gap: 6px; overflow-x: auto; min-width: 0; scrollbar-width: none; scroll-snap-type: x proximity; }
+.tchip-list::-webkit-scrollbar { display: none; }
+.target-chips.folded { right: auto; }
+.tchip.tchip-toggle { padding: 4px 10px; color: var(--text); }
+.tchip.tchip-hide { --c: var(--cyan); padding: 4px 8px; }
+.tchip-caret { color: var(--cyan); font-size: 14px; }
 .tchip { --c: var(--hostile); flex: 0 0 auto; display: flex; align-items: center; gap: 7px; background: rgba(5, 8, 22, 0.92); border: 1px solid var(--line-hi); border-left: 3px solid var(--c); padding: 4px 10px 4px 4px; border-radius: 3px; min-height: 46px; scroll-snap-align: start; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5); }
 .tchip[data-al='neutral'] { --c: var(--neutral); } .tchip[data-al='party'] { --c: var(--party); } .tchip[data-al='ally'] { --c: var(--ally); }
 .tchip.sel { border-color: var(--yellow); border-left-color: var(--yellow); box-shadow: 0 0 14px rgba(255, 212, 0, 0.45); }

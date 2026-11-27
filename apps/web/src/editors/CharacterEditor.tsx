@@ -238,7 +238,7 @@ export function CharacterEditor({ s }: { s: ClientState }) {
                     {ALLEGIANCES.map((a) => <option key={a.v} value={a.v}>{a.label}</option>)}
                   </select>
                 </label>
-                <label className="fld"><span>Played by</span>
+                <label className="fld"><span>Played By</span>
                   <select value={draft.allegiance === 'party' ? draft.controller : 'gm'} disabled={draft.allegiance !== 'party'} onChange={(e) => set({ controller: e.target.value })}>
                     <option value="gm">GM</option>
                     {s.players.map((p) => <option key={p.playerId} value={p.playerId}>{p.name}</option>)}

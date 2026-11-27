@@ -71,7 +71,7 @@ export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor
           {/* Exploration fog (never-seen squares are dark for players). */}
           <div className="modes" style={{ marginTop: 8 }} role="group" aria-label="Exploration">
             <button className="mode" onClick={() => { const m = view.map!; c.act({ type: 'setMap', map: { ...m, explored: '1'.repeat(m.width * m.height) } }); }}
-              title="Players see the whole map's layout (tokens still follow line of sight).">Mark All Explored</button>
+              title="Players see the whole map’s layout (tokens still follow line of sight).">Mark All Explored</button>
             <button className="mode" onClick={() => { const { explored: _e, ...m } = view.map!; c.act({ type: 'setMap', map: m }); }}
               title="Forget everything but what the party sees right now.">Reset Exploration</button>
           </div>
@@ -103,7 +103,7 @@ export function ScenePanel({ c, mapMode, setMapMode, shareCursor, setShareCursor
                   <span className="dim small"> · {a.combatant ? `${a.combatant.hp.current}/${a.combatant.hp.max} HP` : ''}{view.map && !view.map.tokens[a.id] ? ' · Off Map' : ''}</span>
                 </button>
                 {view.encounter.active && !view.encounter.order.includes(a.id) && !a.public.conditions.dead && (
-                  <button className="btn sm" onClick={() => c.act({ type: 'addToInitiative', actorId: a.id })} title={`Roll ${a.public.name} into the Turn order`}>Add to Initiative</button>
+                  <button className="btn sm" onClick={() => c.act({ type: 'addToInitiative', actorId: a.id })} title={`Roll ${a.public.name} into the Turn order.`}>Add to Initiative</button>
                 )}
                 {a.public.allegiance === 'party' && (
                   <select aria-label={`Who Plays ${a.public.name}`} value={a.controller} onChange={(e) => c.act({ type: 'assignController', actorId: a.id, controller: e.target.value })}>
