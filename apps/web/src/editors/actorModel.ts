@@ -22,6 +22,7 @@ export interface WeaponDraft {
   smartgunLink?: boolean;
   smart?: 'built' | 'rebuild';
   tech2070s?: 'power' | 'tech';
+  quality?: 'poor' | 'excellent';
 }
 
 export interface ActorDraft {
@@ -168,6 +169,7 @@ export function draftFromActor(a: ActorWithNotes): ActorDraft {
       ...(w.smartgunLink ? { smartgunLink: true } : {}),
       ...(w.smart ? { smart: w.smart } : {}),
       ...(w.tech2070s ? { tech2070s: w.tech2070s } : {}),
+      ...(w.quality && w.quality !== 'standard' ? { quality: w.quality } : {}),
     })),
     armor: {
       head: armorChoice(c.armor.find((p) => p.location === 'head' && !p.id.startsWith('cw:'))),
@@ -209,6 +211,7 @@ export function actorFromDraft(d: ActorDraft, opts: BuildOptions = {}): ActorWit
       ...(w.smartgunLink ? { smartgunLink: true } : {}),
       ...(w.smart ? { smart: w.smart } : {}),
       ...(w.tech2070s ? { tech2070s: w.tech2070s } : {}),
+      ...(w.quality && !(w.quality === 'excellent' && w.type === 'bowsAndCrossbows') ? { quality: w.quality } : {}),
     };
   });
   const armor = (['body', 'head'] as const)

@@ -348,6 +348,13 @@ export function CharacterEditor({ s }: { s: ClientState }) {
                 </label>
                 <button className="iconbtn" aria-label={`Remove ${w.name}`} onClick={() => set({ weapons: draft.weapons.filter((_, j) => j !== i) })}>✕</button>
               </div>
+              <div className="wopts" aria-label={`${w.name} Quality`}>
+                <label title="Poor −1 and Excellent +1 to attacks with this weapon. Bows and crossbows can’t be Excellent.">Quality
+                  <select value={w.quality ?? ''} onChange={(e) => upd({ quality: (e.target.value || undefined) as 'poor' | 'excellent' | undefined })}>
+                    <option value="poor">Poor (−1)</option><option value="">Standard</option>{w.type !== 'bowsAndCrossbows' && <option value="excellent">Excellent (+1)</option>}
+                  </select>
+                </label>
+              </div>
               {isFirearm(w.type) && (
                 <div className="wopts" aria-label={`${w.name} Attachments`}>
                   <label title="+1 to ranged attacks when wired in through a Neural Link with Interface Plugs or a Subdermal Grip.">

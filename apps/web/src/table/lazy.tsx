@@ -29,6 +29,7 @@ export const CharacterEditor = split(() => import('../editors/CharacterEditor.js
 export const GmSystemsPanel = split(() => import('../systems/GmSystemsPanel.js').then((m) => m.GmSystemsPanel), true);
 export const SystemsSheet = split(() => import('../systems/SystemsSheet.js').then((m) => m.SystemsSheet), true);
 export const CombatExtrasPanel = split(() => import('../extras/CombatExtrasPanel.js').then((m) => m.CombatExtrasPanel), true);
+export const GearPanel = split(() => import('../gear/GearPanel.js').then((m) => m.GearPanel), true);
 export const RoleAbilityPanel = split(() => import('../extras/RoleAbilityPanel.js').then((m) => m.RoleAbilityPanel), true);
 
 let warmed = false;

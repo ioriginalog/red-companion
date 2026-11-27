@@ -11,7 +11,7 @@ import { coverAt, coverLabel } from './table/cover.js';
 import { CombatPanel, fireBlocked } from './table/CombatPanel.js';
 import { SheetPanel } from './table/SheetPanel.js';
 import { AreaDodgePrompt } from './systems/AreaDodgePrompt.js';
-import { CombatExtrasPanel, GmSystemsPanel, NetPanel, warmSplitChunks } from './table/lazy.js';
+import { CombatExtrasPanel, GearPanel, GmSystemsPanel, NetPanel, warmSplitChunks } from './table/lazy.js';
 import { ChatPanel } from './table/ChatPanel.js';
 import { Inspector, ScenePanel } from './table/GmPanels.js';
 import { NotesPanel } from './table/NotesPanel.js';
@@ -431,6 +431,7 @@ export function Table({ s }: { s: ClientState }) {
                 ownIds={ownIds} onSelectOwn={(id) => setSelected(id)} targetHint={targetHint}
               />
               <CombatExtrasPanel c={c} actingId={actingId} targetId={targetId} canAct={canAct} />
+              <GearPanel c={c} actingId={actingId} targetId={targetId} canAct={canAct} />
             </>
           )}
           {tab === 'sheet' && <SheetPanel c={c} preferId={isGm ? (focusId ?? actingId) : actingId} />}

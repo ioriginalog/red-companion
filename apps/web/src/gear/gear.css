@@ -1,0 +1,11 @@
+/* Shields, drugs and vehicles. Reuses the table's .card, .btn, .bar. */
+.gear .gear-block { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px; }
+.gear .gear-block:first-of-type { border-top: 0; padding-top: 0; }
+.gear-sub { font: 700 13px var(--head); text-transform: uppercase; letter-spacing: 0.1em; color: var(--magenta); margin: 4px 0 6px; }
+.gear-row { gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
+.gear-line { margin: 0 0 6px; font-size: 13px; }
+.gear-tag { font: 700 11px var(--head); text-transform: uppercase; padding: 1px 5px; border-radius: 2px; border: 1px solid var(--line-hi); color: var(--dim); }
+.gear-tag.good { background: #06331d; color: #c9ffe0; border-color: var(--green); }
+.gear-tag.bad { background: #3a0710; color: #ffd6db; border-color: var(--red); }
+.gear-check { display: inline-flex; align-items: center; gap: 6px; font: 600 12px var(--head); text-transform: uppercase; letter-spacing: 0.05em; }
+.gear-picker svg { display: block; max-width: 100%; height: auto; border: 1px solid var(--line-hi); background: #050a22; }
