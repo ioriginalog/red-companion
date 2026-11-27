@@ -228,3 +228,16 @@ describe('Death Save before ending the Turn', () => {
     expect(t.send({ type: 'endTurn' }, GM).ok).toBe(true);
   });
 });
+
+describe('healing clears an owed Death Save', () => {
+  it('a GM heal out of Mortally Wounded removes the Death Save requirement', () => {
+    const t = setup();
+    t.send({ type: 'endTurn' }, GM);
+    t.send({ type: 'adjustHp', actorId: 'solo', delta: -45 }, GM);
+    t.send({ type: 'endTurn' }, GM);
+    expect(t.state.encounter.deathSaveRequiredFor).toBe('solo');
+    expect(t.send({ type: 'adjustHp', actorId: 'solo', delta: 30 }, GM).ok).toBe(true);
+    expect(t.state.encounter.deathSaveRequiredFor).toBeNull();
+    expect(t.send({ type: 'endTurn' }, P1).ok).toBe(true);
+  });
+});

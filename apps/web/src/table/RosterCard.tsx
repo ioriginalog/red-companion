@@ -63,21 +63,3 @@ export function RosterCard({ c, admin }: { c: TableCtx; admin: PlayerAdmin | nul
     </section>
   );
 }
-
-/**
- * Player side: joining under a name that matches an offline seat. Wire to the
- * relay's reclaim prompt (net.ts).
- */
-export function ReclaimSeatPrompt({ name, characters, onReclaim, onNewSeat }: { name: string; characters: string[]; onReclaim: () => void; onNewSeat: () => void }) {
-  return (
-    <div className="card prompt" role="alertdialog" aria-label="Reclaim Your Seat">
-      <div className="ttl">Welcome Back?</div>
-      <p>{name} already has a seat at this table{characters.length ? `, playing ${characters.join(', ')}` : ''}. Is that you?</p>
-      <div className="row">
-        <button className="btn yellow" onClick={onReclaim}>Reclaim My Seat</button>
-        <button className="btn" onClick={onNewSeat}>Join as Someone New</button>
-      </div>
-      <p className="dim small">The GM sees which seat you take.</p>
-    </div>
-  );
-}

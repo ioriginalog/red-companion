@@ -125,6 +125,30 @@ export function Prompts({ c, onPickScatter, scatterPicking }: { c: TableCtx; onP
   const enc = view.encounter;
   const out: React.ReactNode[] = [];
   const [dismissed, setDismissed] = useState<string[]>([]);
+  // Seat reclaims: a returning player on a new device asks for their old seat; the GM decides.
+  if (isGm) {
+    for (const r of c.s.reclaims) {
+      out.push(
+        <div className="card prompt" key={`reclaim-${r.requestId}`} role="alertdialog" aria-label="Seat Request">
+          <div className="ttl">Seat Request</div>
+          <p>Someone joined as {r.name} on a new device and asks for that seat. Approve only if it’s really them.</p>
+          <div className="row">
+            <button className="btn yellow" onClick={() => client.answerReclaim(r.requestId, true)}>Give Them the Seat</button>
+            <button className="btn" onClick={() => client.answerReclaim(r.requestId, false)}>Keep Them Separate</button>
+          </div>
+        </div>,
+      );
+    }
+  } else if (c.s.reclaim) {
+    out.push(
+      <div className="card prompt" key="reclaim-wait" role="status">
+        <div className="ttl">{c.s.reclaim.status === 'pending' ? 'Waiting for the GM' : 'Seat Not Restored'}</div>
+        <p>{c.s.reclaim.status === 'pending'
+          ? `You asked for ${c.s.reclaim.seatName}’s seat. The GM will confirm it’s you.`
+          : `The GM kept you separate from ${c.s.reclaim.seatName}. You can still play once the GM gives you a character.`}</p>
+      </div>,
+    );
+  }
   if (pending?.kind === 'awaitingScatter' && isGm) {
     out.push(
       <div className="card prompt" key="scatter">

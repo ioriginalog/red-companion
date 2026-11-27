@@ -134,6 +134,11 @@ export function executeTool(state: SessionState, intent: Intent, by: Viewer, dic
       const from = woundState(c.hp);
       const to = woundState(next.combatant.hp);
       if (from !== to) events.push({ type: 'woundStateChanged', visibility: 'public', targetId: a.id, from, to });
+      // Healed out of Mortally Wounded: a Death Save owed this Turn is no longer owed.
+      const enc = state.encounter;
+      if (to !== 'mortally' && enc.deathSaveRequiredFor === a.id) {
+        return { events, patch: { actors: { [a.id]: next }, encounter: { ...enc, deathSaveRequiredFor: null } } };
+      }
       return { events, patch: { actors: { [a.id]: next } } };
     }
 
