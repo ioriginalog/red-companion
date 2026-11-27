@@ -14,3 +14,5 @@ export * from './player-edits.js';
 export * from './availability.js';
 export * from './upkeep.js';
 export { netThreats } from './netrun.js';
+export * from './vision.js';
+export * from './annotations.js';

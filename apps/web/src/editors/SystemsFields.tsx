@@ -90,6 +90,7 @@ const EFFECT_LABEL: Record<CyberwareEffect['kind'], string> = {
   healingMultiplier: 'Faster Healing', ignoreSeriouslyWounded: 'Ignore Seriously Wounded',
   smartLink: 'Targeting Scope (Old)',
   speedware: 'Speedware',
+  vision: 'Night Vision',
 };
 /** Effects offered when adding (the legacy alias is display-only). */
 const PICKABLE = (Object.keys(EFFECT_LABEL) as CyberwareEffect['kind'][]).filter((k) => k !== 'smartLink');
@@ -103,6 +104,7 @@ function effectText(e: CyberwareEffect): string {
     case 'initiative': return `Initiative ${signed(e.value)}`;
     case 'healingMultiplier': return `Heal × ${e.value}`;
     case 'speedware': return `Speedware (${e.mode === 'passive' ? 'Always On' : 'Activated'}), Initiative ${signed(e.initiative)}`;
+    case 'vision': return e.sense === 'ir' ? 'IR Vision' : 'Low Light Vision';
     default: return EFFECT_LABEL[e.kind];
   }
 }
@@ -240,6 +242,7 @@ function EffectAdder({ onAdd }: { onAdd: (e: CyberwareEffect) => void }) {
   const [num, setNum] = useState(1);
   const [loc, setLoc] = useState<'body' | 'head'>('body');
   const [mode, setMode] = useState<'passive' | 'activated'>('passive');
+  const [sense, setSense] = useState<'lowlight' | 'ir'>('lowlight');
   const build = (): CyberwareEffect => {
     switch (kind) {
       case 'stat': return { kind, stat, value: num };
@@ -248,6 +251,7 @@ function EffectAdder({ onAdd }: { onAdd: (e: CyberwareEffect) => void }) {
       case 'initiative': return { kind, value: num };
       case 'healingMultiplier': return { kind, value: Math.max(1, Math.min(4, num)) };
       case 'speedware': return { kind, mode, initiative: Math.max(1, Math.min(5, num)) };
+      case 'vision': return { kind, sense };
       default: return { kind } as CyberwareEffect;
     }
   };
@@ -263,6 +267,12 @@ function EffectAdder({ onAdd }: { onAdd: (e: CyberwareEffect) => void }) {
         <select aria-label="Speedware Mode" value={mode} onChange={(e) => setMode(e.target.value as 'passive' | 'activated')}>
           <option value="passive">Always On (Kerenzikov Type)</option>
           <option value="activated">Activated (Sandevistan Type)</option>
+        </select>
+      )}
+      {kind === 'vision' && (
+        <select aria-label="Vision Type" value={sense} onChange={(e) => setSense(e.target.value as 'lowlight' | 'ir')}>
+          <option value="lowlight">Low Light</option>
+          <option value="ir">IR</option>
         </select>
       )}
       {['stat', 'skill', 'armor', 'initiative', 'healingMultiplier', 'speedware'].includes(kind) && (

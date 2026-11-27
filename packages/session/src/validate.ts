@@ -15,6 +15,8 @@ import {
   type AmmoTypeId, type CyberwareItem, type RoleState, type Weapon,
 } from '@cprc/rules-core';
 import { SessionError } from './helpers.js';
+import { validateMapLighting } from './vision.js';
+import { validateMapAnnotations } from './annotations.js';
 import type { SessionState, Viewer } from './types.js';
 
 type Obj = Record<string, unknown>;
@@ -231,6 +233,8 @@ export function validateMap(v: unknown) {
   }
   for (const s of arr(m.spotted, 'Spotted', 500)!) str(s, 'Spotted id', 64);
   if (m.lighting !== undefined) validateLighting(m.lighting);
+  validateMapLighting(m, w, h);
+  validateMapAnnotations(m, w, h);
   // Exploration bitmap.
   if (m.explored !== undefined && (typeof m.explored !== 'string' || m.explored.length !== w * h || !/^[01]*$/.test(m.explored))) {
     bad('Explored squares must be a width × height string of 0 and 1.');

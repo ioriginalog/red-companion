@@ -21,6 +21,8 @@ import {
 } from './helpers.js';
 import { executeTool, TOOL_GM_ONLY, TOOL_WHILE_PENDING } from './tools.js';
 import { executeHandout } from './handouts.js';
+import { executeLight, lightingModifiers, senseOf } from './vision.js';
+import { executeAnnotate } from './annotations.js';
 import { executePlayerEdit } from './player-edits.js';
 import { executeNet } from './netrun.js';
 import { doAreaAttack, doSuppressiveFire } from './grid-area.js';
@@ -48,7 +50,7 @@ const GM_ONLY: ReadonlySet<IntentType> = new Set([
   ...TOOL_GM_ONLY,
   'setHandout', 'removeHandout',
 ]);
-const ALLOWED_WHILE_PENDING: ReadonlySet<IntentType> = new Set(['respondDodge', 'rollDamage', 'cancelPending', 'declineWatch', ...TOOL_WHILE_PENDING, 'setHandout', 'removeHandout', 'editOwnSheet' /* */, ...SYSTEMS_WHILE_PENDING /* */, ...(PLAYLOOP_WHILE_PENDING as ReadonlySet<IntentType>) /* */]);
+const ALLOWED_WHILE_PENDING: ReadonlySet<IntentType> = new Set(['respondDodge', 'rollDamage', 'cancelPending', 'declineWatch', ...TOOL_WHILE_PENDING, 'setHandout', 'removeHandout', 'editOwnSheet' /* */, ...SYSTEMS_WHILE_PENDING /* */, ...(PLAYLOOP_WHILE_PENDING as ReadonlySet<IntentType>) /* */, 'light', 'annotate']);
 
 export function authorId(v: Viewer): AuthorId {
   return v.role === 'gm' ? 'gm' : `player:${v.playerId}`;
@@ -60,11 +62,12 @@ export function handleIntent(state: SessionState, intent: Intent, by: Viewer, ct
     validateIntent(state, intent, by);
     const effective = extrasAdjust(state, intent); // Grapple and Facedown penalties
     authorize(state, effective, by);
-    const { events, patch } = trackExtras(state, effective, execute(state, effective, by, ctx.dice, newId));
+    const at = (ctx.now ?? (() => new Date().toISOString()))();
+    const { events, patch } = trackExtras(state, effective, execute(state, effective, by, ctx.dice, newId, at));
     const entry: LogEntry = {
       seq: state.seq + 1,
       id: newId(),
-      at: (ctx.now ?? (() => new Date().toISOString()))(),
+      at,
       by: authorId(by),
       intent,
       events,
@@ -182,8 +185,12 @@ function authorize(state: SessionState, intent: Intent, by: Viewer) {
 
 type Result = { events: CombatEvent[]; patch: StatePatch };
 
-function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, newId: () => string): Result {
+function execute(state: SessionState, intent: Intent, by: Viewer, dice: Dice, newId: () => string, at: string): Result {
   switch (intent.type) {
+    case 'light':
+      return executeLight(state, (intent as { op: unknown }).op, by, (m) => withSpotted(m, state.actors));
+    case 'annotate':
+      return executeAnnotate(state, (intent as { op: unknown }).op, by, at);
     case 'addActor': {
       const a = intent.actor;
       if (state.actors[a.id]) throw new SessionError('INVALID', `Actor ${a.id} already exists.`);
@@ -418,7 +425,9 @@ function withMapGeometry(state: SessionState, intent: RangedAttackIntent): Range
   if (!intent.ignoreLineOfSight && !hasLineOfSight(state.map, a, d)) {
     throw new SessionError('NO_LINE_OF_SIGHT', `${getActor(state, intent.defenderId).combatant.name} is behind cover or out of sight.`);
   }
-  return { ...intent, distance: Math.max(1, metersBetween(a, d)) };
+  // Lighting house rule (off unless the GM turns it on): dim −2, unseen dark −4.
+  const light = lightingModifiers(state.map, { at: a, sense: senseOf(state.actors[intent.attackerId]?.combatant) }, d);
+  return { ...intent, distance: Math.max(1, metersBetween(a, d)), ...(light.length ? { situational: [...(intent.situational ?? []), ...light] } : {}) };
 }
 
 const stepCost = (map: TacticalMap, path: Cell[]) => path.reduce((s, c) => s + (terrainAt(map, c) === '~' ? 2 : 1), 0);
