@@ -2,6 +2,7 @@
 import { getInjury, type CheckResult, type CombatEvent } from '@cprc/rules-core';
 import { narrateSystems } from './systems/narrate.js';
 import { narrateExtras } from './extras/narrate.js';
+import { joinNames } from './table/format.js';
 
 export type Tone = 'hit' | 'miss' | 'info' | 'bad' | 'good' | 'chat' | 'roll';
 export interface Line { text: string; tone: Tone }
@@ -83,7 +84,7 @@ export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: 
       return { text: `Scene: ${e.name}.`, tone: 'info' };
     case 'areaResolved': {
       // An explosive's areaResolved only comes once it has gone off (hit or placed scatter).
-      const caught = e.targetIds.length ? e.targetIds.map(name).join(', ') : '';
+      const caught = e.targetIds.length ? joinNames(e.targetIds.map(name)) : '';
       if (e.kind === 'shotgunShell') return { text: caught ? `${name(e.attackerId)}’s shotgun shell catches ${caught}.` : `${name(e.attackerId)}’s shotgun shell hits no one.`, tone: caught ? 'hit' : 'miss' };
       return { text: caught ? `The blast catches ${caught}.` : 'The blast catches no one.', tone: caught ? 'hit' : 'miss' };
     }
@@ -98,7 +99,7 @@ export function narrate(e: CombatEvent, name: (id: string) => string, who: (by: 
     case 'leftInitiative':
       return { text: `${name(e.combatantId)} leaves the Turn order.`, tone: 'info' };
     case 'suppressiveFireResolved':
-      return { text: `${name(e.attackerId)} lays down Suppressive Fire${e.results.some((r) => r.mustSeekCover) ? `; ${e.results.filter((r) => r.mustSeekCover).map((r) => name(r.targetId)).join(', ')} must take cover` : ''}.`, tone: 'hit' };
+      return { text: `${name(e.attackerId)} lays down Suppressive Fire${e.results.some((r) => r.mustSeekCover) ? `; ${joinNames(e.results.filter((r) => r.mustSeekCover).map((r) => name(r.targetId)))} must take cover` : ''}.`, tone: 'hit' };
     default:
       return null;
   }

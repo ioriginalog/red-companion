@@ -42,7 +42,13 @@ export interface HistoryItem { seq: number; by: string; intentType: string; even
 
 export type ServerMessage =
   | { t: 'welcome'; role: 'gm'; sessionId: string; headSeq: number; players: PlayerInfo[] }
-  | { t: 'welcome'; role: 'player'; sessionId: string; playerId: string; playerToken: string; view: ViewState; players: PlayerInfo[]; history?: HistoryItem[] }
+  | {
+    t: 'welcome'; role: 'player'; sessionId: string; playerId: string; playerToken: string; view: ViewState; players: PlayerInfo[]; history?: HistoryItem[];
+    /** This player's intents the relay still holds for the GM. */
+    queued?: string[];
+    /** This player's recently held intents that were delivered to the GM or dropped with notice. Anything held that's in neither list was lost. */
+    settled?: string[];
+  }
   | { t: 'entries'; entries: ProjectedEntry[] }
   | { t: 'snapshot'; view: ViewState }
   /** The GM undid entries or replaced the log: the player's view and history, rebuilt up to `toSeq`. */
@@ -52,6 +58,8 @@ export type ServerMessage =
   | { t: 'rejected'; clientMsgId: string; code: string; message: string }
   /** A player intent is being held at the relay until the GM is back. */
   | { t: 'queued'; clientMsgId: string }
+  /** A held intent will never reach the GM (expired, or lost). */
+  | { t: 'queueDropped'; clientMsgId: string; reason: 'expired' | 'lost'; message: string }
   | { t: 'playerJoined'; player: PlayerInfo }
   | { t: 'playerLeft'; playerId: string }
   | { t: 'gmStatus'; online: boolean }

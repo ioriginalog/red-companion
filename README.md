@@ -6,8 +6,8 @@ Unofficial fan tool for running Cyberpunk RED combat: a rules engine, a synced s
 |---|---|
 | `packages/rules-core` | Zero-dependency combat rules engine. Pure: no I/O, no clock, injected dice. |
 | `packages/session` | Event-sourced session layer: intents, GM authority, replay, per-player redaction, wire protocol. |
-| `apps/relay` | WebSocket relay deployed on Railway: stores logs, forwards player intents to the GM, sends redacted updates to players, serves the web client. |
-| `apps/web` | Vite + React client: tactical map with fog of war, targeting and watch cones, initiative strip, attack panel. The GM's browser is the rules authority. |
+| `apps/relay` | Node WebSocket relay (deployed on Railway): stores each session's log, forwards player intents to the GM, sends every player their own redacted view, holds player actions while the GM is away, and serves the web client. It never runs rules or rolls dice. |
+| `apps/web` | Vite + React installable web app (PWA): tactical map with fog of war, targeting and watch cones, initiative strip, attack and NET panels, character editors. The GM's browser is the rules authority and caches its log in IndexedDB. |
 
 See [`docs/ADR-001-architecture.md`](docs/ADR-001-architecture.md) for the stack and sync design.
 
@@ -18,10 +18,13 @@ See [`docs/ADR-001-architecture.md`](docs/ADR-001-architecture.md) for the stack
 ```bash
 npm ci
 npm test            # builds all packages, then runs every test suite
+npm run typecheck   # tsc in every workspace
 npm run build && PORT=8080 DATA_DIR=./.data npm start   # relay + web client on http://localhost:8080
-npm run e2e   # browser end-to-end suite: real relay + headless Chrome (needs Python Playwright and /usr/bin/google-chrome or CHROME=...)
+npm run e2e         # builds, then the browser end-to-end suite against a real relay
 npm run dev -w @cprc/web   # hot-reload client on :5173 (proxies to the relay on :8080)
 ```
+
+The end-to-end suite (`apps/web/e2e/run.py`) starts its own relay with a throwaway `DATA_DIR` and drives headless Chrome through Python Playwright. It checks identity across a relay restart, redaction over a scripted encounter (no hidden data in any player frame), offline GM actions surviving a closed tab, undo reaching players, rate limits under bursts, and that GM pings, ruler lines and cursors from fogged squares never reach a player. It needs `pip install playwright` and Chrome at `/usr/bin/google-chrome` (or set `CHROME=/path/to/chrome`). `E2E_PORT` pins the relay's port; otherwise it picks a free one.
 
 Create a session, choose **Load Demo Encounter**, share the join code, assign each player a character in the Roster, then **Start Encounter**.
 
@@ -40,7 +43,7 @@ if (atk.damage) {
 }
 ```
 
-## Module Map
+## Rules Engine Module Map (`packages/rules-core`)
 
 | File | Responsibility |
 |---|---|
@@ -55,6 +58,15 @@ if (atk.damage) {
 | `src/health.ts` | Death Saves, Stabilization, turn-start checklist |
 | `src/initiative.ts` | Initiative with tie rerolls |
 | `src/events.ts` | Event types for the sync log, with a visibility hint |
+| `src/data/packs.ts` | Rules-pack format and validation (GM-imported catalogs; see below) |
+
+Also in `src/`: `ammo`, `cover`, `wield`, `grid`, `grapple`, `martial`, `facedown`, `roles`, `roles-extra`, `cyberware`, `healing`, `injury-effects`, and `net/` (the Netrunning engine).
+
+## Rules Data and Rules Packs
+
+- **Built-in data** lives in `packages/rules-core/src/data/`: numbers, tables and one-line paraphrases only (range and Autofire DVs, weapon and armor types, Critical Injury tables). It's kept in one place so it can be swapped out.
+- **Shipped examples are original.** The demo encounter, characters, starter Programs, Black ICE and example cyberware were written for this tool; no RTG stat blocks, Program or ICE names, or rulebook text are shipped.
+- **Rules packs** let a GM who owns the books add official catalogs (cyberware, Programs) on their own device: Characters → Cyberware and Humanity → Import Rules Pack. A pack is a JSON file with `"format": "nsc-rules-pack"`; it's validated strictly, stored only in that GM's browser, and never written to the session log, the relay or this repository. The full format is in [`docs/rules-verification.md`](docs/rules-verification.md#rules-packs-and-book-values-round-3).
 
 ## Session Layer
 
@@ -67,7 +79,7 @@ player ◀─projected entry── relay ◀─append─┘   (relay redacts per
 - **Intents** are requests (`rangedAttack`, `respondDodge`, `rollDamage`, `deathSave`, `endTurn`, GM setup…). The authority accepts or rejects them.
 - **Flow rules:** players act only through actors they control, on that actor's Turn. One pending step at a time (a dodge decision or a damage roll). A dying actor must roll its Death Save before acting. Dead or unconscious-but-stable actors are skipped in the Turn order.
 - **Dodge prompt:** when a REF 8+ defender is attacked, the attack pauses until the defender's controller answers. The attack is validated (range, ammo, mode) *before* the prompt, so nobody is asked to decide on an illegal shot.
-- **Redaction:** players see full sheets for their own actors and other PCs; NPCs show only name, Wound State, conditions and injury names. HP, SP, stats and roll breakdowns for NPCs are stripped from both snapshots and entries.
+- **Redaction:** players see full sheets for their own actors and other PCs; NPCs show only name, Wound State, conditions and injury names. HP, SP, stats and roll breakdowns for NPCs are stripped from both snapshots and entries. The relay projects every entry separately for each player (`projectEntry`), so whispers, GM-only rolls, hidden tokens and enemy watches never leave the server for players who shouldn't have them.
 
 ### Relay API
 
@@ -79,19 +91,23 @@ player ◀─projected entry── relay ◀─append─┘   (relay redacts per
 | `GET /u/:id/<sha256>.<ext>` | Uploaded image, cached immutably, `nosniff`, `default-src 'none'` |
 | `GET /api/sessions/:id/export` | GM only. Download `{ meta, log }` as JSON (no key or token hashes) |
 | `POST /api/sessions/import` | Body = an export. Creates a **new** session (fresh GM key and join code) whose log is the export's; every entry must chain from 1 and replay cleanly. Players rejoin and are reassigned. Rate-limited like session creation; 25 MB max. |
-| `WS /ws` | Protocol in `packages/session/src/protocol.ts`. `signal` messages (ping, cursor, measure) are relayed to the rest of the room, never logged, and rate-limited to about 10 per second per connection (excess is dropped). |
+| `WS /ws` | Protocol in `packages/session/src/protocol.ts`. An upgrade from a disallowed Origin gets `403`. `signal` messages (ping, cursor, measure) are relayed to the rest of the room, never logged, and rate-limited to about 10 per second per connection (excess is dropped). |
+
+A request from a disallowed Origin gets `403`; a GM-only request without the right key gets `401`.
 
 Environment:
 
 | Variable | Meaning |
 |---|---|
-| `PORT` | Listen port (Railway sets it). |
+| `PORT` | Listen port, default `8080` (Railway sets it). |
 | `HOST` | Listen address, default `::` (falls back to `0.0.0.0`). |
-| `DATA_DIR` | Volume path for logs, metadata and uploads. Unset = in memory, lost on restart. |
+| `DATA_DIR` | Volume path for logs, metadata, uploads and held player actions. Unset = in memory, lost on restart (the relay logs a warning). |
 | `ALLOWED_ORIGINS` | Browser origins allowed to create or import sessions, upload, and open sockets. **Unset = same-origin only** (the Origin's host must match the Host header). Comma-separated list = exactly those. `*` = any (not recommended). |
 | `TRUST_PROXY_HOPS` | Reverse proxies in front of the relay. Unset or `0` = rate limits and lockouts use the socket address and ignore `X-Forwarded-For` (it's client-controlled). `N` = use the Nth `X-Forwarded-For` entry from the right. **Railway: `1`.** |
 | `WEB_DIR` | Built client to serve; default `apps/web/dist`. |
-| `MAX_LOG_ENTRIES` | Log entries per session before appends are refused (minimum 1000, default 20000). Player chat and free rolls pause 2% (at least 50 entries) short of it so the GM always has headroom. |
+| `MAX_LOG_ENTRIES` | Log entries per session before appends are refused (minimum 1000, default 20000; anything lower or not a whole number falls back to the default). Player chat and free rolls pause 2% (at least 50 entries) short of it so the GM always has headroom. |
+
+The end-to-end suite also reads `CHROME` and `E2E_PORT` (see Quick Start).
 
 **Sync behavior worth knowing:**
 
@@ -100,7 +116,8 @@ Environment:
 - **Player rate limits:** 5 actions per second per player (burst 20), and at most 30 chat messages and free rolls per minute. Excess is refused with `RATE_LIMITED` (the player sees why).
 - **Undo:** when the GM undoes, each player gets a `rewind` with their view and history rebuilt, so undone lines disappear from their logs.
 - **Log size and compaction:** the log only grows. For long campaigns, export the session (GM menu → Export Session) at the end of an arc and import it as a fresh session, or start a new session for the next arc; the export is the archive.
-- **GM offline:** players' actions are held at the relay (50 per session, 10 per player, up to 10 minutes) and handed to the GM in order once it reconnects and has fetched the log. The GM device caches its log in IndexedDB, so actions taken offline survive a closed tab and sync on reopen.
+- **GM offline:** players' actions are held at the relay (50 per session, 10 per player, up to 10 minutes) and handed to the GM in order once it reconnects and has fetched the log. Held actions are written atomically to `DATA_DIR/sessions/<id>/queue.json` after every change, so they survive a relay restart. An action that expires is never dropped silently: the player gets a `queueDropped` notice (on their next join, if they were away), and a reconnecting player's welcome lists which of their actions are still held, so the client corrects its "Queued" count and says if anything was lost. The GM device caches its log in IndexedDB, so actions taken offline survive a closed tab and sync on reopen.
+- **GM pings, ruler and cursor stay out of the fog:** the relay sends a GM signal to players only when every square it points at is in the party's current vision; a GM cursor or ruler that moves into the fog is cleared for players. Players' own signals go to the whole room. The GM can also turn off **Show My Pings and Ruler to Players** (Scene tab) to keep them private entirely.
 - **History:** a player's welcome carries their last 300 projected log entries (events only, redacted exactly like live updates); the GM rebuilds its feed from the whole log.
 - **Unseen hostiles** are absent from the players' Turn order; while one acts, players see a single "Unknown Contact Acting" slot, never a count.
 
@@ -130,13 +147,15 @@ Environment:
 
 ## IP Compliance Checklist (RTG Homebrew Content Policy)
 
-- [ ] **App name** must not include "Cyberpunk RED". "Night Shift Companion" is a placeholder chosen to stay clear of the trademark; the final name is your call.
-- [ ] **Disclaimer** in a visible spot (About screen and store listing). Draft: *"[App Name] is unofficial content provided under R. Talsorian Games' Homebrew Content Policy. It is not approved or endorsed by R. Talsorian Games. It references material that is the property of R. Talsorian Games and its licensees."* Check it against the current policy page before release.
-- [ ] **Free**, with no paywall or subscription; no itch.io or DriveThruRPG distribution. App-store distribution is allowed when free.
-- [ ] **No full NPC stat blocks** from any RTG book, in data or seed files. Users create their own NPCs.
-- [ ] **Text = summaries + page refs only.** `src/data/` holds numbers and one-line paraphrases; never paste rulebook prose. Policy is ambiguous on full tables in apps, which is why tables live in one swappable data pack.
-- [ ] **No RTG logos, art, trade dress, fonts or colors.**
-- [ ] **Hardcoded lore:** none in this package. Weapon, armor and injury names are game terms. "Kevlar" is a DuPont trademark used in the book; consider "Kevlar-Style" or keep with a ® note.
-- [ ] **Duplication risk:** RTG can request removal if an official or licensed product does the same job. Licensed VTT integrations exist, so keep the app focused on table-side combat speed rather than becoming a full VTT.
-- [x] **Art:** the warehouse map and portraits were generated for this project with open image models (Z-Image Turbo on Hugging Face). No RTG or CD PROJEKT RED art, logos or characters. Demo characters and stats are original.
-- [ ] **2077 setting (CD PROJEKT RED Fan Content Guidelines):** non-commercial only. Don't add CDPR art, logos, UI assets, music or named characters; place names and gangs are fine in your own session data, not in shipped seed files.
+Checked items are true of the code as it stands; recheck them against the current policy pages before any public release.
+
+- [x] **App name** doesn't include "Cyberpunk RED". "Night Shift Companion" was chosen to stay clear of the trademark; the final name is the owner's call.
+- [x] **Disclaimer shipped.** The full text is in Help and About (`DISCLAIMER` in `apps/web/src/table/panels.tsx`): *"This is unofficial content provided under the Homebrew Content Policy of R. Talsorian Games and is not approved or endorsed by RTG. This content references materials that are the property of R. Talsorian Games and its licensees."* The home screen carries it too. A store listing, if there ever is one, needs the same text.
+- [x] **Free**, with no paywall, accounts or subscription. Not distributed on itch.io or DriveThruRPG. App-store distribution would be allowed while free. Hosting is an out-of-pocket cost (see the ADR).
+- [x] **No NPC stat blocks** from any RTG book, in data or seed files. The demo encounter's characters and stats are original; users create their own NPCs.
+- [x] **Text = summaries + page refs only.** `packages/rules-core/src/data/` holds numbers and one-line paraphrases; no rulebook prose. Official catalogs come only from GM-imported rules packs that stay on the GM's device. The policy is ambiguous on full tables in apps, which is why tables live in one swappable data pack.
+- [x] **No RTG logos, art, trade dress or fonts.** Type is Barlow and Barlow Condensed (SIL Open Font License); the navy, cyan and magenta palette is this project's own.
+- [x] **Trademarks in game terms:** "Kevlar" is a DuPont trademark used in the book; the armor table shows it as "Kevlar®" with a note in `data/core.ts`.
+- [x] **Art:** the warehouse map and portraits were generated for this project with open image models (Z-Image Turbo on Hugging Face). No RTG or CD PROJEKT RED art, logos or characters.
+- [x] **2077 setting (CD PROJEKT RED Fan Content Guidelines):** non-commercial; no CDPR art, logos, UI assets, music or named characters ship. Place names and gangs are fine in a GM's own session data, not in shipped seed files.
+- [ ] **Duplication risk (ongoing):** RTG can request removal if an official or licensed product does the same job, and licensed VTT integrations exist. This is now a private virtual tabletop, so keep it free, private and focused on running RED at the table, and be ready to take it down if asked.

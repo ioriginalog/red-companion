@@ -23,7 +23,7 @@ export function MiniMap({ map, view, box, fogPath, fogFill, darkPath, darkFill, 
   };
   return (
     <svg
-      ref={ref} className="minimap" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Map overview. Click to move the view."
+      ref={ref} className="minimap" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Map Overview (Click to Move the View)"
       onPointerDown={(e) => { drag.current = true; (e.target as Element).setPointerCapture?.(e.pointerId); go(e); }}
       onPointerMove={(e) => { if (drag.current) go(e); }}
       onPointerUp={() => { drag.current = false; }}

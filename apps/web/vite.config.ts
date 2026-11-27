@@ -13,5 +13,17 @@ export default defineConfig({
       '/ws': { target: 'ws://localhost:8080', ws: true },
     },
   },
-  build: { outDir: 'dist', sourcemap: false, chunkSizeWarningLimit: 800 },
+  build: {
+    outDir: 'dist', sourcemap: false, chunkSizeWarningLimit: 400,
+    rollupOptions: {
+      output: {
+        // React and the rules engine change less often than the UI: their own long-cached chunks.
+        manualChunks(id: string) {
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'vendor';
+          if (/[\\/]packages[\\/](rules-core|session)[\\/]/.test(id)) return 'rules';
+          return undefined;
+        },
+      },
+    },
+  },
 });

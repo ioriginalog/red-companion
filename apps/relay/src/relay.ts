@@ -12,10 +12,21 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
-  applyEntry, LogGapError, parseClientMessage, projectEntry, projectState, PROTOCOL_VERSION, replay,
-  type ClientMessage, type HistoryItem, type Intent, type LogEntry, type PlayerInfo, type ServerMessage, type SessionState, type Viewer,
+  applyEntry, LogGapError, parseClientMessage, partyVision, projectEntry, projectState, PROTOCOL_VERSION, replay,
+  type ClientMessage, type HistoryItem, type Intent, type LogEntry, type PlayerInfo, type ServerMessage, type SessionState, type Signal, type Viewer,
 } from '@cprc/session';
-import { ASSET_NAME, type SessionMeta, type Store } from './store.js';
+import type { Cell } from '@cprc/rules-core';
+import { ASSET_NAME, type DropNotice, type QueuedIntent, type SessionMeta, type Store } from './store.js';
+
+/** Every square a signal points at (none for clears). */
+function signalCells(s: Signal): Cell[] {
+  switch (s.kind) {
+    case 'ping': return [s.at];
+    case 'cursor': return s.at ? [s.at] : [];
+    case 'measure': return s.to ? [s.from, s.to] : [];
+    default: return [];
+  }
+}
 
 export interface RelayOptions {
   store: Store;
@@ -88,11 +99,18 @@ interface Room {
   flushOnFetch: boolean;
   /** Per-player intent limiter. */
   rates: Map<string, PlayerRate>;
+  /** Recently delivered or dropped held intents per player (bounded), so a reconnecting client can tell what was lost. */
+  settled: Record<string, string[]>;
+  /** Drops a player wasn't connected to hear about; sent on their next join. */
+  unseen: Record<string, DropNotice[]>;
+  /** Whether players currently see the GM's cursor or ruler, so one moving into the fog is cleared, not frozen at its edge. */
+  gmShown?: { cursor?: boolean; measure?: boolean };
+  /** Party vision cached per state object, for filtering GM signals. */
+  visionCache?: { state: SessionState; cells: Set<string> | null };
 }
 
 interface PlayerRate { tokens: number; at: number; chat: number[] }
 
-interface QueuedIntent { playerId: string; clientMsgId: string; intent: Intent; at: number }
 
 type Conn = {
   ws: WebSocket; room?: Room; role?: 'gm' | 'player'; playerId?: string; alive: boolean; ip: string;
@@ -135,7 +153,21 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
 
   const rooms = new Map<string, Room>();
   const byJoinCode = new Map<string, Room>();
-  for (const meta of store.listMeta()) indexRoom({ meta, log: null, state: null, gm: null, players: new Map(), queue: [], flushOnFetch: false, rates: new Map() });
+  for (const meta of store.listMeta()) {
+    let held = { queue: [] as QueuedIntent[], settled: {} as Record<string, string[]>, unseen: {} as Record<string, DropNotice[]> };
+    try { held = store.loadQueue(meta.sessionId); } catch (e) { log(`queue load failed for ${meta.sessionId}: ${(e as Error).message}`); }
+    // Same bounds as live: oldest first, per player and per session.
+    const perPlayer = new Map<string, number>();
+    const queue = held.queue.filter((i) => {
+      const n = (perPlayer.get(i.playerId) ?? 0) + 1;
+      perPlayer.set(i.playerId, n);
+      return n <= qPerPlayer;
+    }).slice(0, qPerSession);
+    indexRoom({ meta, log: null, state: null, gm: null, players: new Map(), queue, settled: held.settled, unseen: held.unseen, flushOnFetch: false, rates: new Map() });
+  }
+  const saveQueue = (r: Room) => {
+    try { store.saveQueue(r.meta.sessionId, { queue: r.queue, settled: r.settled, unseen: r.unseen }); } catch (e) { log(`queue save failed: ${(e as Error).message}`); }
+  };
 
   function indexRoom(r: Room) {
     rooms.set(r.meta.sessionId, r);
@@ -297,7 +329,7 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     const meta: SessionMeta = { sessionId, gmKeyHash: sha256(gmKey), joinCode, createdAt: new Date().toISOString(), players: [] };
     store.saveMeta(meta);
     if (entries.length) store.appendLog(sessionId, entries);
-    indexRoom({ meta, log: entries, state: replay(sessionId, entries), gm: null, players: new Map(), queue: [], flushOnFetch: false, rates: new Map() });
+    indexRoom({ meta, log: entries, state: replay(sessionId, entries), gm: null, players: new Map(), queue: [], settled: {}, unseen: {}, flushOnFetch: false, rates: new Map() });
     log(`session ${entries.length ? `imported (${entries.length} entries)` : 'created'} ${sessionId}`);
     return { sessionId, gmKey, joinCode };
   }
@@ -375,7 +407,10 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
   // ----- WebSocket ------------------------------------------------------------
   const wss = new WebSocketServer({
     server, path: '/ws', maxPayload: opts.maxPayloadBytes ?? 512 * 1024,
-    verifyClient: (info: { req: IncomingMessage }) => originOk(info.req),
+    verifyClient: (info: { req: IncomingMessage }, cb: (ok: boolean, code?: number, message?: string) => void) => {
+      if (originOk(info.req)) cb(true);
+      else cb(false, 403, 'Origin not allowed');
+    },
   });
   // ws re-emits the HTTP server's errors; the server's own listener handles them.
   wss.on('error', (e) => log(`wss error: ${e.message}`));
@@ -560,7 +595,16 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     send(c.ws, {
       t: 'welcome', role: 'player', sessionId: r.meta.sessionId, playerId: rec.playerId, playerToken: token!,
       view: projectState(r.state, viewer), players: playersOf(r), history: historyFor(r, viewer),
+      queued: r.queue.filter((i) => i.playerId === rec.playerId).map((i) => i.clientMsgId),
+      settled: r.settled[rec.playerId] ?? [],
     });
+    // Held actions that were dropped while this player was away.
+    const missed = r.unseen[rec.playerId];
+    if (missed?.length) {
+      for (const n of missed) send(c.ws, { t: 'queueDropped', ...n });
+      delete r.unseen[rec.playerId];
+      saveQueue(r);
+    }
     if (r.gm) {
       send(r.gm, { t: 'playerJoined', player: joined });
       send(c.ws, { t: 'gmStatus', online: true });
@@ -594,12 +638,34 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     if (!r.gm) { r.queue = q; return; }
     const t = now();
     for (const i of q) {
-      if (t - i.at > qMaxAge) {
-        rejectTo(r, i.playerId, i.clientMsgId, 'EXPIRED', 'The GM was away too long, so that action was dropped. Try it again.');
-        continue;
-      }
+      if (t - i.at > qMaxAge) { dropQueued(r, i, 'expired'); continue; }
       send(r.gm, { t: 'intent', from: i.playerId, clientMsgId: i.clientMsgId, intent: i.intent });
+      settle(r, i);
     }
+    saveQueue(r);
+  }
+  function settle(r: Room, i: QueuedIntent) {
+    r.settled[i.playerId] = [...(r.settled[i.playerId] ?? []), i.clientMsgId].slice(-50);
+  }
+  /** Tells the player (now, or on their next join) that a held intent will never reach the GM. The caller saves. */
+  function dropQueued(r: Room, i: QueuedIntent, reason: 'expired' | 'lost') {
+    settle(r, i);
+    const message = reason === 'expired'
+      ? 'The GM was away too long, so that action was dropped. Try it again.'
+      : 'That action was lost before the GM got it. Try it again.';
+    const notice: DropNotice = { clientMsgId: i.clientMsgId, reason, message };
+    let told = false;
+    for (const [ws, pid] of r.players) if (pid === i.playerId) { send(ws, { t: 'queueDropped', ...notice }); told = true; }
+    if (!told) r.unseen[i.playerId] = [...(r.unseen[i.playerId] ?? []), notice].slice(-qPerPlayer);
+  }
+  /** Drop held intents past their age, telling their players. */
+  function expireQueue(r: Room) {
+    const t = now();
+    const keep = r.queue.filter((i) => t - i.at <= qMaxAge);
+    if (keep.length === r.queue.length) return;
+    for (const i of r.queue) if (t - i.at > qMaxAge) dropQueued(r, i, 'expired');
+    r.queue = keep;
+    saveQueue(r);
   }
   function rejectTo(r: Room, playerId: string, clientMsgId: string, code: string, message: string) {
     for (const [ws, pid] of r.players) if (pid === playerId) send(ws, { t: 'rejected', clientMsgId, code, message });
@@ -663,7 +729,46 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     c.signalTokens -= 1;
     const out: ServerMessage = { t: 'signal', from: c.role === 'gm' ? 'gm' : c.playerId!, signal };
     if (r.gm && r.gm !== c.ws) send(r.gm, out);
+    if (c.role === 'gm') return gmSignalToPlayers(r, signal, out);
     for (const p of r.players.keys()) if (p !== c.ws) send(p, out);
+  }
+
+  /**
+   * The GM's pointer, pings and ruler must not point into the fog: players only
+   * get GM signals whose squares the party can see right now. A cursor or ruler
+   * that moves into the fog is cleared for players instead of freezing at the edge.
+   */
+  function gmSignalToPlayers(r: Room, signal: Signal, out: ServerMessage) {
+    const toPlayers = (m: ServerMessage) => { for (const p of r.players.keys()) send(p, m); };
+    const shown = (r.gmShown ??= {});
+    if (gmSignalVisible(r, signal)) {
+      if (signal.kind === 'cursor') shown.cursor = !!signal.at;
+      if (signal.kind === 'measure') shown.measure = !!signal.to;
+      return toPlayers(out);
+    }
+    if (signal.kind === 'cursor' && shown.cursor) {
+      shown.cursor = false;
+      toPlayers({ t: 'signal', from: 'gm', signal: { kind: 'cursor', at: null } });
+    } else if (signal.kind === 'measure' && shown.measure) {
+      shown.measure = false;
+      toPlayers({ t: 'signal', from: 'gm', signal: { kind: 'measure', from: { x: 0, y: 0 }, to: null } });
+    }
+  }
+
+  /** Squares the party sees now (null = no map, nothing to hide). Cached per state. */
+  function partyCells(r: Room): Set<string> | null {
+    ensureLoaded(r);
+    if (r.visionCache?.state === r.state) return r.visionCache.cells;
+    const cells = r.state.map ? partyVision(r.state.map, r.state.actors) : null;
+    r.visionCache = { state: r.state, cells };
+    return cells;
+  }
+  function gmSignalVisible(r: Room, signal: Signal): boolean {
+    const cells = signalCells(signal);
+    if (!cells.length) return true; // clears (cursor/ruler off) carry no position
+    const seen = partyCells(r);
+    if (!seen) return true;
+    return cells.every((x) => seen.has(`${x.x},${x.y}`));
   }
 
   /** Per-player limiter: a token bucket for all intents, plus a per-minute cap on chatter. */
@@ -695,19 +800,21 @@ export function createRelay(opts: RelayOptions): { server: Server; close: () => 
     const t = now();
     // While the GM is away (or still catching up), hold the intent; bounded and short-lived.
     if (!r.gm || r.flushOnFetch) {
-      r.queue = r.queue.filter((i) => t - i.at <= qMaxAge);
+      expireQueue(r);
       const mine = r.queue.filter((i) => i.playerId === c.playerId).length;
       if (r.queue.length >= qPerSession || mine >= qPerPlayer) {
         return send(c.ws, { t: 'rejected', clientMsgId: msg.clientMsgId, code: 'QUEUE_FULL', message: 'Too many actions are waiting for the GM. Try again when the GM is back.' });
       }
       r.queue.push({ playerId: c.playerId!, clientMsgId: msg.clientMsgId, intent: msg.intent, at: t });
+      saveQueue(r);
       return send(c.ws, { t: 'queued', clientMsgId: msg.clientMsgId });
     }
     send(r.gm, { t: 'intent', from: c.playerId!, clientMsgId: msg.clientMsgId, intent: msg.intent });
   }
 
-  // Heartbeat: drop dead connections every 30 s.
+  // Heartbeat: drop dead connections and expired held intents every 30 s.
   const beat = setInterval(() => {
+    for (const r of rooms.values()) if (r.queue.length) expireQueue(r);
     for (const ip of [...helloFails.keys()]) failScore(ip);
     for (const ws of wss.clients) {
       const c = (ws as WebSocket & { conn?: Conn }).conn;
