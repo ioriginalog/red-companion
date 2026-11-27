@@ -327,13 +327,13 @@ def test_gm_signals(browser, base):
     gm_act(gm, {'type': 'addActor', 'actor': actor('zzlurker', 'Zzlurker', 'npc')})
     gm_act(gm, {'type': 'setMap', 'map': {'id': 'm', 'name': 'Wall', 'width': 12, 'height': 5, 'cells': cells, 'cellPx': 64, 'sightRange': 30,
                                           'tokens': {'solo': {'x': 2, 'y': 2}, 'zzlurker': {'x': 9, 'y': 2}}, 'watches': {}, 'spotted': []}})
-    time.sleep(0.5)
+    a.wait_for_timeout(500)
     gm.evaluate("() => window.__nsc.signal({ kind: 'ping', at: { x: 9, y: 2 } })")
-    time.sleep(0.2)
+    a.wait_for_timeout(200)
     gm.evaluate("() => window.__nsc.signal({ kind: 'measure', from: { x: 9, y: 2 }, to: { x: 2, y: 2 } })")
-    time.sleep(0.2)
+    a.wait_for_timeout(200)
     gm.evaluate("() => window.__nsc.signal({ kind: 'cursor', at: { x: 10, y: 1 } })")
-    time.sleep(0.2)
+    a.wait_for_timeout(200)
     gm.evaluate("() => window.__nsc.signal({ kind: 'ping', at: { x: 3, y: 1 } })")  # sentinel, in view
     deadline = time.time() + 5
     def sigs():
@@ -344,9 +344,9 @@ def test_gm_signals(browser, base):
             if m.get('t') == 'signal' and m.get('from') == 'gm': out.append(m['signal'])
         return out
     while time.time() < deadline and not any(x.get('kind') == 'ping' and x.get('at') == {'x': 3, 'y': 1} for x in sigs()):
-        time.sleep(0.1)
+        a.wait_for_timeout(100)  # lets Playwright deliver the player's frames
     got = sigs()
-    check(any(x.get('kind') == 'ping' and x.get('at') == {'x': 3, 'y': 1} for x in got), 'a GM ping the party can see reaches the player')
+    check(any(x.get('kind') == 'ping' and x.get('at') == {'x': 3, 'y': 1} for x in got), f'a GM ping the party can see reaches the player ({got[:6]})')
     def fogged(x):
         pts = [x.get('at'), x.get('from'), x.get('to')]
         return any(isinstance(c, dict) and c.get('x', 0) >= 6 for c in pts)
@@ -354,12 +354,12 @@ def test_gm_signals(browser, base):
     # Show My Pings and Ruler to Players, off: nothing goes out, even in view.
     gm.evaluate("() => window.__nsc.setGmSignals(false)")
     gm.evaluate("() => window.__nsc.signal({ kind: 'ping', at: { x: 4, y: 1 } })")
-    time.sleep(0.2)
+    a.wait_for_timeout(200)
     gm.evaluate("() => window.__nsc.setGmSignals(true)")
     gm.evaluate("() => window.__nsc.signal({ kind: 'ping', at: { x: 5, y: 1 } })")
     deadline = time.time() + 5
     while time.time() < deadline and not any(x.get('kind') == 'ping' and x.get('at') == {'x': 5, 'y': 1} for x in sigs()):
-        time.sleep(0.1)
+        a.wait_for_timeout(100)  # lets Playwright deliver the player's frames
     got = sigs()
     check(any(x.get('kind') == 'ping' and x.get('at') == {'x': 5, 'y': 1} for x in got), 'GM pings reach the player again once the toggle is back on')
     check(not any(x.get('kind') == 'ping' and x.get('at') == {'x': 4, 'y': 1} for x in got), 'with the toggle off, a GM ping in plain view stayed private')
