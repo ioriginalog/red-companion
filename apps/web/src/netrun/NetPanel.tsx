@@ -3,8 +3,8 @@
  * Self-contained: mount it in a side-panel tab and pass the acting/selected actor.
  */
 import { useMemo, useState } from 'react';
-import { boostFor, netActionsFor, type InterfaceAbility, type NetRig } from '@cprc/rules-core';
-import type { Intent, NetFloorView, NetOp, NetRunView, ViewState } from '@cprc/session';
+import { boostFor, iceOn, netActionsFor, type InterfaceAbility, type NetRig } from '@cprc/rules-core';
+import { netAvailability, netAvailInputFromView, type Intent, type NetAvail, type NetFloorView, type NetOp, type NetRunView, type ViewState } from '@cprc/session';
 import type { FeedItem } from '../net.js';
 import { chanceToBeat, chanceToWinContest, pct } from '../odds.js';
 import './netrun.css';
@@ -60,8 +60,18 @@ export function NetPanel({ view, actorId, isGm, canAct, act, feed }: NetPanelPro
   const odds = (ability: InterfaceAbility, dv: number | undefined) => (dv === undefined ? null : chanceToBeat(rig.interface + boostFor(rig, ability), dv));
   const here = run ? run.floors[run.floorId] : undefined;
   const liveIce = here?.ice?.map((x, i) => ({ ...x, i })).filter((x) => x.rez > 0) ?? [];
-  const iceDef = (i: number) => (arch ? arch.floors[run!.floorId]?.ice?.[i]?.def : undefined);
+  // GM: ICE stats by position on this floor (followers included).
+  const refs = run && full?.runs[actor.id] ? iceOn(full.runs[actor.id]!, run.floorId) : [];
+  const iceDef = (i: number) => (arch && refs[i] ? arch.floors[refs[i]!.home]?.ice?.[refs[i]!.index]?.def : undefined);
   const neighbors = run ? neighborList(run) : [];
+  // Same rules the authority applies: disabled buttons say why.
+  const availFor = (archId?: string) => {
+    const input = netAvailInputFromView(view, actor.id, isGm, archId);
+    return input ? netAvailability(input) : null;
+  };
+  const avail = availFor();
+  const ok = (k: keyof NonNullable<typeof avail>) => canAct && (avail?.[k].ok ?? true);
+  const why = (k: keyof NonNullable<typeof avail>) => (avail && !avail[k].ok ? avail[k].reason : undefined);
 
   return (
     <section className="card net" aria-label={`${actor.public.name} NET view`}>
@@ -76,21 +86,28 @@ export function NetPanel({ view, actorId, isGm, canAct, act, feed }: NetPanelPro
         <div className="net-block">
           <div className="net-sub">Architectures</div>
           {nv!.jackable.length === 0 && <p className="dim" style={{ margin: 0 }}>No access points found. Try Scanner.</p>}
-          {nv!.jackable.map((a) => (
-            <div className="row net-row" key={a.id}>
-              <span className="h">{a.name}</span>
-              <button className="btn yellow" disabled={!canAct} onClick={() => send({ op: 'jackIn', actorId: actor.id, archId: a.id })}>Jack In</button>
-            </div>
-          ))}
+          {nv!.jackable.map((a) => {
+            const j: NetAvail | undefined = availFor(a.id)?.jackIn;
+            return (
+              <div className="net-row-wrap" key={a.id}>
+                <div className="row net-row">
+                  <span className="h">{a.name}</span>
+                  <button className="btn yellow" disabled={!canAct || (j && !j.ok)} title={j && !j.ok ? j.reason : 'Jack In (1 NET Action)'}
+                    onClick={() => send({ op: 'jackIn', actorId: actor.id, archId: a.id })}>Jack In</button>
+                </div>
+                {canAct && j && !j.ok && <p className="net-why">{j.reason}</p>}
+              </div>
+            );
+          })}
           <div className="row" style={{ marginTop: 8, gap: 6, flexWrap: 'wrap' }}>
-            <button className="btn" disabled={!canAct} onClick={() => send({ op: 'scan', actorId: actor.id })} title="Meat Action: find access points nearby.">Scanner</button>
+            <button className="btn" disabled={!ok('scan')} onClick={() => send({ op: 'scan', actorId: actor.id })} title={why('scan') ?? 'Meat Action: find access points nearby.'}>Scanner</button>
             {nv!.quickhacks2070s && (
               <>
                 <select aria-label="Quickhack Target" value={targetId} onChange={(e) => setTargetId(e.target.value)}>
                   <option value="">Quickhack Target</option>
                   {Object.keys(view.map?.tokens ?? {}).filter((id) => id !== actor.id).map((id) => <option key={id} value={id}>{view.actors[id]?.public.name ?? id}</option>)}
                 </select>
-                <button className="btn" disabled={!canAct || !targetId} onClick={() => send({ op: 'quickhack', actorId: actor.id, targetId })}>Quickhack</button>
+                <button className="btn" disabled={!ok('quickhack') || !targetId} title={why('quickhack')} onClick={() => send({ op: 'quickhack', actorId: actor.id, targetId })}>Quickhack</button>
               </>
             )}
           </div>
@@ -100,7 +117,7 @@ export function NetPanel({ view, actorId, isGm, canAct, act, feed }: NetPanelPro
       {run && (
         <>
           <div className="net-sub">{run.archName}</div>
-          <FloorTree run={run} onPick={(id) => neighbors.includes(id) && send({ op: 'move', actorId: actor.id, toFloorId: id })} movable={canAct && !run.engaged ? neighbors : []} />
+          <FloorTree run={run} onPick={(id) => neighbors.includes(id) && send({ op: 'move', actorId: actor.id, toFloorId: id })} movable={ok('move') ? neighbors : []} />
 
           {here && (
             <div className="net-block">
@@ -108,32 +125,33 @@ export function NetPanel({ view, actorId, isGm, canAct, act, feed }: NetPanelPro
               {here.note && <p className="net-note">{here.note}</p>}
               <div className="net-actions">
                 {/* Go down without Pathfinder; the floor reveals itself on arrival. */}
-                {(here.exitsDown ?? 0) > 0 && !run.engaged && Array.from({ length: here.exitsDown! }, (_, b) => (
+                {(here.exitsDown ?? 0) > 0 && Array.from({ length: here.exitsDown! }, (_, b) => (
                   <Act key={`down-${b}`} label={here.exitsDown! > 1 ? `Go Down: Branch ${b + 1}` : 'Go Down a Floor'} p={null}
                     on={() => send({ op: 'descend', actorId: actor.id, branch: b })}
-                    dis={!canAct || (here.kind === 'password' && !here.passed)} />
+                    dis={!ok('descend')} why={why('descend') ?? (run.engaged ? 'The Black ICE here follows you.' : undefined)} />
                 ))}
-                {here.kind === 'password' && !here.passed && <Act label="Backdoor" p={odds('backdoor', known(here))} on={() => send({ op: 'ability', actorId: actor.id, ability: 'backdoor' })} dis={!canAct} />}
-                {here.kind === 'file' && !here.identified && <Act label="Eye-Dee" p={odds('eyeDee', known(here))} on={() => send({ op: 'ability', actorId: actor.id, ability: 'eyeDee' })} dis={!canAct} />}
-                {here.kind === 'controlNode' && !here.controlled && <Act label="Control" p={odds('control', known(here))} on={() => send({ op: 'ability', actorId: actor.id, ability: 'control' })} dis={!canAct} />}
-                {here.children.length === 0 && (arch?.children[here.id] ?? []).length === 0 && !run.virusPlaced && <Act label="Virus" p={arch ? odds('virus', arch.virusDv) : null} on={() => send({ op: 'ability', actorId: actor.id, ability: 'virus' })} dis={!canAct} />}
-                <Act label="Pathfinder" p={null} on={() => send({ op: 'ability', actorId: actor.id, ability: 'pathfinder' })} dis={!canAct} />
-                <Act label="Cloak" p={null} on={() => send({ op: 'ability', actorId: actor.id, ability: 'cloak' })} dis={!canAct} />
+                {here.kind === 'password' && !here.passed && <Act label="Backdoor" p={odds('backdoor', known(here))} on={() => send({ op: 'ability', actorId: actor.id, ability: 'backdoor' })} dis={!ok('backdoor')} why={why('backdoor')} />}
+                {here.kind === 'file' && !here.identified && <Act label="Eye-Dee" p={odds('eyeDee', known(here))} on={() => send({ op: 'ability', actorId: actor.id, ability: 'eyeDee' })} dis={!ok('eyeDee')} why={why('eyeDee')} />}
+                {here.kind === 'controlNode' && !here.controlled && <Act label="Control" p={odds('control', known(here))} on={() => send({ op: 'ability', actorId: actor.id, ability: 'control' })} dis={!ok('control')} why={why('control')} />}
+                {!run.virusPlaced && <Act label="Virus" p={arch && avail?.virus.ok ? odds('virus', arch.virusDv) : null} on={() => send({ op: 'ability', actorId: actor.id, ability: 'virus' })} dis={!ok('virus')} why={why('virus')} />}
+                <Act label="Pathfinder" p={null} on={() => send({ op: 'ability', actorId: actor.id, ability: 'pathfinder' })} dis={!ok('pathfinder')} why={why('pathfinder')} />
+                <Act label="Cloak" p={null} on={() => send({ op: 'ability', actorId: actor.id, ability: 'cloak' })} dis={!ok('cloak')} why={why('cloak')} />
               </div>
+              {canAct && avail && !avail.pathfinder.ok && <p className="net-why">{avail.pathfinder.reason}</p>}
               {liveIce.map((ice) => (
                 <div className="net-ice" key={ice.i}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
-                    <span className="h">{ice.name}</span>
+                    <span className="h">{ice.name}{ice.following && <span className="net-tag bad" title="Chased you here from another floor.">Following</span>}</span>
                     <span className="mono dim">REZ {ice.rez}/{ice.maxRez}</span>
                   </div>
                   <div className="bar hurt"><i style={{ width: `${(ice.rez / ice.maxRez) * 100}%` }} /></div>
                   <div className="net-actions">
-                    <Act label="Zap" p={iceDef(ice.i) === undefined ? null : chanceToWinContest(rig.interface + boostFor(rig, 'zap'), iceDef(ice.i)!)} on={() => send({ op: 'ability', actorId: actor.id, ability: 'zap', index: ice.i })} dis={!canAct} />
+                    <Act label="Zap" p={iceDef(ice.i) === undefined ? null : chanceToWinContest(rig.interface + boostFor(rig, 'zap'), iceDef(ice.i)!)} on={() => send({ op: 'ability', actorId: actor.id, ability: 'zap', index: ice.i })} dis={!ok('zap')} why={why('zap')} />
                     {rig.programs.filter((p) => p.class === 'attacker' && p.target === 'ice' && p.status !== 'destroyed' && p.status !== 'derezzed').map((p) => (
-                      <Act key={p.id} label={p.name} p={iceDef(ice.i) === undefined ? null : chanceToWinContest(rig.interface + p.atk + boostFor(rig, 'zap'), iceDef(ice.i)!)} on={() => send({ op: 'program', actorId: actor.id, programId: p.id, index: ice.i })} dis={!canAct} />
+                      <Act key={p.id} label={p.name} p={iceDef(ice.i) === undefined ? null : chanceToWinContest(rig.interface + p.atk + boostFor(rig, 'zap'), iceDef(ice.i)!)} on={() => send({ op: 'program', actorId: actor.id, programId: p.id, index: ice.i })} dis={!ok('program')} why={why('program')} />
                     ))}
                     {run.canSlide && neighbors.map((n) => (
-                      <Act key={`s-${n}`} label={`Slide to ${run.floors[n]?.depth ?? '?'}`} p={null} on={() => send({ op: 'ability', actorId: actor.id, ability: 'slide', index: ice.i, toFloorId: n })} dis={!canAct} />
+                      <Act key={`s-${n}`} label={`Slide to ${run.floors[n]?.depth ?? '?'}`} p={null} on={() => send({ op: 'ability', actorId: actor.id, ability: 'slide', index: ice.i, toFloorId: n })} dis={!ok('slide')} why={why('slide') ?? 'Slip away; this ICE stays behind.'} />
                     ))}
                     {isGm && <button className="btn danger" onClick={() => act(net({ op: 'iceAttack', actorId: actor.id, index: ice.i }))}>ICE Attacks</button>}
                   </div>
@@ -143,9 +161,9 @@ export function NetPanel({ view, actorId, isGm, canAct, act, feed }: NetPanelPro
                 <div className="net-ice">
                   <div className="row" style={{ justifyContent: 'space-between' }}><span className="h">Demon: {here.demon.name}</span><span className="mono dim">REZ {here.demon.rez}/{here.demon.maxRez}</span></div>
                   <div className="net-actions">
-                    <Act label="Zap" p={null} on={() => send({ op: 'ability', actorId: actor.id, ability: 'zap', index: -1 })} dis={!canAct} />
+                    <Act label="Zap" p={null} on={() => send({ op: 'ability', actorId: actor.id, ability: 'zap', index: -1 })} dis={!ok('zap')} why={why('zap')} />
                     {rig.programs.filter((p) => p.class === 'attacker' && p.target === 'ice' && p.status !== 'destroyed' && p.status !== 'derezzed').map((p) => (
-                      <Act key={p.id} label={p.name} p={null} on={() => send({ op: 'program', actorId: actor.id, programId: p.id, index: -1 })} dis={!canAct} />
+                      <Act key={p.id} label={p.name} p={null} on={() => send({ op: 'program', actorId: actor.id, programId: p.id, index: -1 })} dis={!ok('program')} why={why('program')} />
                     ))}
                   </div>
                 </div>
@@ -153,7 +171,7 @@ export function NetPanel({ view, actorId, isGm, canAct, act, feed }: NetPanelPro
             </div>
           )}
           <div className="row" style={{ gap: 6, marginTop: 8 }}>
-            <button className="btn" disabled={!canAct} onClick={() => send({ op: 'jackOut', actorId: actor.id })}>Jack Out</button>
+            <button className="btn" disabled={!ok('jackOut')} title={why('jackOut')} onClick={() => send({ op: 'jackOut', actorId: actor.id })}>Jack Out</button>
             {isGm && <button className="btn danger" onClick={() => act(net({ op: 'forceJackOut', actorId: actor.id }))} title="Unsafe: every live Black ICE they met strikes.">Force Jack Out</button>}
           </div>
         </>
@@ -170,7 +188,7 @@ export function NetPanel({ view, actorId, isGm, canAct, act, feed }: NetPanelPro
             <div className="net-prog-r">
               <span className="mono">{p.rez}/{p.maxRez}</span>
               {p.class !== 'attacker' && p.status !== 'destroyed' && run && (
-                <button className={`btn ${p.status === 'active' ? 'on' : ''}`} disabled={!canAct} onClick={() => send({ op: 'activate', actorId: actor.id, programId: p.id, active: p.status !== 'active' })}>
+                <button className={`btn ${p.status === 'active' ? 'on' : ''}`} disabled={!ok('activate')} title={why('activate')} onClick={() => send({ op: 'activate', actorId: actor.id, programId: p.id, active: p.status !== 'active' })}>
                   {p.status === 'active' ? 'Stop' : p.status === 'derezzed' ? 'Restart' : 'Run'}
                 </button>
               )}
@@ -189,9 +207,9 @@ export function NetPanel({ view, actorId, isGm, canAct, act, feed }: NetPanelPro
   );
 }
 
-function Act({ label, p, on, dis }: { label: string; p: number | null; on: () => void; dis: boolean }) {
+function Act({ label, p, on, dis, why }: { label: string; p: number | null; on: () => void; dis: boolean; why?: string }) {
   return (
-    <button className="btn net-act" disabled={dis} onClick={on}>
+    <button className="btn net-act" disabled={dis} onClick={on} title={why}>
       {label}{p !== null && <span className="net-odds">{pct(p)}</span>}
     </button>
   );

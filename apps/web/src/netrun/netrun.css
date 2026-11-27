@@ -50,3 +50,52 @@
 .net-grid3 label input, .net-grid3 label select, .net-mini input { font: 15px var(--body); text-transform: none; letter-spacing: normal; color: var(--text); }
 .net-nocase { text-transform: none; }
 .net-dvlabel { font: 600 11px var(--head); color: var(--dim); text-transform: uppercase; }
+.net-why { margin: 4px 0 0; font-size: 12px; color: var(--yellow); }
+.net-ice .net-tag { margin-left: 6px; vertical-align: middle; }
+
+/* NET Prep: floor diagram, inspector, access map, live overview */
+.net-prep-split { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 12px; align-items: start; }
+@media (max-width: 1000px) { .net-prep-split { grid-template-columns: 1fr; } }
+.net-diagram-wrap { min-width: 0; }
+.net-diagram-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.net-sel { font: 700 13px var(--head); text-transform: uppercase; letter-spacing: 0.06em; color: var(--yellow); margin-right: 4px; }
+.net-diagram { position: relative; margin: 4px 0; overflow: visible; }
+.net-diagram-wrap > .net-diagram { max-width: 100%; }
+.net-diagram-lines { position: absolute; inset: 0; pointer-events: none; }
+.net-node { position: absolute; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 4px 8px; text-align: left;
+  background: #071030; border: 1px solid var(--line-hi); border-radius: 3px; color: var(--text); cursor: pointer; font-size: 13px; }
+.net-node:hover { background: #0a1a45; }
+.net-node.sel { border-color: var(--yellow); box-shadow: 0 0 0 2px rgba(255, 230, 0, 0.35), inset 3px 0 0 var(--yellow); }
+.net-node.drop { border-color: var(--green); box-shadow: 0 0 0 2px rgba(57, 255, 136, 0.4); }
+.net-node.nodrop { border-color: var(--red); opacity: 0.7; }
+.net-node.marked { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(34, 227, 255, 0.35); }
+.net-node-top { display: flex; align-items: center; gap: 6px; }
+.net-node .g { font: 700 11px var(--head); min-width: 30px; text-align: center; color: var(--cyan); border: 1px solid var(--line-hi); border-radius: 2px; }
+.net-node.k-blackIce .g, .net-node.k-demon .g { color: var(--red); border-color: var(--red); }
+.net-node.k-password .g { color: var(--yellow); border-color: var(--yellow); }
+.net-node .d { font: 700 14px var(--head); color: var(--dim); }
+.net-node .dv { font: 600 12px var(--head); color: var(--yellow); margin-left: auto; }
+.net-node-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.net-node-marks { font: 700 11px var(--head); color: var(--cyan); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.net-diagram-hint { font-size: 12px; margin: 6px 0 0; }
+.net-inspector { border: 1px solid var(--line); background: #071030; padding: 10px; border-radius: 3px; display: grid; gap: 8px; }
+.net-field { display: grid; gap: 3px; font: 600 11px var(--head); text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); }
+.net-field input, .net-field select { font: 15px var(--body); text-transform: none; letter-spacing: normal; color: var(--text); }
+.net-inspector .net-ice .row input[aria-label="ICE Name"] { width: 100%; }
+.net-access { display: grid; gap: 6px; }
+.net-access-map { overflow: auto; border: 1px solid var(--line-hi); background: #050a22; }
+.net-access-map svg { display: block; }
+.net-access-hint { font-size: 12px; min-height: 16px; }
+.net-live .net-live-diagram { overflow-x: auto; padding-bottom: 6px; margin-bottom: 6px; }
+.net-runner { border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 8px; }
+.net-live-stats { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.net-live-stats > div { background: #050a22; border: 1px solid var(--line); padding: 4px 8px; min-width: 70px; }
+.net-live-stats dt { font: 600 11px var(--head); text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); }
+.net-live-stats dd { margin: 0; font: 700 17px var(--head); }
+.net-tag.good { background: #06331d; color: #c9ffe0; border: 1px solid var(--green); }
+.net-ice-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+.net-ice-table th { text-align: left; font: 600 11px var(--head); text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); border-bottom: 1px solid var(--line); padding: 3px 4px; }
+.net-ice-table td { padding: 3px 4px; border-bottom: 1px dashed var(--line); }
+.net-ice-table .s-fighting td:last-child, .net-ice-table .s-following td:last-child { color: var(--red); font-weight: 700; }
+.net-ice-table .s-waiting td:last-child { color: var(--yellow); }
+.net-ice-table .s-derezzed td { color: var(--dim); text-decoration: line-through; }
