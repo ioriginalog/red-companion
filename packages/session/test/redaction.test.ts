@@ -216,6 +216,45 @@ describe('pending steps and view state for players', () => {
     expect(json).not.toContain(HIDDEN_ID2);
     expect(json).not.toContain(HIDDEN_ID);
     expect(view.pending).toMatchObject({ attackerId: 'hidden', targets: [{ id: 'vex' }, { id: 'ganger' }], decisions: { vex: false } });
+    // Only the total to beat: no STAT, skill, modifiers or natural roll; no NPC damage dice.
+    expect(json).not.toContain(String(S));
+    expect(view.pending).toMatchObject({ attack: { total: 19, redacted: true }, damageDice: 0 });
+    expect(Object.keys((view.pending as { attack: object }).attack).sort()).toEqual(['redacted', 'total']);
+  });
+
+  it.each([HIDDEN_ID, 'ganger'])('area and scatter pendings by %s (sheet not visible) expose only the attack total', (attacker) => {
+    const state = world();
+    const area = {
+      kind: 'awaitingAreaDodge', id: 'p', attackerId: attacker, areaKind: 'thrownGrenade', at: c0,
+      attack: check(true), damageDice: S, source: 'explosive', targets: [{ id: 'vex', coverHp: S }], decisions: { vex: null },
+    } as unknown as Pending;
+    const scatter = { kind: 'awaitingScatter', id: 'q', attackerId: attacker, areaKind: 'launcher', at: c0, attack: check(true), damageDice: S } as Pending;
+    for (const pending of [area, scatter]) {
+      const view = projectState({ ...state, pending }, P1);
+      expect(JSON.stringify(view.pending)).not.toContain(String(S));
+      expect((view.pending as { attack: unknown }).attack).toEqual({ total: 19, redacted: true });
+      // The same holds for the pending riding in an entry's patch.
+      const entry: LogEntry = { ...entryOf([]), patch: { pending } };
+      const p = projectEntry(entry, P1, { ...state, pending }, undefined, state).patch.pending;
+      expect(JSON.stringify(p)).not.toContain(String(S));
+      // The GM and a PC attacker's own players see the whole check.
+      expect((projectState({ ...state, pending }, GM).pending as { attack: unknown }).attack).toEqual(check(true));
+      const own = { ...pending, attackerId: 'vex' } as Pending;
+      expect((projectState({ ...state, pending: own }, P1).pending as { attack: unknown }).attack).toEqual(check(true));
+    }
+  });
+
+  it('every pending kind is projected without NPC numbers or unseen ids', () => {
+    const state = world();
+    const pendings = [
+      { kind: 'awaitingDodge', id: 'a', defenderId: 'vex', attack: { type: 'rangedAttack', attackerId: HIDDEN_ID, defenderId: 'vex', weaponId: 'zz-secret-gun', distance: 10, situational: [{ label: 'GM', value: S }] } },
+      { kind: 'awaitingDamage', id: 'b', attackerId: 'ganger', targetId: 'vex', spec: { dice: S, source: 'ranged', location: 'body' } },
+      { kind: 'awaitingWatch', id: 'c', watcherId: HIDDEN_ID, targetId: 'vex' },
+    ] as unknown as Pending[];
+    for (const pending of pendings) {
+      const json = JSON.stringify(projectState({ ...state, pending }, P1).pending);
+      for (const secret of [String(S), HIDDEN_ID, 'zz-secret-gun']) expect(json).not.toContain(secret);
+    }
   });
 
   it('player view state never carries hidden actors, NPC sheets or GM notes', () => {
@@ -239,5 +278,43 @@ describe('pending steps and view state for players', () => {
     if (!r.ok) return;
     const after = { ...before, actors: { ...before.actors, vex: { ...before.actors.vex!, gmNotes: 'Owes the Tyger Claws.' } } };
     expect(JSON.stringify(projectEntry(r.entry, P1, after, undefined, before))).not.toContain('Tyger');
+  });
+});
+
+describe('Black ICE and Demons', () => {
+  it('the ICE side of a contest shows only its total, even on a PC runner’s line', () => {
+    const state = world();
+    for (const [action, field] of [['iceAttack', 'check'], ['demonZap', 'check'], ['speedCheck', 'vs'], ['slide', 'vs'], ['zap', 'vs'], ['program', 'vs']] as const) {
+      const e: CombatEvent = { type: 'netAction', visibility: 'public', combatantId: 'vex', action, text: 'Hellhound attacks Vex: 19 vs 12. Hit.', check: check(true), vs: check(true), success: true };
+      const out = projectEntry(entryOf([e]), P1, state, undefined, state).events[0] as Extract<CombatEvent, { type: 'netAction' }>;
+      expect(out[field]).toMatchObject({ total: 19, baseBreakdown: [], redacted: true });
+      expect(out[field === 'check' ? 'vs' : 'check']).toEqual(check(true));
+      expect((projectEntry(entryOf([e]), GM, state).events[0] as typeof out)[field]).toEqual(check(true));
+    }
+  });
+});
+
+describe('unexplored terrain', () => {
+  it('players get `?` for squares the party has never seen, and no cover records there', () => {
+    const s = world();
+    // Explored: the left eight columns only. A crate at (10, 1) behind the wall.
+    const explored = Array.from({ length: 5 }, () => '1'.repeat(9) + '000').join('');
+    const cells = MAP.cells.split('');
+    cells[1 * 12 + 10] = 'c';
+    cells[2 * 12 + 2] = 'c';
+    const map: TacticalMap = { ...MAP, cells: cells.join(''), explored, cover: { '10,1': { material: 'concrete', hp: 25 }, '2,2': { material: 'thickWood', hp: 20 } } };
+    const view = projectState({ ...s, map }, P1).map!;
+    expect(view.cells).toHaveLength(60);
+    for (let y = 0; y < 5; y++) {
+      expect(view.cells.slice(y * 12 + 9, y * 12 + 12)).toBe('???');
+      expect(view.cells.slice(y * 12, y * 12 + 9)).toBe(map.cells.slice(y * 12, y * 12 + 9));
+    }
+    expect(view.cover).toEqual({ '2,2': { material: 'thickWood', hp: 20 } });
+    expect(view.explored).toBe(explored);
+    // The GM sees everything.
+    expect(projectState({ ...s, map }, GM).map!.cells).toBe(map.cells);
+    // Squares in view right now are never masked, even if `explored` lags behind.
+    const fresh = projectState({ ...s, map: { ...map, explored: '0'.repeat(60) } }, P1).map!;
+    expect(fresh.cells.slice(0, 8)).toBe(map.cells.slice(0, 8));
   });
 });
