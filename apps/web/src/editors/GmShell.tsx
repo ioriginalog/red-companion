@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { client, type ClientState } from '../net.js';
-import { NetArchitectureEditor } from '../netrun/index.js';
-import { MapEditor } from './MapEditor.js';
-import { CharacterEditor } from './CharacterEditor.js';
+import { CharacterEditor, MapEditor, NetArchitectureEditor } from '../table/lazy.js';
 import './editors.css';
 
 const TABS = [

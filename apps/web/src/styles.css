@@ -506,3 +506,6 @@ kbd, code { font: 600 12px ui-monospace, monospace; background: #071030; border:
 .dock-required .req-main { min-width: 150px; font-size: 17px; box-shadow: 0 0 18px rgba(255, 212, 0, 0.45); }
 .dock-required.dock .req-main { flex: 1 1 auto; }
 @media (max-width: 420px) { .dock-required .req-title { font-size: 15px; } .dock-required .req-main { min-width: 0; } }
+
+/* Split chunks (editors, NET) while they load */
+.loading-card { margin: 16px; }

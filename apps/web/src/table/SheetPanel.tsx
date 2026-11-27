@@ -9,8 +9,7 @@ import { linkedStat } from './skills.js';
 import { NotesAndGear } from './SheetEdit.js';
 import { ALLEGIANCE, WOUND, type TableCtx } from './ctx.js';
 import { Portrait } from './panels.js';
-import { SystemsSheet } from '../systems/index.js';
-import { RoleAbilityPanel } from '../extras/index.js';
+import { RoleAbilityPanel, SystemsSheet } from './lazy.js';
 
 const STAT_NAMES: Record<StatKeyName, string> = {
   INT: 'Intelligence', REF: 'Reflexes', DEX: 'Dexterity', TECH: 'Technique', COOL: 'Cool', WILL: 'Willpower',

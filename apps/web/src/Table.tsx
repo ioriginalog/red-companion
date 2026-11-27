@@ -10,12 +10,11 @@ import { HelpOverlay, InitiativeStrip, Prompts, TopBar } from './table/panels.js
 import { coverAt, coverLabel } from './table/cover.js';
 import { CombatPanel, fireBlocked } from './table/CombatPanel.js';
 import { SheetPanel } from './table/SheetPanel.js';
-import { AreaDodgePrompt, GmSystemsPanel } from './systems/index.js';
-import { CombatExtrasPanel } from './extras/index.js';
+import { AreaDodgePrompt } from './systems/AreaDodgePrompt.js';
+import { CombatExtrasPanel, GmSystemsPanel, NetPanel, warmSplitChunks } from './table/lazy.js';
 import { ChatPanel } from './table/ChatPanel.js';
 import { Inspector, ScenePanel } from './table/GmPanels.js';
 import { NotesPanel } from './table/NotesPanel.js';
-import { NetPanel } from './netrun/index.js';
 import { narrate } from './narrate.js';
 import { areaKindFor } from './table/area.js';
 import { EFFECT_MS, effectsFor, type Effect } from './table/effects.js';
@@ -74,6 +73,7 @@ export function Table({ s }: { s: ClientState }) {
   const [announce, setAnnounce] = useState('');
   const [notesUnread, setNotesUnread] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { warmSplitChunks(); }, []);
 
   const mine = useCallback((id: string | null | undefined) => !!id && (isGm || view.actors[id]?.controller === me), [isGm, view.actors, me]);
   const name = useCallback((id: string) => view.actors[id]?.public.name ?? 'Unknown Contact', [view.actors]);
